@@ -1,0 +1,18 @@
+[tasks]
+prove
+
+[options]
+prove: mode prove
+prove: depth 10
+
+[engines]
+smtbmc z3
+
+[script]
+read -formal -sv sisRegFile.sv
+read -formal -sv regfile_x0.sv
+prep -top regfile_x0_wrapper
+
+[files]
+regfile_x0.sv
+../rtl/core/sisRegFile.sv

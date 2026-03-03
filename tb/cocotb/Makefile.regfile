@@ -1,0 +1,8 @@
+# cocotb Makefile for sisRegFile tests
+TOPLEVEL_LANG = verilog
+VERILOG_SOURCES = $(shell pwd)/../../rtl/core/sisRegFile.sv
+TOPLEVEL = sisRegFile
+MODULE = test_regfile
+SIM ?= icarus
+
+include $(shell cocotb-config --makefiles)/Makefile.sim
