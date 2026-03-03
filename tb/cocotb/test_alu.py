@@ -68,7 +68,7 @@ async def apply_and_check(dut, a, b, op):
     dut.a.value = a & MASK32
     dut.b.value = b & MASK32
     dut.op.value = op
-    await Timer(1, units="ns")
+    await Timer(1, unit="ns")
 
     expected = alu_ref(a, b, op)
     result = int(dut.result.value)

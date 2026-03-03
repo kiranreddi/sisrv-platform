@@ -104,17 +104,17 @@ run-%: $(SIM) $(BUILD)/tests/%.hex
 clean:
 	rm -rf $(BUILD) obj_dir rom.hex
 
-# cocotb tests (requires cocotb + iverilog)
+# cocotb tests (requires cocotb + verilator 5.036+)
 cocotb:
 	@echo "=== Running cocotb ALU tests ==="
-	@cd tb/cocotb && rm -rf sim_build results.xml && $(MAKE) -f Makefile.alu SIM=icarus
+	@cd tb/cocotb && rm -rf sim_build results.xml && $(MAKE) -f Makefile.alu SIM=verilator
 	@echo "=== Running cocotb RegFile tests ==="
-	@cd tb/cocotb && rm -rf sim_build results.xml && $(MAKE) -f Makefile.regfile SIM=icarus
+	@cd tb/cocotb && rm -rf sim_build results.xml && $(MAKE) -f Makefile.regfile SIM=verilator
 	@echo "=== cocotb tests PASSED ==="
 
 # Formal verification (requires SymbiYosys + yosys + z3)
 formal:
 	@echo "=== Running formal proofs ==="
 	@cd formal && sby -f regfile_x0.sby
-	@cd formal && sby -f alu_add.sby
+	@cd formal && yosys -s alu_prove.ys
 	@echo "=== Formal proofs PASSED ==="
