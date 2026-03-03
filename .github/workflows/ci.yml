@@ -82,7 +82,12 @@ jobs:
         run: pip install cocotb
 
       - name: Run cocotb Tests
-        run: make cocotb
+        run: |
+          echo "=== cocotb Test Configuration ==="
+          echo "Simulator backend: Verilator"
+          verilator --version
+          echo "================================"
+          make cocotb
 
   formal:
     name: Formal Verification
