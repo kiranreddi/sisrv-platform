@@ -88,34 +88,6 @@ module sisPlatformTop #(
   logic        mtip_wire;
 
   // ---------------------------------------------------------------
-  // MMIO sub-router: tohost (0x1000_0xxx) vs timer (0x1000_2xxx)
-  // ---------------------------------------------------------------
-  wire sel_timer = (mmio_req_addr[15:12] == 4'h2); // 0x1000_2xxx
-
-  assign tohost_req_valid = mmio_req_valid && !sel_timer;
-  assign timer_req_valid  = mmio_req_valid && sel_timer;
-  assign timer_req_addr   = mmio_req_addr;
-  assign timer_req_we     = mmio_req_we;
-  assign timer_req_wdata  = mmio_req_wdata;
-  assign timer_req_wstrb  = mmio_req_wstrb;
-  assign mmio_req_ready   = sel_timer ? timer_req_ready : tohost_req_ready;
-
-  // MMIO response mux
-  logic mmio_sel_timer_r;
-  always_ff @(posedge clk or negedge rst_n) begin
-    if (!rst_n)
-      mmio_sel_timer_r <= 1'b0;
-    else if (mmio_req_valid && mmio_req_ready)
-      mmio_sel_timer_r <= sel_timer;
-  end
-
-  assign mmio_rsp_valid = mmio_sel_timer_r ? timer_rsp_valid : tohost_rsp_valid;
-  assign mmio_rsp_rdata = mmio_sel_timer_r ? timer_rsp_rdata : tohost_rsp_rdata;
-  assign mmio_rsp_err   = mmio_sel_timer_r ? timer_rsp_err   : tohost_rsp_err;
-  assign timer_rsp_ready  = mmio_rsp_ready && mmio_sel_timer_r;
-  assign tohost_rsp_ready = mmio_rsp_ready && !mmio_sel_timer_r;
-
-  // ---------------------------------------------------------------
   // CPU Core
   // ---------------------------------------------------------------
   sisRvCore #(
@@ -141,6 +113,34 @@ module sisPlatformTop #(
   // ---------------------------------------------------------------
   generate
     if (USE_AXIL == 0) begin : gen_corebus
+      // ---------------------------------------------------------------
+      // MMIO sub-router: tohost (0x1000_0xxx) vs timer (0x1000_2xxx)
+      // ---------------------------------------------------------------
+      wire sel_timer = (mmio_req_addr[15:12] == 4'h2); // 0x1000_2xxx
+
+      assign tohost_req_valid = mmio_req_valid && !sel_timer;
+      assign timer_req_valid  = mmio_req_valid && sel_timer;
+      assign timer_req_addr   = mmio_req_addr;
+      assign timer_req_we     = mmio_req_we;
+      assign timer_req_wdata  = mmio_req_wdata;
+      assign timer_req_wstrb  = mmio_req_wstrb;
+      assign mmio_req_ready   = sel_timer ? timer_req_ready : tohost_req_ready;
+
+      // MMIO response mux
+      logic mmio_sel_timer_r;
+      always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n)
+          mmio_sel_timer_r <= 1'b0;
+        else if (mmio_req_valid && mmio_req_ready)
+          mmio_sel_timer_r <= sel_timer;
+      end
+
+      assign mmio_rsp_valid = mmio_sel_timer_r ? timer_rsp_valid : tohost_rsp_valid;
+      assign mmio_rsp_rdata = mmio_sel_timer_r ? timer_rsp_rdata : tohost_rsp_rdata;
+      assign mmio_rsp_err   = mmio_sel_timer_r ? timer_rsp_err   : tohost_rsp_err;
+      assign timer_rsp_ready  = mmio_rsp_ready && mmio_sel_timer_r;
+      assign tohost_rsp_ready = mmio_rsp_ready && !mmio_sel_timer_r;
+
       // ---------------------------------------------------------------
       // Direct corebus routing (default)
       // ---------------------------------------------------------------
@@ -366,16 +366,27 @@ module sisPlatformTop #(
       );
 
       // Tie off unused corebus slave signals in AXI path
-      assign rom_req_valid  = 1'b0;
-      assign ram_req_valid  = 1'b0;
-      assign mmio_req_valid = 1'b0;
-      assign rom_rsp_ready  = 1'b0;
-      assign ram_rsp_ready  = 1'b0;
-      assign mmio_rsp_ready = 1'b0;
+      assign rom_req_valid    = 1'b0;
+      assign ram_req_valid    = 1'b0;
+      assign rom_rsp_ready    = 1'b0;
+      assign ram_rsp_ready    = 1'b0;
       // No timer in AXI path (timer not modeled in AXI slave yet)
-      assign mtip_wire = 1'b0;
-      assign timer_req_valid = 1'b0;
+      assign mtip_wire        = 1'b0;
+      // MMIO sub-router: tie off all signals (not used in AXI path)
+      assign mmio_req_valid   = 1'b0;
+      assign mmio_rsp_ready   = 1'b0;
+      assign timer_req_valid  = 1'b0;
+      assign timer_req_addr   = 32'h0;
+      assign timer_req_we     = 1'b0;
+      assign timer_req_wdata  = 32'h0;
+      assign timer_req_wstrb  = 4'h0;
+      assign timer_rsp_ready  = 1'b0;
       assign tohost_req_valid = 1'b0;
+      assign tohost_rsp_ready = 1'b0;
+      assign mmio_req_ready   = 1'b0;
+      assign mmio_rsp_valid   = 1'b0;
+      assign mmio_rsp_rdata   = 32'h0;
+      assign mmio_rsp_err     = 1'b0;
 
     end
   endgenerate
