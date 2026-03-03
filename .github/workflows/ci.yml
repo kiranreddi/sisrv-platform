@@ -33,7 +33,7 @@ jobs:
         run: make lint
 
   regress:
-    name: Assembly Regression (23 tests)
+    name: Assembly Regression (24 tests)
     runs-on: ubuntu-latest
     needs: lint
     steps:
@@ -59,7 +59,7 @@ jobs:
         run: make regress
 
   cocotb:
-    name: cocotb Tests (ALU + RegFile + Decode + CSR)
+    name: cocotb Tests (ALU + RegFile + Decode + CSR + AXI-Lite)
     runs-on: ubuntu-latest
     needs: lint
     steps:

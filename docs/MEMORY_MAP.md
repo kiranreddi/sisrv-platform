@@ -7,12 +7,11 @@
 | RAM | 0x8000_0000 | 256 KiB–1 MiB | program/data/stack |
 | MMIO | 0x1000_0000 | 64 KiB | peripherals + tohost |
 
-## MMIO devices (MVP)
+## MMIO devices
 | Device | Base | Offset regs | Notes |
 |---|---:|---|---|
 | tohost | 0x1000_0000 | +0x0 DATA | write PASS/FAIL signature |
-| UART (opt) | 0x1000_1000 | TXDATA/RXDATA/STATUS | minimal |
-| Timer (opt) | 0x1000_2000 | MTIME/MTIMECMP | machine timer interrupt |
+| Timer | 0x1000_2000 | +0x0 MTIME_LO, +0x4 MTIME_HI, +0x8 MTIMECMP_LO, +0xC MTIMECMP_HI | machine timer interrupt |
 
 ## PASS/FAIL protocol
 - Write 32-bit value to `tohost.DATA`:

@@ -4,22 +4,23 @@
 
 ASIC-first, open-source end-to-end RISC-V (RV32I) platform using **Verilator** as the primary simulator.
 
-This repo implements a complete RV32I multi-cycle FSM core with M-mode CSRs and traps,
-connected to ROM, RAM, and MMIO peripherals via a simple internal bus.
+This repo implements a complete RV32I multi-cycle FSM core with M-mode CSRs, trap handling,
+timer interrupts, and AXI4-Lite bridge integration — connected to ROM, RAM, timer, and MMIO
+peripherals via a configurable bus path (corebus or AXI4-Lite).
 
 ## Current status
 
 | Milestone | Status |
 |-----------|--------|
 | M0 — Sim harness & golden flow | ✅ Complete |
-| M1 — RV32I multi-cycle core | ✅ Complete (23/23 tests pass) |
+| M1 — RV32I multi-cycle core | ✅ Complete (24/24 tests pass) |
 | M2 — CSRs + traps (M-mode) | ✅ Complete |
-| M2.5 — Formal verification | ✅ Complete (ALU + RegFile proofs) |
-| M3 — AXI4-Lite master bridge | ✅ RTL complete (not integrated in default platform) |
-| M4 — Timer interrupt | 🔲 Planned |
+| M2.5 — Verification infrastructure | ✅ Complete (40 cocotb + 3 formal) |
+| M3 — AXI4-Lite master bridge | ✅ RTL complete, system integration incomplete |
+| M4 — Timer interrupt | ✅ Complete |
 | M5 — RV32M (mul/div) | 🔲 Planned |
 | M6 — 3-stage pipeline | 🔲 Planned |
-| M7 — Yosys synthesis | 🔲 Planned |
+| M7 — Yosys synthesis | ✅ Complete |
 | M8 — OpenROAD hardening | 🔲 Planned |
 
 See `docs/status.md` for detailed status.
@@ -32,7 +33,7 @@ See `docs/status.md` for detailed status.
 - **RISC-V cross-compiler**: `riscv64-linux-gnu-gcc` (from `gcc-riscv64-linux-gnu` package)
 - **GNU Make**
 - **Python 3 + cocotb** (for cocotb tests)
-- **Yosys + SymbiYosys + z3** (for formal verification)
+- **Yosys + SymbiYosys + z3** (for formal verification and synthesis)
 
 On Ubuntu/Debian:
 ```bash
@@ -47,7 +48,7 @@ cd verilator && autoconf && ./configure --prefix=/usr/local && make -j$(nproc) &
 # cocotb
 pip install cocotb
 
-# Formal verification
+# Formal verification + synthesis
 sudo apt-get install yosys symbiyosys z3
 ```
 
@@ -66,14 +67,17 @@ make sw
 # Run a single test (the basic PASS test)
 make sim
 
-# Run full regression suite (23 tests)
+# Run full regression suite (24 tests)
 make regress
 
-# Run cocotb tests (ALU + RegFile, 7 tests)
+# Run cocotb tests (40 tests: ALU + RegFile + Decode + CSR + AXI-Lite)
 make cocotb
 
 # Run formal verification proofs
 make formal
+
+# Run Yosys synthesis
+make synth
 
 # Run a specific test
 make run-test_addi
@@ -115,13 +119,14 @@ $ make regress
   PASS: test_ram_walk
   PASS: test_shift
   PASS: test_slt
+  PASS: test_timer
   PASS: test_x0
-=== Results: 23/23 passed, 0 failed ===
+=== Results: 24/24 passed, 0 failed ===
 ```
 
 ## Verification
 
-### Assembly Tests (23 tests)
+### Assembly Tests (24 tests)
 Directed self-checking tests covering all RV32I instructions:
 
 | Category | Tests | Coverage |
@@ -133,16 +138,18 @@ Directed self-checking tests covering all RV32I instructions:
 | Jump | test_jal_jalr, test_jalr_align | JAL/JALR, bit[0] masking, rd=x0 |
 | CSR | test_csr, test_csr_edge | CSRRW/CSRRS/CSRRC/CSRRWI/CSRRSI/CSRRCI, rs1=x0 read-only |
 | Trap | test_ecall, test_ebreak, test_illegal | ECALL/EBREAK/illegal instr trap, mcause, MRET |
+| Timer | test_timer | MTIP interrupt, ISR handler, MTIME/MTIMECMP, MRET return |
 | System | test_fence, test_lui_auipc, test_x0 | FENCE, LUI/AUIPC, x0 hardwired zero |
 | Stress | test_back_to_back | Fibonacci, register file stress, data dependencies, loops |
 
-### cocotb Tests (28 tests)
+### cocotb Tests (40 tests)
 Randomized and directed unit tests using Verilator 5.038:
 
 - **ALU** (3 tests): 1000 directed edge-case checks, 1000 random stimulus, full shift amount sweep
 - **RegFile** (4 tests): x0-always-zero, write/read all registers, write isolation, 500 random read/write cycles
 - **Decoder** (10 tests): Type flag decode for all 11 opcodes, illegal opcode detection, register extraction, I/S/U/B/J immediate sign-extension, funct3/funct7 extraction, 1000 random instructions
-- **CSR** (11 tests): Reset values, CSRRW/CSRRS/CSRRC operations, unknown CSR reads zero, trap entry (mepc/mcause/mtval/mstatus), MRET restore, MEPC word alignment, mtvec/mepc output ports
+- **CSR** (12 tests): Reset values, CSRRW/CSRRS/CSRRC operations, unknown CSR reads zero, trap entry (mepc/mcause/mtval/mstatus), MRET restore, MEPC word alignment, mtvec/mepc output ports, MTIP/irq_pending
+- **AXI-Lite Bridge** (11 tests): Reset state, basic read/write, error responses (DECERR/SLVERR), stalled channels, back-to-back transactions, 100-transaction random stress, write strobe variations, VALID stability
 
 ### Formal Verification
 Proofs via Yosys/SymbiYosys:
@@ -164,11 +171,13 @@ Proofs via Yosys/SymbiYosys:
 |--------|------|------|-------|
 | ROM | `0x0000_0000` | 64 KB | Reset vector, program code |
 | MMIO | `0x1000_0000` | 64 KB | tohost (pass/fail signaling) |
+| Timer | `0x1000_2000` | 16 B | MTIME/MTIMECMP registers |
 | RAM | `0x8000_0000` | 256 KB | Data/stack memory |
 
-### Internal Bus (corebus)
-Simple request/response protocol, single outstanding transaction.
-See `docs/INTERFACES.md` for signal details.
+### Bus Architecture
+- **Internal Bus (corebus)**: Simple request/response protocol, single outstanding transaction
+- **AXI4-Lite**: Optional bridge path (`USE_AXIL=1` parameter), corebus → AXI-Lite → slave model
+- See `docs/INTERFACES.md` for signal details
 
 ## CI Pipeline
 
@@ -177,8 +186,8 @@ The CI pipeline runs on every push/PR to `main`:
 | Job | Description | Tool |
 |-----|-------------|------|
 | **Lint** | Verilator lint check (all RTL) | Verilator 5.038 |
-| **Regression** | 23 assembly self-checking tests | Verilator 5.038 + riscv64-gcc |
-| **cocotb** | 28 randomized/directed unit tests | Verilator 5.038 + cocotb |
+| **Regression** | 24 assembly self-checking tests | Verilator 5.038 + riscv64-gcc |
+| **cocotb** | 40 randomized/directed unit tests | Verilator 5.038 + cocotb |
 | **Formal** | ALU + RegFile + Decoder formal proofs | Yosys + SymbiYosys + z3 |
 
 ## Directory layout
@@ -187,14 +196,14 @@ The CI pipeline runs on every push/PR to `main`:
 rtl/           Synthesizable RTL (ASIC-first)
   core/        CPU core: sisRvCore, sisAlu, sisDecode, sisRegFile, sisCsr
   bus/         Bus infrastructure: sisMemFabric, sisAxiLiteM
-  periph/      Peripherals: sisRom, sisRam, sisTohost
+  periph/      Peripherals: sisRom, sisRam, sisTohost, sisTimer
 tb/            Testbench
   verilator/   Verilator C++ harness
-  cocotb/      cocotb Python tests (ALU, RegFile, Decode, CSR)
-  models/      Behavioral models
+  cocotb/      cocotb Python tests (ALU, RegFile, Decode, CSR, AXI-Lite)
+  models/      Behavioral models (AXI-Lite slave)
 sw/            Bare-metal BSP + assembly tests
   bsp/         crt0.S, link.ld
-  tests/asm/   Assembly test programs (23 tests)
+  tests/asm/   Assembly test programs (24 tests)
 formal/        Formal verification
   alu_add.sv       ALU formal proof wrapper (all 10 ops)
   alu_prove.ys     Yosys SAT proof script (ALU)
@@ -202,6 +211,8 @@ formal/        Formal verification
   regfile_x0.sby   SymbiYosys configuration (RegFile)
   decode_legal.sv  Decoder proof wrapper (fields + legality)
   decode_prove.ys  Yosys SAT proof script (Decoder)
+scripts/       Build scripts
+  yosys_synth.tcl  Yosys synthesis script
 docs/          Architecture docs + plan
 ```
 
