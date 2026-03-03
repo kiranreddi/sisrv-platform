@@ -7,7 +7,7 @@ tests, randomized cocotb unit tests, and formal proofs. All tests run on Verilat
 
 ## Verification Tiers
 
-### Tier 1: Directed Assembly Tests (23 tests)
+### Tier 1: Directed Assembly Tests (24 tests)
 
 Self-checking assembly tests that write 1 to `0x10000000` (PASS) or 0 (FAIL).
 Compiled with `rv32i_zicsr` ISA and run on the full platform simulation.
@@ -24,10 +24,11 @@ Compiled with `rv32i_zicsr` ISA and run on the full platform simulation.
 | Memory | test_load_store, test_mem_edge, test_ram_walk | All load/store variants, byte lanes, walking patterns |
 | CSR | test_csr, test_csr_edge | All CSR instructions, rs1=x0 read-only behavior |
 | Trap | test_ecall, test_ebreak, test_illegal | ECALL/EBREAK/illegal instr trap + MRET |
+| Timer | test_timer | MTIP interrupt, ISR handler, MTIME/MTIMECMP, MRET |
 | System | test_fence, test_lui_auipc, test_x0, test_pass | FENCE NOP, LUI/AUIPC, x0=0 invariant |
 | Stress | test_back_to_back | Fibonacci, register stress, tight loops |
 
-### Tier 2: cocotb Randomized Tests (28 tests)
+### Tier 2: cocotb Randomized Tests (40 tests)
 
 Unit-level tests using cocotb with constrained random stimulus on Verilator 5.038.
 
@@ -54,7 +55,7 @@ Unit-level tests using cocotb with constrained random stimulus on Verilator 5.03
 - funct3/funct7 extraction
 - 1000 random instructions with field/legality verification
 
-**CSR (11 tests)**:
+**CSR (12 tests)**:
 - Reset values (all 8 CSRs read as 0)
 - CSRRW write/read all CSRs
 - CSRRS set-bits operation
@@ -64,6 +65,20 @@ Unit-level tests using cocotb with constrained random stimulus on Verilator 5.03
 - MRET (restore MIE from MPIE, MPIE=1)
 - MEPC word alignment (lower 2 bits cleared)
 - mtvec_out/mepc_out output port verification
+- MTIP/irq_pending (ext_mtip → mip.MTIP → irq_pending with MIE/MTIE)
+
+**AXI-Lite Bridge (11 tests)**:
+- Reset state verification (req_ready=1, all VALID=0)
+- Basic read transaction (AR→R→corebus response)
+- Basic write transaction (AW+W→B→corebus response)
+- Read error response (DECERR)
+- Write error response (SLVERR)
+- Stalled read (AR stall + R stall)
+- Stalled write (AW/W/B stalls)
+- Back-to-back transactions (10 mixed R/W)
+- Random stall stress (100 transactions with random stalls 0-5 cycles)
+- Write strobe variations (all patterns)
+- VALID stability (ARVALID stays high until ARREADY)
 
 ### Tier 3: Formal Proofs
 
@@ -86,14 +101,17 @@ Unit-level tests using cocotb with constrained random stimulus on Verilator 5.03
 ## Running Tests
 
 ```bash
-# Run all assembly tests (23 tests)
+# Run all assembly tests (24 tests)
 make regress
 
-# Run cocotb tests (7 tests)
+# Run cocotb tests (40 tests)
 make cocotb
 
 # Run formal proofs
 make formal
+
+# Run Yosys synthesis
+make synth
 
 # Run everything
 make lint && make regress && make cocotb && make formal
@@ -103,9 +121,9 @@ make lint && make regress && make cocotb && make formal
 
 GitHub Actions workflow (`.github/workflows/ci.yml`) runs on every push/PR:
 1. **Lint** — Verilator lint check
-2. **Regression** — 23 assembly tests
-3. **cocotb** — 7 randomized unit tests
-4. **Formal** — ALU + RegFile proofs
+2. **Regression** — 24 assembly tests
+3. **cocotb** — 40 randomized unit tests
+4. **Formal** — ALU + RegFile + Decoder proofs
 
 ## Debug Knobs
 
@@ -119,7 +137,9 @@ GitHub Actions workflow (`.github/workflows/ci.yml`) runs on every push/PR:
 - ✅ Branch taken/not-taken for all 6 conditions
 - ✅ All load/store sizes and sign extension
 - ✅ All CSR operations + immediate forms
-- ✅ All trap types (ECALL, EBREAK, illegal)
+- ✅ All trap types (ECALL, EBREAK, illegal, timer interrupt)
 - ✅ ALU edge cases (overflow, boundary values)
 - ✅ Memory byte lane coverage
 - ✅ Register file x0 invariant (formal proof)
+- ✅ AXI-Lite handshake compliance (assertions + cocotb tests)
+- ✅ Timer interrupt end-to-end (ISR execution + return)
