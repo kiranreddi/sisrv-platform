@@ -11,7 +11,7 @@ RV_GCC    := $(RV_PREFIX)gcc
 RV_OBJCOPY := $(RV_PREFIX)objcopy
 RV_OBJDUMP := $(RV_PREFIX)objdump
 
-RV_ARCH   := rv32i
+RV_ARCH   := rv32i_zicsr
 RV_ABI    := ilp32
 RV_CFLAGS := -march=$(RV_ARCH) -mabi=$(RV_ABI) -nostdlib -nostartfiles -ffreestanding -static -O2 -Wl,--build-id=none
 
