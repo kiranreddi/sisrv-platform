@@ -1,0 +1,8 @@
+# cocotb Makefile for sisAlu tests
+TOPLEVEL_LANG = verilog
+VERILOG_SOURCES = $(shell pwd)/../../rtl/core/sisAlu.sv
+TOPLEVEL = sisAlu
+MODULE = test_alu
+SIM ?= icarus
+
+include $(shell cocotb-config --makefiles)/Makefile.sim

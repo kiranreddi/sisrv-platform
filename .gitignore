@@ -12,3 +12,11 @@ rom.hex
 *~
 .vscode/
 _codeql_detected_source_root
+
+# cocotb artifacts
+tb/cocotb/sim_build/
+tb/cocotb/results.xml
+tb/cocotb/__pycache__/
+
+# Formal verification artifacts
+formal/*/
