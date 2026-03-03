@@ -3,6 +3,8 @@ TOPLEVEL_LANG = verilog
 VERILOG_SOURCES = $(shell pwd)/../../rtl/core/sisAlu.sv
 TOPLEVEL = sisAlu
 MODULE = test_alu
-SIM ?= icarus
+SIM ?= verilator
+
+EXTRA_ARGS += --timing
 
 include $(shell cocotb-config --makefiles)/Makefile.sim

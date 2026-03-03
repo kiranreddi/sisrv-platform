@@ -10,7 +10,7 @@ MASK32 = 0xFFFFFFFF
 @cocotb.test()
 async def test_x0_always_zero(dut):
     """x0 must always read as zero regardless of write attempts."""
-    clock = Clock(dut.clk, 10, units="ns")
+    clock = Clock(dut.clk, 10, unit="ns")
     cocotb.start_soon(clock.start())
 
     # Try to write to x0
@@ -22,7 +22,7 @@ async def test_x0_always_zero(dut):
     dut.wr_en.value = 0
     dut.rs1_addr.value = 0
     dut.rs2_addr.value = 0
-    await Timer(1, units="ns")
+    await Timer(1, unit="ns")
 
     assert int(dut.rs1_data.value) == 0, "x0 read port A should be 0"
     assert int(dut.rs2_data.value) == 0, "x0 read port B should be 0"
@@ -33,7 +33,7 @@ async def test_x0_always_zero(dut):
 @cocotb.test()
 async def test_write_read_all_regs(dut):
     """Write unique values to x1..x31 and read them back."""
-    clock = Clock(dut.clk, 10, units="ns")
+    clock = Clock(dut.clk, 10, unit="ns")
     cocotb.start_soon(clock.start())
 
     # Write to each register
@@ -49,7 +49,7 @@ async def test_write_read_all_regs(dut):
     for i in range(1, 32):
         dut.rs1_addr.value = i
         dut.rs2_addr.value = i
-        await Timer(1, units="ns")
+        await Timer(1, unit="ns")
         expected = (i * 0x11111111) & MASK32
         assert int(dut.rs1_data.value) == expected, \
             f"x{i} rs1 mismatch: expected 0x{expected:08x}"
@@ -62,7 +62,7 @@ async def test_write_read_all_regs(dut):
 @cocotb.test()
 async def test_write_does_not_corrupt_others(dut):
     """Writing one register should not change others."""
-    clock = Clock(dut.clk, 10, units="ns")
+    clock = Clock(dut.clk, 10, unit="ns")
     cocotb.start_soon(clock.start())
 
     # Initialize x1..x31
@@ -81,7 +81,7 @@ async def test_write_does_not_corrupt_others(dut):
 
     # Check x5 changed
     dut.rs1_addr.value = 5
-    await Timer(1, units="ns")
+    await Timer(1, unit="ns")
     assert int(dut.rs1_data.value) == 0xFFFFFFFF
 
     # Check others unchanged
@@ -89,7 +89,7 @@ async def test_write_does_not_corrupt_others(dut):
         if i == 5:
             continue
         dut.rs1_addr.value = i
-        await Timer(1, units="ns")
+        await Timer(1, unit="ns")
         assert int(dut.rs1_data.value) == i, \
             f"x{i} corrupted: expected {i}, got {int(dut.rs1_data.value)}"
 
@@ -99,7 +99,7 @@ async def test_write_does_not_corrupt_others(dut):
 @cocotb.test()
 async def test_random_read_write(dut):
     """Randomized read/write traffic."""
-    clock = Clock(dut.clk, 10, units="ns")
+    clock = Clock(dut.clk, 10, unit="ns")
     cocotb.start_soon(clock.start())
     random.seed(123)
 
@@ -132,7 +132,7 @@ async def test_random_read_write(dut):
         rs2 = random.randint(0, 31)
         dut.rs1_addr.value = rs1
         dut.rs2_addr.value = rs2
-        await Timer(1, units="ns")
+        await Timer(1, unit="ns")
 
         assert int(dut.rs1_data.value) == shadow[rs1], \
             f"x{rs1} mismatch: expected 0x{shadow[rs1]:08x}"
