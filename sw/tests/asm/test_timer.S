@@ -17,8 +17,6 @@ _start:
 timer_handler:                 # 0x04: timer interrupt handler
     # Verify mcause = 0x80000007 (interrupt bit + timer interrupt code)
     csrr  x5, mcause
-    li    x6, 0x80000007       # {1'b1, 31'd7}
-    # Upper bit check
     lui   x7, 0x80000
     ori   x7, x7, 7
     bne   x5, x7, fail

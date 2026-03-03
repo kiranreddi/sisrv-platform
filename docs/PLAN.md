@@ -100,7 +100,7 @@ Key principles:
 
 ---
 
-## Milestone 3 — AXI4-Lite master bridge (1–2 weeks)
+## Milestone 3 — AXI4-Lite master bridge: RTL complete, system integration incomplete
 ### Objectives
 - Keep core internal bus unchanged; add an AXI4-Lite master bridge.
 - Integrate with an AXI-Lite RAM model in TB, including randomized wait states.
@@ -112,27 +112,48 @@ Key principles:
 - Proper channel handshake compliance
 
 ### Deliverables
-- `rtl/bus/sisAxiLiteM.sv` (corebus -> AXI-Lite)
-- TB AXI-Lite memory model with optional wait insertion
-- Protocol checks (assertions) + optional formal proofs
+- ✅ `rtl/bus/sisAxiLiteM.sv` (corebus -> AXI-Lite)
+- ✅ `tb/models/sisAxiLiteSlave.sv` — AXI-Lite slave model with random stalls
+- ✅ Synthesizable assertions (ifdef ASSERT): VALID stability, no simultaneous R/W
+- ✅ `sisPlatformTop` parameter switch: `USE_AXIL=0` (corebus) / `USE_AXIL=1` (AXI-Lite)
+- ✅ 11 cocotb bridge unit tests with random stall stress (100 txns)
+- 🔲 Full regression (24 asm tests) through AXI path in CI
+- 🔲 1000-seed randomized stall nightly
 
 ### Exit criteria
-- Same C tests run end-to-end through AXI-Lite.
-- Random wait-state stress test (>= 100 seeds) passes without deadlock.
+- ✅ AXI-Lite bridge lint-clean and unit-tested
+- ✅ Random stall stress passes (100 txns per seed)
+- 🔲 All asm tests pass with AXI-Lite path enabled
+- 🔲 1000 seeded runs pass without deadlock
 
 ### Risks / mitigations
-- **Handshake deadlocks:** enforce strict state machine for AR/R and AW/W/B.
-- **TB too forgiving:** inject waits on *every* channel independently.
+- **Handshake deadlocks:** ✅ strict FSM + synthesizable assertions
+- **TB too forgiving:** ✅ independent stall injection on all 5 channels
 
 ---
 
-## Milestone 4 — Timer interrupt (optional in MVP) (1–2 weeks)
+## Milestone 4 — Timer interrupt (1–2 weeks)
 ### Objectives
 - Add machine timer interrupt (MTIP) path.
 - Demonstrate periodic interrupt execution with return to mainline.
 
 ### Scope
 - CSRs: `mie`, `mip` bits for MTIP; `mstatus.MIE`
+- Timer peripheral at MMIO, simple compare register
+
+### Semantic decisions (documented)
+- `mstatus.MIE/MPIE`: Full swap on trap entry (MIE→MPIE, MIE=0), restore on MRET (MPIE→MIE, MPIE=1)
+- `mtvec`: **Direct mode only** (MODE=0); all traps go to same vector address
+- Interrupt taken between instructions (at WB→FETCH transition)
+- mcause: bit 31 = interrupt flag, code 7 = machine timer
+- mepc: PC + 4 (return to next instruction after interrupted one)
+
+### Deliverables
+- ✅ `rtl/periph/sisTimer.sv` — MTIME (64-bit), MTIMECMP, MTIP output
+- ✅ CSR: ext_mtip → mip.MTIP, irq_pending output
+- ✅ Core: interrupt check in WB state
+- ✅ `test_timer.S` — deterministic periodic interrupt test
+- ✅ cocotb test_csr_mtip_irq_pending
 - Timer peripheral at MMIO, simple compare register
 
 ### Deliverables
@@ -182,21 +203,29 @@ Key principles:
 - Ensure synthesizable RTL is clean and timing/plausibility is understood.
 
 ### Deliverables
-- `scripts/yosys_synth.tcl`
+- ✅ `scripts/yosys_synth.tcl`
+- ✅ `$readmemh` guarded with `ifndef SYNTHESIS`
+- ✅ `make synth` target
 - Lint-clean RTL:
   - no inferred latches
   - no combinational loops
-  - reset strategy consistent
+  - reset strategy consistent (async active-low)
 - Synthesis report: area, max frequency estimate (generic libs OK)
 
 ### Exit criteria
-- Yosys builds netlist without errors; basic STA estimates generated.
+- ✅ Yosys synthesis script exists and synthesizes core + bridge
+- ✅ Sim-only constructs properly guarded
+- 🔲 Synthesis reports saved as CI artifacts
 
 ---
 
 ## Milestone 8 — OpenROAD hardening (Sky130 reference) (2–4 weeks)
 ### Objectives
-- Produce GDS for core+bridge (mem may be blackboxed initially).
+- Produce GDS for core + bridge (mem/ROM blackboxed).
+
+### Approach
+- Harden core + AXI bridge only first (no RAM macros)
+- Treat RAM/ROM as blackboxes (use known SRAM macros later)
 
 ### Deliverables
 - OpenROAD flow scripts + constraints

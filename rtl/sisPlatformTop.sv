@@ -279,6 +279,10 @@ module sisPlatformTop #(
     end else begin : gen_axilite
       // ---------------------------------------------------------------
       // AXI4-Lite path: core -> bridge -> AXI-Lite slave model
+      // Note: Timer interrupt is not available in the AXI path.
+      // The AXI-Lite slave model does not include a timer peripheral;
+      // mtip_wire is tied to 0. To add timer support, extend the
+      // AXI slave model or add a separate timer slave on the AXI bus.
       // ---------------------------------------------------------------
 
       // AXI4-Lite signals between bridge and slave
