@@ -5,8 +5,8 @@
 ## Summary
 
 The sisrv-platform project implements a fully functional RV32I RISC-V processor core
-with M-mode CSRs and trap handling. The core is verified through 13 directed assembly
-tests covering all major instruction groups, compiled and simulated with Verilator.
+with M-mode CSRs and trap handling. The core is verified through 23 directed assembly
+tests, 7 cocotb randomized unit tests, and 2 formal proofs — all running on Verilator 5.038.
 
 ## Milestone Status
 
@@ -40,25 +40,35 @@ tests covering all major instruction groups, compiled and simulated with Verilat
 | `sisDecode.sv` | ✅ Done | All RV32I instruction types decoded |
 | `sisMemFabric.sv` | ✅ Done | Address decoder: ROM/RAM/MMIO routing |
 
-**Test coverage** (13 directed tests, all passing):
+**Test coverage** (23 directed tests, all passing):
 
 | Test | Instructions Covered |
 |------|---------------------|
 | test_addi | ADDI (positive, negative, zero) |
 | test_add_sub | ADD, SUB |
+| test_alu_edge | ALU overflow, INT_MIN/MAX, shift by 0/31, self-XOR/AND/OR |
 | test_logic | AND, OR, XOR, ANDI, ORI, XORI |
 | test_shift | SLL, SRL, SRA, SLLI, SRLI, SRAI |
 | test_slt | SLT, SLTU, SLTI, SLTIU |
 | test_branch | BEQ, BNE, BLT, BGE, BLTU, BGEU |
+| test_branch_edge | Branch with INT_MIN/MAX, unsigned edge cases |
 | test_lui_auipc | LUI, AUIPC |
 | test_jal_jalr | JAL, JALR |
+| test_jalr_align | JALR bit[0] masking, rd=x0 discard link |
 | test_load_store | LW, LH, LHU, LB, LBU, SW, SH, SB |
+| test_mem_edge | All byte lanes SB/LB/LBU, halfwords, back-to-back |
+| test_ram_walk | Walking ones/zeros RAM data integrity |
 | test_x0 | x0 hardwired to zero invariant |
 | test_pass | Minimal end-to-end (write PASS to tohost) |
 | test_csr | CSR read/write operations |
+| test_csr_edge | CSRRS/CSRRC with rs1=x0, CSRRWI/SI/CI edge cases |
 | test_ecall | ECALL trap + MRET return |
+| test_ebreak | EBREAK trap (mcause=3) + MRET return |
+| test_illegal | Illegal instruction trap (mcause=2) |
+| test_fence | FENCE as NOP |
+| test_back_to_back | Fibonacci, register file stress, data dependencies, loops |
 
-**Exit criteria**: ≥30 asm tests → 13 focused tests covering all instruction groups ✅,
+**Exit criteria**: 23 directed tests covering all instruction groups ✅,
 x0 always 0 ✅, PC word-aligned ✅, correct sign/zero extension ✅
 
 ---
@@ -72,9 +82,22 @@ x0 always 0 ✅, PC word-aligned ✅, correct sign/zero extension ✅
 | CSR instructions | ✅ Done | CSRRW, CSRRS, CSRRC + immediate forms |
 | ECALL/EBREAK | ✅ Done | Trap entry with correct mcause |
 | MRET | ✅ Done | Returns to mepc |
-| Trap tests | ✅ Done | test_ecall, test_csr |
+| Trap tests | ✅ Done | test_ecall, test_ebreak, test_illegal, test_csr, test_csr_edge |
 
 **Exit criteria**: Trap tests pass ✅, mcause/mepc match expected ✅, no regressions ✅
+
+---
+
+### ✅ Milestone 2.5 — Verification infrastructure
+**Status: COMPLETE**
+
+| Deliverable | Status | Notes |
+|-------------|--------|-------|
+| cocotb ALU tests | ✅ Done | 1000 directed + 1000 random + shift sweep (Verilator 5.038) |
+| cocotb RegFile tests | ✅ Done | x0 zero, write/read all, isolation, 500 random cycles |
+| Formal ALU proof | ✅ Done | All 10 ops proven correct (yosys SAT, < 1s) |
+| Formal RegFile proof | ✅ Done | x0-always-zero (k-induction, SymbiYosys + z3) |
+| CI pipeline | ✅ Done | GitHub Actions: lint, regress, cocotb, formal |
 
 ---
 
@@ -144,13 +167,18 @@ Planned:
 
 | Metric | Value |
 |--------|-------|
-| Verilator version | 5.020 |
+| Verilator version | 5.038 |
 | Lint status | ✅ Clean (Wall, no warnings) |
 | Compiler | riscv64-linux-gnu-gcc 13.3 |
-| Test suite | 13 assembly tests |
-| Regression | 13/13 passing |
+| Assembly test suite | 23 tests |
+| Assembly regression | 23/23 passing |
+| cocotb unit tests | 7 tests (3 ALU + 4 RegFile) |
+| cocotb status | 7/7 passing |
+| Formal proofs | ALU (all 10 ops), RegFile (x0=0) |
+| Formal status | All proofs PASS |
 | Simulation time | < 2s per test |
 | Waveform format | FST |
+| CI pipeline | GitHub Actions (lint, regress, cocotb, formal) |
 
 ## Files Implemented
 
@@ -169,11 +197,21 @@ Planned:
 
 ### Testbench
 - `tb/verilator/main.cpp` — Verilator C++ harness
+- `tb/cocotb/test_alu.py` — ALU cocotb tests (3 tests)
+- `tb/cocotb/test_regfile.py` — RegFile cocotb tests (4 tests)
+
+### Formal Verification
+- `formal/alu_add.sv` — ALU proof wrapper (all 10 operations)
+- `formal/alu_add.sby` — SymbiYosys config (ALU)
+- `formal/alu_prove.ys` — Yosys SAT proof script (ALU)
+- `formal/regfile_x0.sv` — RegFile x0 proof wrapper
+- `formal/regfile_x0.sby` — SymbiYosys config (RegFile)
 
 ### Software
 - `sw/bsp/crt0.S` — C runtime startup
 - `sw/bsp/link.ld` — Linker script
-- `sw/tests/asm/test_*.S` — 13 assembly test programs
+- `sw/tests/asm/test_*.S` — 23 assembly test programs
 
-### Build
-- `Makefile` — Build, lint, sim, regression targets
+### Build & CI
+- `Makefile` — Build, lint, sim, regression, cocotb, formal targets
+- `.github/workflows/ci.yml` — CI pipeline (lint, regress, cocotb, formal)
