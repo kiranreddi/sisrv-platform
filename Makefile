@@ -26,7 +26,7 @@ CPP_SRCS := $(wildcard tb/verilator/*.cpp)
 ASM_TESTS := $(wildcard sw/tests/asm/*.S)
 ASM_HEXES := $(patsubst sw/tests/asm/%.S,$(BUILD)/tests/%.hex,$(ASM_TESTS))
 
-.PHONY: sim lint clean wave regress sw all tests cocotb formal
+.PHONY: sim lint clean wave regress sw all tests cocotb formal synth
 
 all: sim
 
@@ -114,6 +114,8 @@ cocotb:
 	@cd tb/cocotb && rm -rf sim_build results.xml && $(MAKE) -f Makefile.decode SIM=verilator
 	@echo "=== Running cocotb CSR tests ==="
 	@cd tb/cocotb && rm -rf sim_build results.xml && $(MAKE) -f Makefile.csr SIM=verilator
+	@echo "=== Running cocotb AXI-Lite bridge tests ==="
+	@cd tb/cocotb && rm -rf sim_build results.xml && $(MAKE) -f Makefile.axil SIM=verilator
 	@echo "=== cocotb tests PASSED ==="
 
 # Formal verification (requires SymbiYosys + yosys + z3)
@@ -123,3 +125,10 @@ formal:
 	@cd formal && yosys -s alu_prove.ys
 	@cd formal && yosys -s decode_prove.ys
 	@echo "=== Formal proofs PASSED ==="
+
+# Yosys synthesis (requires yosys)
+synth:
+	@echo "=== Running Yosys synthesis ==="
+	@mkdir -p $(BUILD)
+	yosys -s scripts/yosys_synth.tcl
+	@echo "=== Synthesis complete ==="

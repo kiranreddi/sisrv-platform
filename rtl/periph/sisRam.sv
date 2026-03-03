@@ -29,7 +29,9 @@ module sisRam #(
 
   initial begin
     for (int i = 0; i < DEPTH_WORDS; i++) mem[i] = 32'h0;
+`ifndef SYNTHESIS
     if (INIT_FILE != "") $readmemh(INIT_FILE, mem);
+`endif
   end
 
   // Single-cycle response

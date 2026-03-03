@@ -178,4 +178,56 @@ module sisAxiLiteM (
   assign rsp_rdata = rdata_reg;
   assign rsp_err   = err_reg;
 
+  // ---------------------------------------------------------------
+  // Synthesizable assertions (guarded by `ifdef ASSERT)
+  // ---------------------------------------------------------------
+`ifdef ASSERT
+  // VALID stability: once VALID is asserted, it must stay high until READY
+  // AR channel
+  logic ar_was_valid;
+  always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n) ar_was_valid <= 1'b0;
+    else        ar_was_valid <= arvalid && !arready;
+  end
+  assert property (@(posedge clk) disable iff (!rst_n)
+    ar_was_valid |-> arvalid
+  ) else $error("AXI: ARVALID dropped before ARREADY");
+
+  // AW channel
+  logic aw_was_valid;
+  always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n) aw_was_valid <= 1'b0;
+    else        aw_was_valid <= awvalid && !awready;
+  end
+  assert property (@(posedge clk) disable iff (!rst_n)
+    aw_was_valid |-> awvalid
+  ) else $error("AXI: AWVALID dropped before AWREADY");
+
+  // W channel
+  logic w_was_valid;
+  always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n) w_was_valid <= 1'b0;
+    else        w_was_valid <= wvalid && !wready;
+  end
+  assert property (@(posedge clk) disable iff (!rst_n)
+    w_was_valid |-> wvalid
+  ) else $error("AXI: WVALID dropped before WREADY");
+
+  // No simultaneous outstanding read and write
+  assert property (@(posedge clk) disable iff (!rst_n)
+    !(state == S_RD_ADDR || state == S_RD_DATA) ||
+    !(state == S_WR_ADDR || state == S_WR_RESP)
+  ) else $error("AXI: simultaneous read and write in progress");
+
+  // Corebus response VALID stability
+  logic rsp_was_valid;
+  always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n) rsp_was_valid <= 1'b0;
+    else        rsp_was_valid <= rsp_valid && !rsp_ready;
+  end
+  assert property (@(posedge clk) disable iff (!rst_n)
+    rsp_was_valid |-> rsp_valid
+  ) else $error("COREBUS: rsp_valid dropped before rsp_ready");
+`endif
+
 endmodule
