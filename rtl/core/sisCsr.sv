@@ -1,6 +1,14 @@
 // sisCsr.sv — M-mode CSR unit for RV32I
 // Implements minimal set: mstatus, mtvec, mepc, mcause, mtval, mscratch, mie, mip
 // Plus CSR read/write operations and trap entry/return logic.
+//
+// Interrupt semantics (documented decisions):
+//   - mstatus.MIE (bit 3):  Global machine interrupt enable
+//   - mstatus.MPIE (bit 7): Previous MIE (saved on trap entry, restored on MRET)
+//   - mie (bit 7): MTIE — Machine timer interrupt enable
+//   - mip (bit 7): MTIP — Machine timer interrupt pending (read-only from external)
+//   - mtvec: Direct mode only (MODE=0, no vectored mode)
+//   - Trap priority: external interrupts checked between instructions
 
 module sisCsr (
     input  logic        clk,
@@ -21,8 +29,12 @@ module sisCsr (
 
     input  logic        mret_exec,    // MRET instruction executed
 
+    // External interrupt input
+    input  logic        ext_mtip,     // Machine timer interrupt pending (from timer)
+
     output logic [31:0] mtvec_out,    // trap vector address
-    output logic [31:0] mepc_out      // return address for MRET
+    output logic [31:0] mepc_out,     // return address for MRET
+    output logic        irq_pending   // interrupt pending and enabled
 );
 
   // CSR addresses
@@ -49,6 +61,9 @@ module sisCsr (
   // bit 3: MIE (machine interrupt enable)
   // bit 7: MPIE (previous MIE)
 
+  // Reflect external MTIP into mip (bit 7) — read-only from external source
+  wire [31:0] mip_effective = {mip[31:8], ext_mtip, mip[6:0]};
+
   // CSR read
   always_comb begin
     case (csr_addr)
@@ -59,7 +74,7 @@ module sisCsr (
       CSR_MEPC:     csr_rdata = mepc;
       CSR_MCAUSE:   csr_rdata = mcause;
       CSR_MTVAL:    csr_rdata = mtval;
-      CSR_MIP:      csr_rdata = mip;
+      CSR_MIP:      csr_rdata = mip_effective;
       default:      csr_rdata = 32'h0;
     endcase
   end
@@ -112,5 +127,8 @@ module sisCsr (
 
   assign mtvec_out = mtvec;
   assign mepc_out  = mepc;
+
+  // Interrupt pending: mstatus.MIE && (mie & mip) has any enabled+pending bits
+  assign irq_pending = mstatus[3] && ((mie & mip_effective) != 32'h0);
 
 endmodule

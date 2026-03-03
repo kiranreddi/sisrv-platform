@@ -27,7 +27,9 @@ module sisRom #(
   // Initialize from hex file
   initial begin
     for (int i = 0; i < DEPTH_WORDS; i++) mem[i] = 32'h0000_0013; // NOP
+`ifndef SYNTHESIS
     if (INIT_FILE != "") $readmemh(INIT_FILE, mem);
+`endif
   end
 
   // Single-cycle read response

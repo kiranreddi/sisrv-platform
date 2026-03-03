@@ -20,3 +20,6 @@ tb/cocotb/__pycache__/
 
 # Formal verification artifacts
 formal/*/
+
+# Synthesis artifacts
+build/*_synth.v

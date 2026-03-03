@@ -8,6 +8,9 @@ module sisRvCore #(
     input  logic        clk,
     input  logic        rst_n,
 
+    // External interrupt
+    input  logic        ext_mtip,     // Machine timer interrupt pending
+
     // corebus request
     output logic        req_valid,
     input  logic        req_ready,
@@ -146,6 +149,7 @@ module sisRvCore #(
   logic        mret_exec;
   logic [31:0] mtvec_out;
   logic [31:0] mepc_out;
+  logic        irq_pending;
 
   sisCsr u_csr (
     .clk        (clk),
@@ -160,8 +164,10 @@ module sisRvCore #(
     .trap_val   (trap_val),
     .trap_epc   (trap_epc),
     .mret_exec  (mret_exec),
+    .ext_mtip   (ext_mtip),
     .mtvec_out  (mtvec_out),
-    .mepc_out   (mepc_out)
+    .mepc_out   (mepc_out),
+    .irq_pending(irq_pending)
   );
 
   // ---------------------------------------------------------------
@@ -432,6 +438,9 @@ module sisRvCore #(
           end else if (!dec_is_legal) begin
             // Illegal instruction trap
             pc <= mtvec_out;
+          end else if (irq_pending && !is_csr_op) begin
+            // Timer interrupt: take between instructions
+            pc <= mtvec_out;
           end else begin
             pc <= pc + 32'd4;
           end
@@ -542,6 +551,10 @@ module sisRvCore #(
         trap_cause = 32'd2; // Illegal instruction
         trap_val   = instr_reg;
         trap_epc   = pc;
+      end else if (irq_pending) begin
+        trap_enter = 1'b1;
+        trap_cause = {1'b1, 31'd7}; // Machine timer interrupt (bit 31 = interrupt flag)
+        trap_epc   = pc + 32'd4;    // Return to next instruction
       end
     end
   end

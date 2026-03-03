@@ -44,6 +44,7 @@ async def reset_dut(dut):
     dut.trap_val.value = 0
     dut.trap_epc.value = 0
     dut.mret_exec.value = 0
+    dut.ext_mtip.value = 0
     await RisingEdge(dut.clk)
     await RisingEdge(dut.clk)
     dut.rst_n.value = 1
@@ -277,3 +278,41 @@ async def test_csr_mepc_output(dut):
     assert int(dut.mepc_out.value) == 0x00004000
 
     dut._log.info("mepc_out: PASS")
+
+
+@cocotb.test()
+async def test_csr_mtip_irq_pending(dut):
+    """Verify ext_mtip reflects in mip and irq_pending works."""
+    clock = Clock(dut.clk, 10, units="ns")
+    cocotb.start_soon(clock.start())
+    await reset_dut(dut)
+
+    # Initially no interrupt
+    await Timer(1, units="ns")
+    assert int(dut.irq_pending.value) == 0, "No interrupt should be pending"
+
+    # Set ext_mtip=1 but MIE=0 and MTIE=0
+    dut.ext_mtip.value = 1
+    await Timer(1, units="ns")
+    assert int(dut.irq_pending.value) == 0, "IRQ should not be pending (MIE=0, MTIE=0)"
+
+    # Enable MTIE (mie bit 7)
+    await csr_write(dut, CSR_MIE, 0x00000080, CSR_OP_RW)
+    await Timer(1, units="ns")
+    assert int(dut.irq_pending.value) == 0, "IRQ should not be pending (MIE=0)"
+
+    # Enable MIE (mstatus bit 3)
+    await csr_write(dut, CSR_MSTATUS, 0x00000008, CSR_OP_RW)
+    await Timer(1, units="ns")
+    assert int(dut.irq_pending.value) == 1, "IRQ should be pending (MIE=1, MTIE=1, MTIP=1)"
+
+    # Read mip — bit 7 should reflect ext_mtip
+    mip = await csr_read(dut, CSR_MIP)
+    assert (mip >> 7) & 1 == 1, "mip.MTIP should be 1"
+
+    # Clear ext_mtip
+    dut.ext_mtip.value = 0
+    await Timer(1, units="ns")
+    assert int(dut.irq_pending.value) == 0, "IRQ should not be pending (MTIP=0)"
+
+    dut._log.info("MTIP/irq_pending: PASS")
