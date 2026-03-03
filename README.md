@@ -136,17 +136,20 @@ Directed self-checking tests covering all RV32I instructions:
 | System | test_fence, test_lui_auipc, test_x0 | FENCE, LUI/AUIPC, x0 hardwired zero |
 | Stress | test_back_to_back | Fibonacci, register file stress, data dependencies, loops |
 
-### cocotb Tests (7 tests)
+### cocotb Tests (28 tests)
 Randomized and directed unit tests using Verilator 5.038:
 
 - **ALU** (3 tests): 1000 directed edge-case checks, 1000 random stimulus, full shift amount sweep
 - **RegFile** (4 tests): x0-always-zero, write/read all registers, write isolation, 500 random read/write cycles
+- **Decoder** (10 tests): Type flag decode for all 11 opcodes, illegal opcode detection, register extraction, I/S/U/B/J immediate sign-extension, funct3/funct7 extraction, 1000 random instructions
+- **CSR** (11 tests): Reset values, CSRRW/CSRRS/CSRRC operations, unknown CSR reads zero, trap entry (mepc/mcause/mtval/mstatus), MRET restore, MEPC word alignment, mtvec/mepc output ports
 
 ### Formal Verification
 Proofs via Yosys/SymbiYosys:
 
 - **ALU**: All 10 operations (ADD, SUB, SLL, SLT, SLTU, XOR, SRL, SRA, OR, AND) formally proven correct for all 2^64 input combinations. Zero flag proven correct.
 - **RegFile**: x0-always-zero property proven by k-induction for any sequence of writes.
+- **Decoder**: Field extraction, U/B/J immediate alignment invariants, is_legal consistency — all proven for all 2^32 possible instructions.
 
 ## Architecture
 
@@ -175,8 +178,8 @@ The CI pipeline runs on every push/PR to `main`:
 |-----|-------------|------|
 | **Lint** | Verilator lint check (all RTL) | Verilator 5.038 |
 | **Regression** | 23 assembly self-checking tests | Verilator 5.038 + riscv64-gcc |
-| **cocotb** | 7 randomized/directed unit tests | Verilator 5.038 + cocotb |
-| **Formal** | ALU + RegFile formal proofs | Yosys + SymbiYosys + z3 |
+| **cocotb** | 28 randomized/directed unit tests | Verilator 5.038 + cocotb |
+| **Formal** | ALU + RegFile + Decoder formal proofs | Yosys + SymbiYosys + z3 |
 
 ## Directory layout
 
@@ -187,17 +190,18 @@ rtl/           Synthesizable RTL (ASIC-first)
   periph/      Peripherals: sisRom, sisRam, sisTohost
 tb/            Testbench
   verilator/   Verilator C++ harness
-  cocotb/      cocotb Python tests (ALU, RegFile)
+  cocotb/      cocotb Python tests (ALU, RegFile, Decode, CSR)
   models/      Behavioral models
 sw/            Bare-metal BSP + assembly tests
   bsp/         crt0.S, link.ld
   tests/asm/   Assembly test programs (23 tests)
 formal/        Formal verification
-  alu_add.sv   ALU formal proof wrapper (all 10 ops)
-  alu_add.sby  SymbiYosys configuration (ALU)
-  alu_prove.ys Yosys SAT proof script (ALU)
-  regfile_x0.sv  RegFile x0 proof wrapper
-  regfile_x0.sby SymbiYosys configuration (RegFile)
+  alu_add.sv       ALU formal proof wrapper (all 10 ops)
+  alu_prove.ys     Yosys SAT proof script (ALU)
+  regfile_x0.sv    RegFile x0 proof wrapper
+  regfile_x0.sby   SymbiYosys configuration (RegFile)
+  decode_legal.sv  Decoder proof wrapper (fields + legality)
+  decode_prove.ys  Yosys SAT proof script (Decoder)
 docs/          Architecture docs + plan
 ```
 

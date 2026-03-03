@@ -1,28 +1,52 @@
-# Formal verification (formal/)
+# Formal Verification (`formal/`)
 
-## Current status
+## Current Status
 
-Formal proofs are planned for future milestones. The current verification is
-through directed simulation tests (13/13 passing).
+All formal proofs are **passing**. The project uses Yosys + SymbiYosys for formal verification.
 
-## Planned proofs (SymbiYosys)
+## Implemented Proofs
 
-### Core invariants
-- **x0 always zero**: Prove that register x0 can never hold a non-zero value
-- **PC alignment**: Prove PC is always word-aligned
-- **No illegal state transitions**: Prove FSM only transitions to valid states
+### ALU — All 10 operations (`alu_add.sv` + `alu_prove.ys`)
+- **Proof method**: Yosys SAT (direct, no SMT solver needed)
+- **Properties proven** (for all 2^64 input combinations):
+  - ADD: `result == a + b`
+  - SUB: `result == a - b`
+  - SLL: `result == a << b[4:0]`
+  - SLT: `result == (signed(a) < signed(b))`
+  - SLTU: `result == (a < b)`
+  - XOR: `result == a ^ b`
+  - SRL: `result == a >> b[4:0]`
+  - SRA: `result == signed(a) >>> b[4:0]`
+  - OR: `result == a | b`
+  - AND: `result == a & b`
+  - Zero flag correctness for all operations
+- **Runtime**: < 1 second
 
-### AXI4-Lite bridge
-- **Handshake stability**: VALID signals held until READY
-- **No deadlock**: Bridge always eventually returns to idle
-- **Bounded response**: Response within N cycles of request
+### Register File — x0 invariant (`regfile_x0.sv` + `regfile_x0.sby`)
+- **Proof method**: k-induction via SymbiYosys + z3
+- **Properties proven**:
+  - `rs1_data == 0` whenever `rs1_addr == 0`
+  - `rs2_data == 0` whenever `rs2_addr == 0`
+  - Holds for any arbitrary write sequence
 
-### Bus fabric
-- **No simultaneous routing**: Only one slave selected per transaction
-- **Request forwarding**: Every accepted request produces a response
+### Decoder — Field extraction & legality (`decode_legal.sv` + `decode_prove.ys`)
+- **Proof method**: Yosys SAT
+- **Properties proven** (for all 2^32 possible instructions):
+  - Opcode field correctly extracted from `instr[6:0]`
+  - rd, rs1, rs2, funct3, funct7 correctly extracted
+  - U-type immediate has lower 12 bits always zero
+  - B-type immediate has bit 0 always zero
+  - J-type immediate has bit 0 always zero
+  - `is_legal` is consistent with the OR of all type flags
+
+## Running Formal Proofs
+
+```bash
+make formal
+```
 
 ## Prerequisites
 
+- [Yosys](https://github.com/YosysHQ/yosys) — synthesis/SAT proving
 - [SymbiYosys](https://github.com/YosysHQ/sby) — formal verification framework
-- [Yosys](https://github.com/YosysHQ/yosys) — synthesis tool
-- A formal backend (e.g., Z3, boolector, or yices2)
+- [z3](https://github.com/Z3Prover/z3) — SMT solver (for k-induction proofs)

@@ -110,6 +110,10 @@ cocotb:
 	@cd tb/cocotb && rm -rf sim_build results.xml && $(MAKE) -f Makefile.alu SIM=verilator
 	@echo "=== Running cocotb RegFile tests ==="
 	@cd tb/cocotb && rm -rf sim_build results.xml && $(MAKE) -f Makefile.regfile SIM=verilator
+	@echo "=== Running cocotb Decode tests ==="
+	@cd tb/cocotb && rm -rf sim_build results.xml && $(MAKE) -f Makefile.decode SIM=verilator
+	@echo "=== Running cocotb CSR tests ==="
+	@cd tb/cocotb && rm -rf sim_build results.xml && $(MAKE) -f Makefile.csr SIM=verilator
 	@echo "=== cocotb tests PASSED ==="
 
 # Formal verification (requires SymbiYosys + yosys + z3)
@@ -117,4 +121,5 @@ formal:
 	@echo "=== Running formal proofs ==="
 	@cd formal && sby -f regfile_x0.sby
 	@cd formal && yosys -s alu_prove.ys
+	@cd formal && yosys -s decode_prove.ys
 	@echo "=== Formal proofs PASSED ==="
