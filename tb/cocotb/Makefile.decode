@@ -1,0 +1,10 @@
+# cocotb Makefile for sisDecode tests
+TOPLEVEL_LANG = verilog
+VERILOG_SOURCES = $(shell pwd)/../../rtl/core/sisDecode.sv
+TOPLEVEL = sisDecode
+MODULE = test_decode
+SIM ?= verilator
+
+EXTRA_ARGS += --timing
+
+include $(shell cocotb-config --makefiles)/Makefile.sim

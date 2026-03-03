@@ -6,7 +6,7 @@
 
 The sisrv-platform project implements a fully functional RV32I RISC-V processor core
 with M-mode CSRs and trap handling. The core is verified through 23 directed assembly
-tests, 7 cocotb randomized unit tests, and 2 formal proofs — all running on Verilator 5.038.
+tests, 28 cocotb randomized unit tests, and 3 formal proofs — all running on Verilator 5.038.
 
 ## Milestone Status
 
@@ -95,8 +95,11 @@ x0 always 0 ✅, PC word-aligned ✅, correct sign/zero extension ✅
 |-------------|--------|-------|
 | cocotb ALU tests | ✅ Done | 1000 directed + 1000 random + shift sweep (Verilator 5.038) |
 | cocotb RegFile tests | ✅ Done | x0 zero, write/read all, isolation, 500 random cycles |
+| cocotb Decode tests | ✅ Done | Type flags, illegal opcodes, immediates (I/S/U/B/J), register extraction, 1000 random |
+| cocotb CSR tests | ✅ Done | Reset values, RW/RS/RC ops, trap entry, MRET, MEPC alignment, outputs |
 | Formal ALU proof | ✅ Done | All 10 ops proven correct (yosys SAT, < 1s) |
 | Formal RegFile proof | ✅ Done | x0-always-zero (k-induction, SymbiYosys + z3) |
+| Formal Decode proof | ✅ Done | Field extraction, immediate invariants, legality consistency (yosys SAT) |
 | CI pipeline | ✅ Done | GitHub Actions: lint, regress, cocotb, formal |
 
 ---
@@ -172,9 +175,9 @@ Planned:
 | Compiler | riscv64-linux-gnu-gcc 13.3 |
 | Assembly test suite | 23 tests |
 | Assembly regression | 23/23 passing |
-| cocotb unit tests | 7 tests (3 ALU + 4 RegFile) |
-| cocotb status | 7/7 passing |
-| Formal proofs | ALU (all 10 ops), RegFile (x0=0) |
+| cocotb unit tests | 28 tests (3 ALU + 4 RegFile + 10 Decode + 11 CSR) |
+| cocotb status | 28/28 passing |
+| Formal proofs | ALU (all 10 ops), RegFile (x0=0), Decode (fields + legality) |
 | Formal status | All proofs PASS |
 | Simulation time | < 2s per test |
 | Waveform format | FST |
@@ -199,6 +202,8 @@ Planned:
 - `tb/verilator/main.cpp` — Verilator C++ harness
 - `tb/cocotb/test_alu.py` — ALU cocotb tests (3 tests)
 - `tb/cocotb/test_regfile.py` — RegFile cocotb tests (4 tests)
+- `tb/cocotb/test_decode.py` — Decoder cocotb tests (10 tests)
+- `tb/cocotb/test_csr.py` — CSR unit cocotb tests (11 tests)
 
 ### Formal Verification
 - `formal/alu_add.sv` — ALU proof wrapper (all 10 operations)
@@ -206,6 +211,8 @@ Planned:
 - `formal/alu_prove.ys` — Yosys SAT proof script (ALU)
 - `formal/regfile_x0.sv` — RegFile x0 proof wrapper
 - `formal/regfile_x0.sby` — SymbiYosys config (RegFile)
+- `formal/decode_legal.sv` — Decoder proof wrapper (fields + legality)
+- `formal/decode_prove.ys` — Yosys SAT proof script (Decoder)
 
 ### Software
 - `sw/bsp/crt0.S` — C runtime startup

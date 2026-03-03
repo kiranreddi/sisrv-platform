@@ -59,7 +59,7 @@ jobs:
         run: make regress
 
   cocotb:
-    name: cocotb Tests (ALU + RegFile)
+    name: cocotb Tests (ALU + RegFile + Decode + CSR)
     runs-on: ubuntu-latest
     needs: lint
     steps:

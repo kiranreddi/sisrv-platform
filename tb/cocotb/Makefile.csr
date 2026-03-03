@@ -1,0 +1,10 @@
+# cocotb Makefile for sisCsr tests
+TOPLEVEL_LANG = verilog
+VERILOG_SOURCES = $(shell pwd)/../../rtl/core/sisCsr.sv
+TOPLEVEL = sisCsr
+MODULE = test_csr
+SIM ?= verilator
+
+EXTRA_ARGS += --timing
+
+include $(shell cocotb-config --makefiles)/Makefile.sim

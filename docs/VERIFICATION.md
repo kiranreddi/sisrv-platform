@@ -27,7 +27,7 @@ Compiled with `rv32i_zicsr` ISA and run on the full platform simulation.
 | System | test_fence, test_lui_auipc, test_x0, test_pass | FENCE NOP, LUI/AUIPC, x0=0 invariant |
 | Stress | test_back_to_back | Fibonacci, register stress, tight loops |
 
-### Tier 2: cocotb Randomized Tests (7 tests)
+### Tier 2: cocotb Randomized Tests (28 tests)
 
 Unit-level tests using cocotb with constrained random stimulus on Verilator 5.038.
 
@@ -42,6 +42,29 @@ Unit-level tests using cocotb with constrained random stimulus on Verilator 5.03
 - Write isolation (modifying one register doesn't corrupt others)
 - 500 random read/write cycles with shadow model
 
+**Decoder (10 tests)**:
+- Type flag decode for all 11 legal opcodes (exactly one flag set)
+- Illegal opcode detection (117 illegal opcodes tested)
+- Register field extraction (rd, rs1, rs2) with corner values
+- I-type immediate sign extension (7 test vectors)
+- S-type immediate sign extension (5 test vectors)
+- U-type immediate (upper 20 bits, lower 12 zeroed)
+- B-type immediate (13-bit signed, bit 0 always 0)
+- J-type immediate (21-bit signed, bit 0 always 0)
+- funct3/funct7 extraction
+- 1000 random instructions with field/legality verification
+
+**CSR (11 tests)**:
+- Reset values (all 8 CSRs read as 0)
+- CSRRW write/read all CSRs
+- CSRRS set-bits operation
+- CSRRC clear-bits operation
+- Unknown CSR reads zero
+- Trap entry (saves mepc/mcause/mtval, MIE→MPIE, MIE=0)
+- MRET (restore MIE from MPIE, MPIE=1)
+- MEPC word alignment (lower 2 bits cleared)
+- mtvec_out/mepc_out output port verification
+
 ### Tier 3: Formal Proofs
 
 **ALU** (`formal/alu_add.sv`):
@@ -53,6 +76,12 @@ Unit-level tests using cocotb with constrained random stimulus on Verilator 5.03
 **RegFile** (`formal/regfile_x0.sv`):
 - Property: x0 reads 0 regardless of any write sequence
 - Proven by k-induction using SymbiYosys + z3
+
+**Decoder** (`formal/decode_legal.sv`):
+- Field extraction correct for all 2^32 instructions
+- U/B/J immediate alignment invariants proven
+- is_legal consistent with type flags OR
+- Proven using Yosys SAT solver
 
 ## Running Tests
 
