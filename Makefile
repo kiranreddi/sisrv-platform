@@ -104,7 +104,7 @@ run-%: $(SIM) $(BUILD)/tests/%.hex
 clean:
 	rm -rf $(BUILD) obj_dir rom.hex
 
-# cocotb tests (requires cocotb + verilator 5.036+)
+# cocotb tests (requires cocotb + verilator 5.038+)
 cocotb:
 	@echo "=== Running cocotb ALU tests ==="
 	@cd tb/cocotb && rm -rf sim_build results.xml && $(MAKE) -f Makefile.alu SIM=verilator
