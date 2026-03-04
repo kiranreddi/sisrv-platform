@@ -27,6 +27,8 @@ module sisRam #(
 
   logic [31:0] mem [0:DEPTH_WORDS-1];
 
+  // Note: initial blocks are sim-only. For synthesis, RAM contents are
+  // undefined at power-on (SRAM macro) or zero-initialized (FPGA BRAM).
   initial begin
     for (int i = 0; i < DEPTH_WORDS; i++) mem[i] = 32'h0;
 `ifndef SYNTHESIS

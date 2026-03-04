@@ -6,8 +6,8 @@
 
 The sisrv-platform project implements a fully functional RV32I RISC-V processor core
 with M-mode CSRs, trap handling, timer interrupts, and an AXI4-Lite master bridge.
-The core is verified through 24 directed assembly tests, 40 cocotb randomized unit tests,
-and 3 formal proofs — all running on Verilator 5.038.
+The core is verified through 25 directed assembly tests, 40 cocotb randomized unit tests,
+and 4 formal proofs — all running on Verilator 5.038.
 
 ## Milestone Status
 
@@ -41,7 +41,7 @@ and 3 formal proofs — all running on Verilator 5.038.
 | `sisDecode.sv` | ✅ Done | All RV32I instruction types decoded |
 | `sisMemFabric.sv` | ✅ Done | Address decoder: ROM/RAM/MMIO routing |
 
-**Test coverage** (24 directed tests, all passing):
+**Test coverage** (25 directed tests, all passing):
 
 | Test | Instructions Covered |
 |------|---------------------|
@@ -69,8 +69,9 @@ and 3 formal proofs — all running on Verilator 5.038.
 | test_fence | FENCE as NOP |
 | test_back_to_back | Fibonacci, register file stress, data dependencies, loops |
 | test_timer | Timer interrupt: MTIP, ISR counter, MRET return |
+| test_mret_boundary | MRET exact resume point: no skipped/repeated instructions |
 
-**Exit criteria**: 24 directed tests covering all instruction groups ✅,
+**Exit criteria**: 25 directed tests covering all instruction groups ✅,
 x0 always 0 ✅, PC word-aligned ✅, correct sign/zero extension ✅
 
 ---
@@ -109,6 +110,7 @@ x0 always 0 ✅, PC word-aligned ✅, correct sign/zero extension ✅
 | Formal ALU proof | ✅ Done | All 10 ops proven correct (yosys SAT, < 1s) |
 | Formal RegFile proof | ✅ Done | x0-always-zero (k-induction, SymbiYosys + z3) |
 | Formal Decode proof | ✅ Done | Field extraction, immediate invariants, legality consistency (yosys SAT) |
+| Formal AXI-Lite proof | ✅ Done | VALID stability, deadlock freedom, mutual exclusion, data stability |
 | CI pipeline | ✅ Done | GitHub Actions: lint, regress, cocotb, formal |
 
 ---
@@ -124,8 +126,9 @@ x0 always 0 ✅, PC word-aligned ✅, correct sign/zero extension ✅
 | Lint clean | ✅ Done | Verilator Wall clean |
 | Synthesizable assertions | ✅ Done | VALID stability, no simultaneous R+W (ifdef ASSERT) |
 | `USE_AXIL` param switch | ✅ Done | `sisPlatformTop`: 0=corebus, 1=AXI-Lite |
-| AXI-Lite slave TB model | ✅ Done | `tb/models/sisAxiLiteSlave.sv` with random stalls |
+| AXI-Lite slave TB model | ✅ Done | `tb/models/sisAxiLiteSlave.sv` with independent per-channel stalls |
 | cocotb bridge tests | ✅ Done | 11 tests: reset, R/W, errors, stalls, 100-txn random stress |
+| Formal AXI-Lite bridge | ✅ Done | VALID stability, deadlock freedom, mutual exclusion, data stability |
 
 **Remaining for full milestone completion**:
 - Full regression suite through AXI path (USE_AXIL=1) not yet in CI
@@ -182,13 +185,22 @@ Planned:
 |-------------|--------|-------|
 | `scripts/yosys_synth.tcl` | ✅ Done | Synthesizes core + AXI bridge, generates area report |
 | $readmemh guarded | ✅ Done | `ifndef SYNTHESIS` in sisRom.sv and sisRam.sv |
-| Sim/synth separation | ✅ Done | Memory init is simulation-only |
+| Sim/synth separation | ✅ Done | Memory init is simulation-only; initial blocks documented |
+| Reset strategy audit | ✅ Done | Consistent async active-low reset across all modules |
+| No sim constructs in synth | ✅ Done | $readmemh, $display behind guards; initial blocks are ASIC-safe |
 | `make synth` target | ✅ Done | Runs Yosys synthesis from Makefile |
 
 **Synthesis constraints (documented)**:
 - Target clock period: 20ns (50 MHz, conservative for educational design)
-- Single clock domain, async active-low reset
+- Single clock domain, async active-low reset (consistent across all modules)
 - Memories (ROM/RAM) should use SRAM macros in real ASIC flow
+- Register file has no reset (intentional: ASIC-standard, contents undefined at power-on)
+- No sim-only constructs in synth path: $readmemh behind `ifndef SYNTHESIS`, initial blocks ignored by synth tools
+
+**Reset strategy (audited)**:
+- All state-holding modules use `always_ff @(posedge clk or negedge rst_n)` — **async active-low**
+- Exception: `sisRegFile.sv` uses `always_ff @(posedge clk)` — **no reset** (intentional: reg file contents are architecturally undefined at reset; x0 is hardwired via combinational read logic)
+- This is consistent and ASIC/DFT-friendly (no mixed sync/async issues)
 
 **Exit criteria**: Yosys builds gate-level netlist ✅, $readmemh properly guarded ✅
 
@@ -212,11 +224,11 @@ Planned:
 | Verilator version | 5.038 |
 | Lint status | ✅ Clean (Wall, no warnings) |
 | Compiler | riscv64-linux-gnu-gcc 13.3 |
-| Assembly test suite | 24 tests |
-| Assembly regression | 24/24 passing |
+| Assembly test suite | 25 tests |
+| Assembly regression | 25/25 passing |
 | cocotb unit tests | 40 tests (3 ALU + 4 RegFile + 10 Decode + 12 CSR + 11 AXI-Lite) |
 | cocotb status | 40/40 passing |
-| Formal proofs | ALU (all 10 ops), RegFile (x0=0), Decode (fields + legality) |
+| Formal proofs | ALU (all 10 ops), RegFile (x0=0), Decode (fields + legality), AXI-Lite (VALID stability + deadlock freedom) |
 | Formal status | All proofs PASS |
 | Simulation time | < 2s per test |
 | Waveform format | FST |
@@ -256,11 +268,13 @@ Planned:
 - `formal/regfile_x0.sby` — SymbiYosys config (RegFile)
 - `formal/decode_legal.sv` — Decoder proof wrapper (fields + legality)
 - `formal/decode_prove.ys` — Yosys SAT proof script (Decoder)
+- `formal/axil_master.sv` — AXI-Lite bridge proof wrapper (VALID stability, deadlock freedom)
+- `formal/axil_master.sby` — SymbiYosys config (AXI-Lite bridge)
 
 ### Software
 - `sw/bsp/crt0.S` — C runtime startup
 - `sw/bsp/link.ld` — Linker script
-- `sw/tests/asm/test_*.S` — 24 assembly test programs
+- `sw/tests/asm/test_*.S` — 25 assembly test programs
 
 ### Build & CI
 - `Makefile` — Build, lint, sim, regression, cocotb, formal, synth targets

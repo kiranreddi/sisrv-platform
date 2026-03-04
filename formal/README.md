@@ -39,11 +39,16 @@ All formal proofs are **passing**. The project uses Yosys + SymbiYosys for forma
   - J-type immediate has bit 0 always zero
   - `is_legal` is consistent with the OR of all type flags
 
-## Future proof candidates (high ROI)
-
-- **AXI-Lite bridge**: Deadlock freedom, VALID stability, handshake compliance
-  (synthesizable assertions already in `rtl/bus/sisAxiLiteM.sv`, ifdef ASSERT)
-- **Timer**: MTIP monotonicity, MTIME increment correctness
+### AXI-Lite Bridge — Handshake safety (`axil_master.sv` + `axil_master.sby`)
+- **Proof method**: k-induction via SymbiYosys + z3 (depth 20)
+- **Properties proven** (for all possible input sequences):
+  - **VALID stability**: ARVALID stays high until ARREADY (AXI spec A3.2.1)
+  - **VALID stability**: AWVALID stays high until AWREADY
+  - **VALID stability**: WVALID stays high until WREADY
+  - **Mutual exclusion**: No simultaneous read (AR/R) and write (AW/W/B) channels active
+  - **Corebus rsp_valid stability**: rsp_valid stays high until rsp_ready
+  - **req_ready only in IDLE**: Bridge only accepts new requests when no AXI transaction in progress
+  - **Address/data stability**: ARADDR, AWADDR, WDATA, WSTRB don't change while VALID is high and READY is low
 
 ## Running Formal Proofs
 

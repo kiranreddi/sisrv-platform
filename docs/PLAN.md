@@ -113,22 +113,24 @@ Key principles:
 
 ### Deliverables
 - ✅ `rtl/bus/sisAxiLiteM.sv` (corebus -> AXI-Lite)
-- ✅ `tb/models/sisAxiLiteSlave.sv` — AXI-Lite slave model with random stalls
+- ✅ `tb/models/sisAxiLiteSlave.sv` — AXI-Lite slave model with independent per-channel stalls
 - ✅ Synthesizable assertions (ifdef ASSERT): VALID stability, no simultaneous R/W
 - ✅ `sisPlatformTop` parameter switch: `USE_AXIL=0` (corebus) / `USE_AXIL=1` (AXI-Lite)
 - ✅ 11 cocotb bridge unit tests with random stall stress (100 txns)
-- 🔲 Full regression (24 asm tests) through AXI path in CI
+- ✅ Formal proof: VALID stability, deadlock freedom, mutual exclusion, data stability (k-induction, depth 20)
+- 🔲 Full regression (25 asm tests) through AXI path in CI
 - 🔲 1000-seed randomized stall nightly
 
 ### Exit criteria
 - ✅ AXI-Lite bridge lint-clean and unit-tested
 - ✅ Random stall stress passes (100 txns per seed)
+- ✅ Formal proof of handshake safety and deadlock freedom
 - 🔲 All asm tests pass with AXI-Lite path enabled
 - 🔲 1000 seeded runs pass without deadlock
 
 ### Risks / mitigations
-- **Handshake deadlocks:** ✅ strict FSM + synthesizable assertions
-- **TB too forgiving:** ✅ independent stall injection on all 5 channels
+- **Handshake deadlocks:** ✅ strict FSM + synthesizable assertions + formal proof
+- **TB too forgiving:** ✅ independent per-channel LFSR stall injection on all 5 channels
 
 ---
 
@@ -153,6 +155,7 @@ Key principles:
 - ✅ CSR: ext_mtip → mip.MTIP, irq_pending output
 - ✅ Core: interrupt check in WB state
 - ✅ `test_timer.S` — deterministic periodic interrupt test
+- ✅ `test_mret_boundary.S` — exact resume point verification (no skipped/repeated instructions)
 - ✅ cocotb test_csr_mtip_irq_pending
 - Timer peripheral at MMIO, simple compare register
 
@@ -206,6 +209,8 @@ Key principles:
 - ✅ `scripts/yosys_synth.tcl`
 - ✅ `$readmemh` guarded with `ifndef SYNTHESIS`
 - ✅ `make synth` target
+- ✅ Reset strategy audit: consistent async active-low across all modules
+- ✅ Sim-only construct audit: no $display/$readmemh/initial in synth path
 - Lint-clean RTL:
   - no inferred latches
   - no combinational loops

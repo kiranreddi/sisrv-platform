@@ -25,6 +25,8 @@ module sisRom #(
   logic [31:0] mem [0:DEPTH_WORDS-1];
 
   // Initialize from hex file
+  // Note: initial blocks are sim-only. For synthesis, ROM contents come from
+  // SRAM macro initialization or configuration bitstream (FPGA).
   initial begin
     for (int i = 0; i < DEPTH_WORDS; i++) mem[i] = 32'h0000_0013; // NOP
 `ifndef SYNTHESIS
