@@ -1,0 +1,19 @@
+[tasks]
+prove
+
+[options]
+prove: mode prove
+prove: depth 20
+
+[engines]
+prove: smtbmc z3
+
+[script]
+read -formal -sv rtl/bus/sisAxiLiteM.sv
+read -formal -sv formal/axil_master.sv
+hierarchy -top axil_master_formal
+prep -top axil_master_formal
+
+[files]
+rtl/bus/sisAxiLiteM.sv
+formal/axil_master.sv

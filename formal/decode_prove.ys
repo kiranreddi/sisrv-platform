@@ -1,0 +1,10 @@
+# Yosys formal proof script for decoder properties
+# Run: yosys -s decode_prove.ys
+# Proves field extraction, immediate invariants, and legality consistency
+
+read -formal -sv ../rtl/core/sisDecode.sv
+read -formal -sv decode_legal.sv
+prep -top decode_legal_wrapper
+flatten
+opt -full
+sat -verify -prove-asserts -show-all

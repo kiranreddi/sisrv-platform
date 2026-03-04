@@ -1,0 +1,25 @@
+# Build artifacts
+build/
+obj_dir/
+
+# Temporary files
+rom.hex
+*.fst
+
+# Editor files
+*.swp
+*.swo
+*~
+.vscode/
+_codeql_detected_source_root
+
+# cocotb artifacts
+tb/cocotb/sim_build/
+tb/cocotb/results.xml
+tb/cocotb/__pycache__/
+
+# Formal verification artifacts
+formal/*/
+
+# Synthesis artifacts
+build/*_synth.v
