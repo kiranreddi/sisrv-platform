@@ -1,0 +1,13 @@
+# axil_prove.ys — Yosys SAT proof for AXI-Lite master bridge
+# Proves VALID stability, mutual exclusion, and handshake safety
+
+read_verilog -formal -sv rtl/bus/sisAxiLiteM.sv
+read_verilog -formal -sv formal/axil_master.sv
+
+hierarchy -top axil_master_formal
+proc
+flatten
+opt -full
+
+# Run SAT solver on all assertions
+sat -verify -prove-asserts -set-init-undef -tempinduct -seq 20

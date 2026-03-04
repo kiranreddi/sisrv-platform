@@ -69,14 +69,26 @@ module sisAxiLiteSlave #(
   end
 
   // ---------------------------------------------------------------
-  // LFSR for random stall generation (sim only)
+  // Independent per-channel LFSRs for truly independent stall injection
+  // Each AXI channel (AR, R, AW, W, B) gets its own LFSR with a
+  // different seed so stalls are uncorrelated across channels.
   // ---------------------------------------------------------------
-  logic [15:0] lfsr;
+  logic [15:0] lfsr_ar, lfsr_r, lfsr_aw, lfsr_w, lfsr_b;
+
   always_ff @(posedge clk or negedge rst_n) begin
-    if (!rst_n)
-      lfsr <= 16'hACE1;
-    else
-      lfsr <= {lfsr[14:0], lfsr[15] ^ lfsr[13] ^ lfsr[12] ^ lfsr[10]};
+    if (!rst_n) begin
+      lfsr_ar <= 16'hACE1;
+      lfsr_r  <= 16'hBEEF;
+      lfsr_aw <= 16'hCAFE;
+      lfsr_w  <= 16'hDEAD;
+      lfsr_b  <= 16'hF00D;
+    end else begin
+      lfsr_ar <= {lfsr_ar[14:0], lfsr_ar[15] ^ lfsr_ar[13] ^ lfsr_ar[12] ^ lfsr_ar[10]};
+      lfsr_r  <= {lfsr_r[14:0],  lfsr_r[15]  ^ lfsr_r[13]  ^ lfsr_r[12]  ^ lfsr_r[10]};
+      lfsr_aw <= {lfsr_aw[14:0], lfsr_aw[15] ^ lfsr_aw[13] ^ lfsr_aw[12] ^ lfsr_aw[10]};
+      lfsr_w  <= {lfsr_w[14:0],  lfsr_w[15]  ^ lfsr_w[13]  ^ lfsr_w[12]  ^ lfsr_w[10]};
+      lfsr_b  <= {lfsr_b[14:0],  lfsr_b[15]  ^ lfsr_b[13]  ^ lfsr_b[12]  ^ lfsr_b[10]};
+    end
   end
 
   function automatic logic should_stall;
@@ -139,9 +151,9 @@ module sisAxiLiteSlave #(
         RD_IDLE: begin
           if (arvalid && arready) begin
             rd_addr_reg <= araddr;
-            if (should_stall(lfsr)) begin
+            if (should_stall(lfsr_r)) begin
               rd_state     <= RD_WAIT;
-              rd_stall_cnt <= lfsr[3:0] & 4'hF;
+              rd_stall_cnt <= lfsr_r[3:0] & 4'hF;
             end else begin
               rd_data_reg <= mem_read(araddr);
               rd_resp_reg <= (is_rom(araddr) || is_ram(araddr) || is_mmio(araddr)) ? 2'b00 : 2'b11;
@@ -171,7 +183,7 @@ module sisAxiLiteSlave #(
     end
   end
 
-  assign arready = (rd_state == RD_IDLE) && !should_stall({lfsr[7:0], lfsr[15:8]});
+  assign arready = (rd_state == RD_IDLE) && !should_stall(lfsr_ar);
   assign rvalid  = (rd_state == RD_RESP);
   assign rdata   = rd_data_reg;
   assign rresp   = rd_resp_reg;
@@ -253,9 +265,9 @@ module sisAxiLiteSlave #(
             if (wr_data_reg == 32'h0000_0000) fail <= 1'b1;
           end
           wr_resp_reg <= (is_rom(wr_addr_reg) || is_ram(wr_addr_reg) || is_mmio(wr_addr_reg)) ? 2'b00 : 2'b11;
-          if (should_stall({lfsr[11:0], lfsr[15:12]})) begin
+          if (should_stall(lfsr_b)) begin
             wr_state     <= WR_WAIT;
-            wr_stall_cnt <= lfsr[3:0] & 4'h7;
+            wr_stall_cnt <= lfsr_b[3:0] & 4'h7;
           end else begin
             wr_state <= WR_RESP;
           end
@@ -279,8 +291,8 @@ module sisAxiLiteSlave #(
     end
   end
 
-  assign awready = (wr_state == WR_IDLE || wr_state == WR_GOT_W) && !should_stall({lfsr[3:0], lfsr[15:4]});
-  assign wready  = (wr_state == WR_IDLE || wr_state == WR_GOT_AW) && !should_stall({lfsr[11:0], lfsr[15:12]});
+  assign awready = (wr_state == WR_IDLE || wr_state == WR_GOT_W) && !should_stall(lfsr_aw);
+  assign wready  = (wr_state == WR_IDLE || wr_state == WR_GOT_AW) && !should_stall(lfsr_w);
   assign bvalid  = (wr_state == WR_RESP);
   assign bresp   = wr_resp_reg;
 

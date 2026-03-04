@@ -33,7 +33,7 @@ jobs:
         run: make lint
 
   regress:
-    name: Assembly Regression (24 tests)
+    name: Assembly Regression (25 tests)
     runs-on: ubuntu-latest
     needs: lint
     steps:
@@ -86,11 +86,12 @@ jobs:
           echo "=== cocotb Test Configuration ==="
           echo "Simulator backend: Verilator"
           verilator --version
+          echo "DUT top modules: sisAlu, sisRegFile, sisDecode, sisCsr, sisAxiLiteM"
           echo "================================"
           make cocotb
 
   formal:
-    name: Formal Verification
+    name: Formal Verification (ALU + RegFile + Decoder + AXI-Lite)
     runs-on: ubuntu-latest
     needs: lint
     steps:

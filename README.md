@@ -13,9 +13,9 @@ peripherals via a configurable bus path (corebus or AXI4-Lite).
 | Milestone | Status |
 |-----------|--------|
 | M0 — Sim harness & golden flow | ✅ Complete |
-| M1 — RV32I multi-cycle core | ✅ Complete (24/24 tests pass) |
+| M1 — RV32I multi-cycle core | ✅ Complete (25/25 tests pass) |
 | M2 — CSRs + traps (M-mode) | ✅ Complete |
-| M2.5 — Verification infrastructure | ✅ Complete (40 cocotb + 3 formal) |
+| M2.5 — Verification infrastructure | ✅ Complete (40 cocotb + 4 formal) |
 | M3 — AXI4-Lite master bridge | ✅ RTL complete, system integration incomplete |
 | M4 — Timer interrupt | ✅ Complete |
 | M5 — RV32M (mul/div) | 🔲 Planned |
@@ -67,7 +67,7 @@ make sw
 # Run a single test (the basic PASS test)
 make sim
 
-# Run full regression suite (24 tests)
+# Run full regression suite (25 tests)
 make regress
 
 # Run cocotb tests (40 tests: ALU + RegFile + Decode + CSR + AXI-Lite)
@@ -115,18 +115,19 @@ $ make regress
   PASS: test_logic
   PASS: test_lui_auipc
   PASS: test_mem_edge
+  PASS: test_mret_boundary
   PASS: test_pass
   PASS: test_ram_walk
   PASS: test_shift
   PASS: test_slt
   PASS: test_timer
   PASS: test_x0
-=== Results: 24/24 passed, 0 failed ===
+=== Results: 25/25 passed, 0 failed ===
 ```
 
 ## Verification
 
-### Assembly Tests (24 tests)
+### Assembly Tests (25 tests)
 Directed self-checking tests covering all RV32I instructions:
 
 | Category | Tests | Coverage |
@@ -139,6 +140,7 @@ Directed self-checking tests covering all RV32I instructions:
 | CSR | test_csr, test_csr_edge | CSRRW/CSRRS/CSRRC/CSRRWI/CSRRSI/CSRRCI, rs1=x0 read-only |
 | Trap | test_ecall, test_ebreak, test_illegal | ECALL/EBREAK/illegal instr trap, mcause, MRET |
 | Timer | test_timer | MTIP interrupt, ISR handler, MTIME/MTIMECMP, MRET return |
+| Timer | test_mret_boundary | MRET exact resume point, no skipped/repeated instructions |
 | System | test_fence, test_lui_auipc, test_x0 | FENCE, LUI/AUIPC, x0 hardwired zero |
 | Stress | test_back_to_back | Fibonacci, register file stress, data dependencies, loops |
 
@@ -157,6 +159,7 @@ Proofs via Yosys/SymbiYosys:
 - **ALU**: All 10 operations (ADD, SUB, SLL, SLT, SLTU, XOR, SRL, SRA, OR, AND) formally proven correct for all 2^64 input combinations. Zero flag proven correct.
 - **RegFile**: x0-always-zero property proven by k-induction for any sequence of writes.
 - **Decoder**: Field extraction, U/B/J immediate alignment invariants, is_legal consistency — all proven for all 2^32 possible instructions.
+- **AXI-Lite Bridge**: VALID stability (AR/AW/W channels), deadlock freedom (mutual exclusion of read/write), corebus response stability, address/data stability — proven by k-induction (depth 20).
 
 ## Architecture
 
@@ -186,9 +189,9 @@ The CI pipeline runs on every push/PR to `main`:
 | Job | Description | Tool |
 |-----|-------------|------|
 | **Lint** | Verilator lint check (all RTL) | Verilator 5.038 |
-| **Regression** | 24 assembly self-checking tests | Verilator 5.038 + riscv64-gcc |
+| **Regression** | 25 assembly self-checking tests | Verilator 5.038 + riscv64-gcc |
 | **cocotb** | 40 randomized/directed unit tests | Verilator 5.038 + cocotb |
-| **Formal** | ALU + RegFile + Decoder formal proofs | Yosys + SymbiYosys + z3 |
+| **Formal** | ALU + RegFile + Decoder + AXI-Lite formal proofs | Yosys + SymbiYosys + z3 |
 
 ## Directory layout
 
@@ -203,7 +206,7 @@ tb/            Testbench
   models/      Behavioral models (AXI-Lite slave)
 sw/            Bare-metal BSP + assembly tests
   bsp/         crt0.S, link.ld
-  tests/asm/   Assembly test programs (24 tests)
+  tests/asm/   Assembly test programs (25 tests)
 formal/        Formal verification
   alu_add.sv       ALU formal proof wrapper (all 10 ops)
   alu_prove.ys     Yosys SAT proof script (ALU)
@@ -211,6 +214,8 @@ formal/        Formal verification
   regfile_x0.sby   SymbiYosys configuration (RegFile)
   decode_legal.sv  Decoder proof wrapper (fields + legality)
   decode_prove.ys  Yosys SAT proof script (Decoder)
+  axil_master.sv   AXI-Lite bridge proof wrapper (VALID stability, deadlock)
+  axil_master.sby  SymbiYosys configuration (AXI-Lite bridge)
 scripts/       Build scripts
   yosys_synth.tcl  Yosys synthesis script
 docs/          Architecture docs + plan

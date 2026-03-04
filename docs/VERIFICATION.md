@@ -7,7 +7,7 @@ tests, randomized cocotb unit tests, and formal proofs. All tests run on Verilat
 
 ## Verification Tiers
 
-### Tier 1: Directed Assembly Tests (24 tests)
+### Tier 1: Directed Assembly Tests (25 tests)
 
 Self-checking assembly tests that write 1 to `0x10000000` (PASS) or 0 (FAIL).
 Compiled with `rv32i_zicsr` ISA and run on the full platform simulation.
@@ -25,6 +25,7 @@ Compiled with `rv32i_zicsr` ISA and run on the full platform simulation.
 | CSR | test_csr, test_csr_edge | All CSR instructions, rs1=x0 read-only behavior |
 | Trap | test_ecall, test_ebreak, test_illegal | ECALL/EBREAK/illegal instr trap + MRET |
 | Timer | test_timer | MTIP interrupt, ISR handler, MTIME/MTIMECMP, MRET |
+| Timer | test_mret_boundary | MRET exact resume point, no skipped/repeated instructions |
 | System | test_fence, test_lui_auipc, test_x0, test_pass | FENCE NOP, LUI/AUIPC, x0=0 invariant |
 | Stress | test_back_to_back | Fibonacci, register stress, tight loops |
 
@@ -98,10 +99,18 @@ Unit-level tests using cocotb with constrained random stimulus on Verilator 5.03
 - is_legal consistent with type flags OR
 - Proven using Yosys SAT solver
 
+**AXI-Lite Bridge** (`formal/axil_master.sv`):
+- VALID stability: ARVALID/AWVALID/WVALID stay high until READY (handshake compliance)
+- No simultaneous read and write in progress (mutual exclusion)
+- Corebus rsp_valid stability (stays high until rsp_ready)
+- req_ready only in IDLE state (no request loss)
+- AXI address/data stability while VALID high (no glitches)
+- Proven using SymbiYosys + z3 (k-induction, depth 20)
+
 ## Running Tests
 
 ```bash
-# Run all assembly tests (24 tests)
+# Run all assembly tests (25 tests)
 make regress
 
 # Run cocotb tests (40 tests)
@@ -141,5 +150,8 @@ GitHub Actions workflow (`.github/workflows/ci.yml`) runs on every push/PR:
 - ✅ ALU edge cases (overflow, boundary values)
 - ✅ Memory byte lane coverage
 - ✅ Register file x0 invariant (formal proof)
-- ✅ AXI-Lite handshake compliance (assertions + cocotb tests)
+- ✅ AXI-Lite handshake compliance (assertions + cocotb tests + formal proofs)
+- ✅ AXI-Lite VALID stability formally proven (ARVALID/AWVALID/WVALID)
+- ✅ AXI-Lite deadlock freedom formally proven (mutual exclusion, no stuck states)
 - ✅ Timer interrupt end-to-end (ISR execution + return)
+- ✅ MRET exact resume point (no skipped/repeated instructions)
