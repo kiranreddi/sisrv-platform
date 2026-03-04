@@ -129,12 +129,15 @@ module axil_master_formal (
 
     // ---------------------------------------------------------------
     // Property 4: No simultaneous read and write
-    // FSM guarantees mutual exclusion
+    // FSM guarantees mutual exclusion between read and write paths
     // ---------------------------------------------------------------
+    wire rd_active = arvalid_o || rready_o;
+    wire wr_active = awvalid_o || wvalid_o || bready_o;
+
     always @(*) begin
         if (rst_n) begin
-            // Can't have both read and write AXI channels active
-            assert (!((arvalid_o || rready_o) && (awvalid_o || wvalid_o || bready_o)));
+            // Read and write paths are mutually exclusive
+            assert (!(rd_active && wr_active));
         end
     end
 
