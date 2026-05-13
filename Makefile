@@ -6,7 +6,9 @@ BUILD     ?= build
 USE_AXIL  ?= 0
 AXIL_STALL_RATE ?= 0
 # Keep corebus and AXI simulation binaries separate; append _stall<N> for stalled AXI runs.
-SIM_SUFFIX := $(if $(filter 1,$(USE_AXIL)),_axil$(if $(filter-out 0,$(AXIL_STALL_RATE)),_stall$(AXIL_STALL_RATE)),)
+AXIL_SUFFIX := $(if $(filter 1,$(USE_AXIL)),_axil,)
+STALL_SUFFIX := $(if $(and $(filter 1,$(USE_AXIL)),$(filter-out 0,$(AXIL_STALL_RATE))),_stall$(AXIL_STALL_RATE),)
+SIM_SUFFIX := $(AXIL_SUFFIX)$(STALL_SUFFIX)
 SIM       ?= $(BUILD)/sim_$(TOP)$(SIM_SUFFIX)
 
 # RISC-V toolchain
