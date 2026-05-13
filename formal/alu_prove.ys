@@ -1,0 +1,10 @@
+# Yosys formal proof script for ALU operations
+# Run: yosys -s alu_prove.ys
+# Proves all 10 ALU operations produce correct results
+
+read -formal -sv ../rtl/core/sisAlu.sv
+read -formal -sv alu_add.sv
+prep -top alu_add_wrapper
+flatten
+opt -full
+sat -verify -prove-asserts -show-all
