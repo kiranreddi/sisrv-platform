@@ -1,0 +1,18 @@
+[tasks]
+bmc
+
+[options]
+bmc: mode bmc
+bmc: depth 1
+
+[engines]
+smtbmc z3
+
+[script]
+read -formal -sv sisAlu.sv
+read -formal -sv alu_add.sv
+prep -top alu_add_wrapper
+
+[files]
+alu_add.sv
+../rtl/core/sisAlu.sv

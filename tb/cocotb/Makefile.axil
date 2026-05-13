@@ -1,0 +1,10 @@
+# cocotb Makefile for sisAxiLiteM bridge tests
+TOPLEVEL_LANG = verilog
+VERILOG_SOURCES = $(shell pwd)/../../rtl/bus/sisAxiLiteM.sv
+TOPLEVEL = sisAxiLiteM
+MODULE = test_axil_bridge
+SIM ?= verilator
+
+EXTRA_ARGS += --timing
+
+include $(shell cocotb-config --makefiles)/Makefile.sim

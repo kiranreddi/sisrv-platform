@@ -1,0 +1,106 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Verilator Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Verilator 5.038
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git autoconf g++ flex bison libfl2 libfl-dev help2man make ccache zlib1g-dev
+          cd /tmp
+          git clone --depth 1 --branch v5.038 https://github.com/verilator/verilator.git
+          cd verilator
+          autoconf
+          ./configure --prefix=/usr/local
+          make -j$(nproc)
+          sudo make install
+          verilator --version
+
+      - name: Run Lint
+        run: make lint
+
+  regress:
+    name: Assembly Regression (25 tests)
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Verilator 5.038
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git autoconf g++ flex bison libfl2 libfl-dev help2man make ccache zlib1g-dev
+          cd /tmp
+          git clone --depth 1 --branch v5.038 https://github.com/verilator/verilator.git
+          cd verilator
+          autoconf
+          ./configure --prefix=/usr/local
+          make -j$(nproc)
+          sudo make install
+          verilator --version
+
+      - name: Install RISC-V Toolchain
+        run: sudo apt-get install -y gcc-riscv64-linux-gnu
+
+      - name: Run Regression
+        run: make regress
+
+  cocotb:
+    name: cocotb Tests (ALU + RegFile + Decode + CSR + AXI-Lite)
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Verilator 5.038
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git autoconf g++ flex bison libfl2 libfl-dev help2man make ccache zlib1g-dev python3-pip
+          cd /tmp
+          git clone --depth 1 --branch v5.038 https://github.com/verilator/verilator.git
+          cd verilator
+          autoconf
+          ./configure --prefix=/usr/local
+          make -j$(nproc)
+          sudo make install
+          verilator --version
+
+      - name: Install cocotb
+        run: pip install cocotb
+
+      - name: Run cocotb Tests
+        run: |
+          echo "=== cocotb Test Configuration ==="
+          echo "Simulator backend: Verilator"
+          verilator --version
+          echo "DUT top modules: sisAlu, sisRegFile, sisDecode, sisCsr, sisAxiLiteM"
+          echo "================================"
+          make cocotb
+
+  formal:
+    name: Formal Verification (ALU + RegFile + Decoder + AXI-Lite)
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install SymbiYosys + Yosys + z3
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y yosys symbiyosys z3
+
+      - name: Run Formal Proofs
+        run: make formal
