@@ -5,7 +5,7 @@
 // Address map (same as corebus):
 //   ROM:  0x0000_0000 - 0x0000_FFFF (64 KB)
 //   MMIO: 0x1000_0000 - 0x1000_FFFF (64 KB)
-//   Timer:0x1000_2000 - 0x1000_200F (MTIME/MTIMECMP)
+//   Timer: 0x1000_2000 - 0x1000_200F (MTIME/MTIMECMP)
 //   RAM:  0x8000_0000 - 0x8003_FFFF (256 KB)
 
 module sisAxiLiteSlave #(
@@ -59,6 +59,7 @@ module sisAxiLiteSlave #(
   // ---------------------------------------------------------------
   localparam ROM_AW = $clog2(ROM_DEPTH_WORDS);
   localparam RAM_AW = $clog2(RAM_DEPTH_WORDS);
+  // Clamp invalid stall percentages so READY/VALID behavior remains bounded.
   localparam int STALL_RATE_CLAMPED = (STALL_RATE < 0) ? 0 :
                                       ((STALL_RATE > 100) ? 100 : STALL_RATE);
 

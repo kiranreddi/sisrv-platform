@@ -5,7 +5,7 @@ TOP       ?= sisPlatformTop
 BUILD     ?= build
 USE_AXIL  ?= 0
 AXIL_STALL_RATE ?= 0
-# Keep corebus and AXI simulation binaries separate; append _stallN for stalled AXI runs.
+# Keep corebus and AXI simulation binaries separate; append _stall<N> for stalled AXI runs.
 SIM_SUFFIX := $(if $(filter 1,$(USE_AXIL)),_axil$(if $(filter-out 0,$(AXIL_STALL_RATE)),_stall$(AXIL_STALL_RATE)),)
 SIM       ?= $(BUILD)/sim_$(TOP)$(SIM_SUFFIX)
 
