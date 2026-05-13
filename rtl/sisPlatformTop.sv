@@ -279,10 +279,6 @@ module sisPlatformTop #(
     end else begin : gen_axilite
       // ---------------------------------------------------------------
       // AXI4-Lite path: core -> bridge -> AXI-Lite slave model
-      // Note: Timer interrupt is not available in the AXI path.
-      // The AXI-Lite slave model does not include a timer peripheral;
-      // mtip_wire is tied to 0. To add timer support, extend the
-      // AXI slave model or add a separate timer slave on the AXI bus.
       // ---------------------------------------------------------------
 
       // AXI4-Lite signals between bridge and slave
@@ -366,7 +362,8 @@ module sisPlatformTop #(
         .rresp     (axi_rresp),
         .pass      (tohost_pass),
         .fail      (tohost_fail),
-        .last_code (tohost_code)
+        .last_code (tohost_code),
+        .mtip      (mtip_wire)
       );
 
       // Tie off unused corebus slave signals in AXI path
@@ -374,8 +371,6 @@ module sisPlatformTop #(
       assign ram_req_valid    = 1'b0;
       assign rom_rsp_ready    = 1'b0;
       assign ram_rsp_ready    = 1'b0;
-      // No timer in AXI path (timer not modeled in AXI slave yet)
-      assign mtip_wire        = 1'b0;
       // MMIO sub-router: tie off all signals (not used in AXI path)
       assign mmio_req_valid   = 1'b0;
       assign mmio_rsp_ready   = 1'b0;

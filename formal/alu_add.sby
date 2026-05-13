@@ -9,7 +9,7 @@ bmc: depth 1
 smtbmc z3
 
 [script]
-read -formal -sv sisAlu.sv
+read -formal -sv ../rtl/core/sisAlu.sv
 read -formal -sv alu_add.sv
 prep -top alu_add_wrapper
 

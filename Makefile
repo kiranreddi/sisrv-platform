@@ -3,7 +3,10 @@
 VERILATOR ?= verilator
 TOP       ?= sisPlatformTop
 BUILD     ?= build
-SIM       ?= $(BUILD)/sim_$(TOP)
+USE_AXIL  ?= 0
+AXIL_STALL_RATE ?= 0
+SIM_SUFFIX := $(if $(filter 1,$(USE_AXIL)),_axil$(if $(filter-out 0,$(AXIL_STALL_RATE)),_stall$(AXIL_STALL_RATE)),)
+SIM       ?= $(BUILD)/sim_$(TOP)$(SIM_SUFFIX)
 
 # RISC-V toolchain
 RV_PREFIX ?= riscv64-linux-gnu-
@@ -26,7 +29,7 @@ CPP_SRCS := $(wildcard tb/verilator/*.cpp)
 ASM_TESTS := $(wildcard sw/tests/asm/*.S)
 ASM_HEXES := $(patsubst sw/tests/asm/%.S,$(BUILD)/tests/%.hex,$(ASM_TESTS))
 
-.PHONY: sim lint clean wave regress sw all tests cocotb formal synth
+.PHONY: sim lint clean wave regress regress-axil regress-axil-stall sw all tests cocotb formal synth
 
 all: sim
 
@@ -38,6 +41,8 @@ $(SIM): $(RTL_SRCS) $(TB_SRCS) $(CPP_SRCS)
 	  -Irtl -Irtl/core -Irtl/bus -Irtl/periph -Itb/models \
 	  --top-module $(TOP) \
 	  -GROM_INIT_FILE='"rom.hex"' \
+	  -GUSE_AXIL=$(USE_AXIL) \
+	  -GAXIL_STALL_RATE=$(AXIL_STALL_RATE) \
 	  $(RTL_SRCS) $(TB_SRCS) $(CPP_SRCS) \
 	  -o sim_$(TOP)
 	@mkdir -p $(BUILD)
@@ -95,6 +100,14 @@ regress: $(SIM) $(ASM_HEXES)
 	done; \
 	echo "=== Results: $$pass/$$total passed, $$fail failed ==="; \
 	[ $$fail -eq 0 ]
+
+# Run the full assembly regression through the AXI4-Lite bridge path.
+regress-axil:
+	@$(MAKE) regress USE_AXIL=1
+
+# Run the AXI4-Lite bridge path with deterministic slave stalls enabled.
+regress-axil-stall:
+	@$(MAKE) regress USE_AXIL=1 AXIL_STALL_RATE=25
 
 # Run a single test
 run-%: $(SIM) $(BUILD)/tests/%.hex

@@ -1,10 +1,11 @@
 // sisAxiLiteSlave.sv — AXI4-Lite Slave Memory Model (Testbench only)
-// Combined ROM/RAM/MMIO slave with configurable random stall injection.
+// Combined ROM/RAM/MMIO/timer slave with configurable random stall injection.
 // Used to verify the AXI4-Lite bridge path end-to-end.
 //
 // Address map (same as corebus):
 //   ROM:  0x0000_0000 - 0x0000_FFFF (64 KB)
 //   MMIO: 0x1000_0000 - 0x1000_FFFF (64 KB)
+//   Timer:0x1000_2000 - 0x1000_200F (MTIME/MTIMECMP)
 //   RAM:  0x8000_0000 - 0x8003_FFFF (256 KB)
 
 module sisAxiLiteSlave #(
@@ -49,7 +50,8 @@ module sisAxiLiteSlave #(
     // Status outputs (tohost)
     output logic        pass,
     output logic        fail,
-    output logic [31:0] last_code
+    output logic [31:0] last_code,
+    output logic        mtip
 );
 
   // ---------------------------------------------------------------
@@ -60,6 +62,8 @@ module sisAxiLiteSlave #(
 
   logic [31:0] rom [0:ROM_DEPTH_WORDS-1];
   logic [31:0] ram [0:RAM_DEPTH_WORDS-1];
+  logic [63:0] mtime;
+  logic [63:0] mtimecmp;
 
   // Initialize memories
   initial begin
@@ -112,6 +116,26 @@ module sisAxiLiteSlave #(
     return (addr[31:16] == 16'h1000);
   endfunction
 
+  function automatic logic is_timer(input [31:0] addr);
+    return (addr[31:4] == 28'h1000200);
+  endfunction
+
+  function automatic logic [31:0] apply_wstrb(
+    input logic [31:0] old_data,
+    input logic [31:0] new_data,
+    input logic [3:0]  strb
+  );
+    logic [31:0] merged;
+    begin
+      merged = old_data;
+      if (strb[0]) merged[7:0]   = new_data[7:0];
+      if (strb[1]) merged[15:8]  = new_data[15:8];
+      if (strb[2]) merged[23:16] = new_data[23:16];
+      if (strb[3]) merged[31:24] = new_data[31:24];
+      return merged;
+    end
+  endfunction
+
   // ---------------------------------------------------------------
   // Read path FSM
   // ---------------------------------------------------------------
@@ -133,6 +157,15 @@ module sisAxiLiteSlave #(
       return rom[addr[ROM_AW+1:2]];
     else if (is_ram(addr))
       return ram[addr[RAM_AW+1:2]];
+    else if (is_timer(addr)) begin
+      case (addr[3:0])
+        4'h0: return mtime[31:0];
+        4'h4: return mtime[63:32];
+        4'h8: return mtimecmp[31:0];
+        4'hC: return mtimecmp[63:32];
+        default: return 32'h0;
+      endcase
+    end
     else if (is_mmio(addr))
       return last_code;
     else
@@ -218,7 +251,10 @@ module sisAxiLiteSlave #(
       pass         <= 1'b0;
       fail         <= 1'b0;
       last_code    <= 32'h0;
+      mtime        <= 64'h0;
+      mtimecmp     <= 64'hFFFF_FFFF_FFFF_FFFF;
     end else begin
+      mtime <= mtime + 64'd1;
       case (wr_state)
         WR_IDLE: begin
           if (awvalid && awready && wvalid && wready) begin
@@ -264,6 +300,15 @@ module sisAxiLiteSlave #(
             if (wr_data_reg == 32'h0000_0001) pass <= 1'b1;
             if (wr_data_reg == 32'h0000_0000) fail <= 1'b1;
           end
+          if (is_timer(wr_addr_reg)) begin
+            case (wr_addr_reg[3:0])
+              4'h0: mtime[31:0]     <= apply_wstrb(mtime[31:0], wr_data_reg, wr_strb_reg);
+              4'h4: mtime[63:32]    <= apply_wstrb(mtime[63:32], wr_data_reg, wr_strb_reg);
+              4'h8: mtimecmp[31:0]  <= apply_wstrb(mtimecmp[31:0], wr_data_reg, wr_strb_reg);
+              4'hC: mtimecmp[63:32] <= apply_wstrb(mtimecmp[63:32], wr_data_reg, wr_strb_reg);
+              default: ;
+            endcase
+          end
           wr_resp_reg <= (is_rom(wr_addr_reg) || is_ram(wr_addr_reg) || is_mmio(wr_addr_reg)) ? 2'b00 : 2'b11;
           if (should_stall(lfsr_b)) begin
             wr_state     <= WR_WAIT;
@@ -295,5 +340,6 @@ module sisAxiLiteSlave #(
   assign wready  = (wr_state == WR_IDLE || wr_state == WR_GOT_AW) && !should_stall(lfsr_w);
   assign bvalid  = (wr_state == WR_RESP);
   assign bresp   = wr_resp_reg;
+  assign mtip    = (mtime >= mtimecmp);
 
 endmodule
