@@ -60,8 +60,8 @@ module sisAxiLiteSlave #(
   localparam ROM_AW = $clog2(ROM_DEPTH_WORDS);
   localparam RAM_AW = $clog2(RAM_DEPTH_WORDS);
   // Clamp invalid stall percentages so READY/VALID behavior remains bounded.
-  localparam int STALL_RATE_CLAMPED = (STALL_RATE < 0) ? 0 :
-                                      ((STALL_RATE > 100) ? 100 : STALL_RATE);
+  localparam int STALL_RATE_MIN = (STALL_RATE < 0) ? 0 : STALL_RATE;
+  localparam int STALL_RATE_CLAMPED = (STALL_RATE_MIN > 100) ? 100 : STALL_RATE_MIN;
 
   logic [31:0] rom [0:ROM_DEPTH_WORDS-1];
   logic [31:0] ram [0:RAM_DEPTH_WORDS-1];
@@ -100,10 +100,12 @@ module sisAxiLiteSlave #(
 
   function automatic logic should_stall;
     input [15:0] lfsr_val;
+    logic [7:0] sample;
     logic [7:0] threshold;
     begin
+      sample = {1'b0, lfsr_val[6:0]};
       threshold = STALL_RATE_CLAMPED[7:0];
-      return ({1'b0, lfsr_val[6:0]} < threshold);
+      return (sample < threshold);
     end
   endfunction
 
