@@ -7,8 +7,8 @@
 
 module sisPlatformTop #(
     parameter ROM_INIT_FILE = "rom.hex",
-    parameter USE_AXIL      = 0,         // 0=corebus, 1=AXI4-Lite path
-    parameter AXIL_STALL_RATE = 0        // stall injection % for AXI slave (TB only)
+    parameter int USE_AXIL  = 0,         // 0=corebus, 1=AXI4-Lite path
+    parameter int AXIL_STALL_RATE = 0    // stall injection % for AXI slave (TB only)
 )(
     input  logic clk,
     input  logic rst_n,
@@ -113,6 +113,8 @@ module sisPlatformTop #(
   // ---------------------------------------------------------------
   generate
     if (USE_AXIL == 0) begin : gen_corebus
+      wire unused_axil_stall_rate = |AXIL_STALL_RATE;
+
       // ---------------------------------------------------------------
       // MMIO sub-router: tohost (0x1000_0xxx) vs timer (0x1000_2xxx)
       // ---------------------------------------------------------------
