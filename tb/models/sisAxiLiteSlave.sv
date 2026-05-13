@@ -192,7 +192,7 @@ module sisAxiLiteSlave #(
               rd_stall_cnt <= lfsr_r[3:0] & 4'hF;
             end else begin
               rd_data_reg <= mem_read(araddr);
-              rd_resp_reg <= (is_rom(araddr) || is_ram(araddr) || is_mmio(araddr)) ? 2'b00 : 2'b11;
+              rd_resp_reg <= (is_rom(araddr) || is_ram(araddr) || is_timer(araddr) || is_mmio(araddr)) ? 2'b00 : 2'b11;
               rd_state    <= RD_RESP;
             end
           end
@@ -201,7 +201,7 @@ module sisAxiLiteSlave #(
         RD_WAIT: begin
           if (rd_stall_cnt == 0) begin
             rd_data_reg <= mem_read(rd_addr_reg);
-            rd_resp_reg <= (is_rom(rd_addr_reg) || is_ram(rd_addr_reg) || is_mmio(rd_addr_reg)) ? 2'b00 : 2'b11;
+            rd_resp_reg <= (is_rom(rd_addr_reg) || is_ram(rd_addr_reg) || is_timer(rd_addr_reg) || is_mmio(rd_addr_reg)) ? 2'b00 : 2'b11;
             rd_state    <= RD_RESP;
           end else begin
             rd_stall_cnt <= rd_stall_cnt - 1;
@@ -312,7 +312,7 @@ module sisAxiLiteSlave #(
               default: ;
             endcase
           end
-          wr_resp_reg <= (is_rom(wr_addr_reg) || is_ram(wr_addr_reg) || is_mmio(wr_addr_reg)) ? 2'b00 : 2'b11;
+          wr_resp_reg <= (is_rom(wr_addr_reg) || is_ram(wr_addr_reg) || is_timer(wr_addr_reg) || is_mmio(wr_addr_reg)) ? 2'b00 : 2'b11;
           if (should_stall(lfsr_b)) begin
             wr_state     <= WR_WAIT;
             wr_stall_cnt <= lfsr_b[3:0] & 4'h7;
