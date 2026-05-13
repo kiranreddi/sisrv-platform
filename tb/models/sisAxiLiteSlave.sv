@@ -97,8 +97,11 @@ module sisAxiLiteSlave #(
 
   function automatic logic should_stall;
     input [15:0] lfsr_val;
-    if (STALL_RATE == 0) return 1'b0;
-    return (lfsr_val[6:0] < STALL_RATE[6:0]);
+    logic [7:0] threshold;
+    begin
+      threshold = (STALL_RATE > 100) ? 8'd100 : STALL_RATE[7:0];
+      return ({1'b0, lfsr_val[6:0]} < threshold);
+    end
   endfunction
 
   // ---------------------------------------------------------------
