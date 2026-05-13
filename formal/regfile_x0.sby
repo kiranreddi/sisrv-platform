@@ -9,7 +9,7 @@ prove: depth 10
 smtbmc z3
 
 [script]
-read -formal -sv sisRegFile.sv
+read -formal -sv ../rtl/core/sisRegFile.sv
 read -formal -sv regfile_x0.sv
 prep -top regfile_x0_wrapper
 

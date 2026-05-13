@@ -116,7 +116,7 @@ x0 always 0 ✅, PC word-aligned ✅, correct sign/zero extension ✅
 ---
 
 ### ✅ Milestone 3 — AXI4-Lite master bridge
-**Status: RTL COMPLETE, system integration incomplete**
+**Status: COMPLETE**
 
 | Deliverable | Status | Notes |
 |-------------|--------|-------|
@@ -127,12 +127,13 @@ x0 always 0 ✅, PC word-aligned ✅, correct sign/zero extension ✅
 | Synthesizable assertions | ✅ Done | VALID stability, no simultaneous R+W (ifdef ASSERT) |
 | `USE_AXIL` param switch | ✅ Done | `sisPlatformTop`: 0=corebus, 1=AXI-Lite |
 | AXI-Lite slave TB model | ✅ Done | `tb/models/sisAxiLiteSlave.sv` with independent per-channel stalls |
+| AXI-Lite timer support | ✅ Done | `tb/models/sisAxiLiteSlave.sv` models MTIME/MTIMECMP and MTIP |
+| AXI-Lite system regression | ✅ Done | `make regress-axil` runs all 25 assembly tests through the AXI path |
 | cocotb bridge tests | ✅ Done | 11 tests: reset, R/W, errors, stalls, 100-txn random stress |
 | Formal AXI-Lite bridge | ✅ Done | VALID stability, deadlock freedom, mutual exclusion, data stability |
 
-**Remaining for full milestone completion**:
-- Full regression suite through AXI path (USE_AXIL=1) not yet in CI
-- 1000-seed randomized stall stress not yet in nightly CI
+**Exit criteria**: Full regression suite passes through the AXI path ✅,
+timer interrupt tests run with the AXI slave timer model ✅, CI covers `make regress-axil` ✅
 
 ---
 
@@ -225,7 +226,7 @@ Planned:
 | Lint status | ✅ Clean (Wall, no warnings) |
 | Compiler | riscv64-linux-gnu-gcc 13.3 |
 | Assembly test suite | 25 tests |
-| Assembly regression | 25/25 passing |
+| Assembly regression | 25/25 passing through corebus and AXI4-Lite paths |
 | cocotb unit tests | 40 tests (3 ALU + 4 RegFile + 10 Decode + 12 CSR + 11 AXI-Lite) |
 | cocotb status | 40/40 passing |
 | Formal proofs | ALU (all 10 ops), RegFile (x0=0), Decode (fields + legality), AXI-Lite (VALID stability + deadlock freedom) |

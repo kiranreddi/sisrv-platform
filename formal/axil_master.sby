@@ -9,11 +9,11 @@ prove: depth 20
 prove: smtbmc z3
 
 [script]
-read -formal -sv rtl/bus/sisAxiLiteM.sv
-read -formal -sv formal/axil_master.sv
+read -formal -sv ../rtl/bus/sisAxiLiteM.sv
+read -formal -sv axil_master.sv
 hierarchy -top axil_master_formal
 prep -top axil_master_formal
 
 [files]
-rtl/bus/sisAxiLiteM.sv
-formal/axil_master.sv
+../rtl/bus/sisAxiLiteM.sv
+axil_master.sv

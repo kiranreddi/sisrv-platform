@@ -16,7 +16,7 @@ peripherals via a configurable bus path (corebus or AXI4-Lite).
 | M1 — RV32I multi-cycle core | ✅ Complete (25/25 tests pass) |
 | M2 — CSRs + traps (M-mode) | ✅ Complete |
 | M2.5 — Verification infrastructure | ✅ Complete (40 cocotb + 4 formal) |
-| M3 — AXI4-Lite master bridge | ✅ RTL complete, system integration incomplete |
+| M3 — AXI4-Lite master bridge | ✅ Complete |
 | M4 — Timer interrupt | ✅ Complete |
 | M5 — RV32M (mul/div) | 🔲 Planned |
 | M6 — 3-stage pipeline | 🔲 Planned |
@@ -69,6 +69,9 @@ make sim
 
 # Run full regression suite (25 tests)
 make regress
+
+# Run full regression suite through AXI4-Lite path
+make regress-axil
 
 # Run cocotb tests (40 tests: ALU + RegFile + Decode + CSR + AXI-Lite)
 make cocotb
@@ -189,7 +192,7 @@ The CI pipeline runs on every push/PR to `main`:
 | Job | Description | Tool |
 |-----|-------------|------|
 | **Lint** | Verilator lint check (all RTL) | Verilator 5.038 |
-| **Regression** | 25 assembly self-checking tests | Verilator 5.038 + riscv64-gcc |
+| **Regression** | 25 assembly self-checking tests through corebus and AXI4-Lite paths | Verilator 5.038 + riscv64-gcc |
 | **cocotb** | 40 randomized/directed unit tests | Verilator 5.038 + cocotb |
 | **Formal** | ALU + RegFile + Decoder + AXI-Lite formal proofs | Yosys + SymbiYosys + z3 |
 

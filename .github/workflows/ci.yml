@@ -58,6 +58,9 @@ jobs:
       - name: Run Regression
         run: make regress
 
+      - name: Run AXI-Lite Regression
+        run: make regress-axil
+
   cocotb:
     name: cocotb Tests (ALU + RegFile + Decode + CSR + AXI-Lite)
     runs-on: ubuntu-latest
