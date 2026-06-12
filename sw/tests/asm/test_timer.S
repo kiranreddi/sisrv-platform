@@ -41,11 +41,9 @@ setup:
     li    x19, 0               # Main counter A
     li    x20, 0               # ISR counter B
 
-    # Set MTIMECMP to fire quickly (MTIME starts at ~reset+N cycles)
-    # Read current MTIME, add small offset
+    # Set MTIMECMP to fire soon. Use a fixed threshold well above early MTIME.
     li    x8, 0x10002000       # Timer base
-    lw    x9, 0(x8)            # Read MTIME_LO
-    addi  x9, x9, 50           # Fire 50 cycles from now
+    li    x9, 500              # Fire once MTIME reaches 500
     sw    x9, 8(x8)            # MTIMECMP_LO
     sw    x0, 12(x8)           # MTIMECMP_HI = 0
 

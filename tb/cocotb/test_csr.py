@@ -16,8 +16,10 @@ CSR_MCAUSE   = 0x342
 CSR_MTVAL    = 0x343
 CSR_MIP      = 0x344
 
-ALL_CSRS = [CSR_MSTATUS, CSR_MIE, CSR_MTVEC, CSR_MSCRATCH,
-            CSR_MEPC, CSR_MCAUSE, CSR_MTVAL, CSR_MIP]
+# MIP is read-only (MTIP is driven by ext_mtip).
+RW_CSRS = [CSR_MSTATUS, CSR_MIE, CSR_MTVEC, CSR_MSCRATCH,
+           CSR_MEPC, CSR_MCAUSE, CSR_MTVAL]
+ALL_CSRS = RW_CSRS + [CSR_MIP]
 
 CSR_NAMES = {
     CSR_MSTATUS: "mstatus", CSR_MIE: "mie", CSR_MTVEC: "mtvec",
@@ -93,7 +95,7 @@ async def test_csr_rw_all(dut):
     await reset_dut(dut)
 
     test_val = 0xDEADBEEF
-    for addr in ALL_CSRS:
+    for addr in RW_CSRS:
         await csr_write(dut, addr, test_val, CSR_OP_RW)
         got = await csr_read(dut, addr)
         if addr == CSR_MEPC:

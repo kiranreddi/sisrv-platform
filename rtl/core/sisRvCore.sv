@@ -424,8 +424,10 @@ module sisRvCore #(
 
         // ----- WRITEBACK + PC UPDATE -----
         S_WB: begin
-          // PC update
-          if (dec_is_jal) begin
+          // PC update (illegal instructions trap before any control-flow effect)
+          if (!dec_is_legal) begin
+            pc <= mtvec_out;
+          end else if (dec_is_jal) begin
             pc <= pc + dec_imm_j;
           end else if (dec_is_jalr) begin
             pc <= (rs1_val + dec_imm_i) & 32'hFFFF_FFFE;
@@ -435,9 +437,6 @@ module sisRvCore #(
             pc <= mtvec_out;
           end else if (is_mret) begin
             pc <= mepc_out;
-          end else if (!dec_is_legal) begin
-            // Illegal instruction trap
-            pc <= mtvec_out;
           end else if (irq_pending && !is_csr_op) begin
             // Timer interrupt: take between instructions
             pc <= mtvec_out;
@@ -534,7 +533,12 @@ module sisRvCore #(
     mret_exec   = 1'b0;
 
     if (state == S_WB) begin
-      if (is_csr_op) begin
+      if (!dec_is_legal) begin
+        trap_enter = 1'b1;
+        trap_cause = 32'd2; // Illegal instruction
+        trap_val   = instr_reg;
+        trap_epc   = pc;
+      end else if (is_csr_op) begin
         csr_wen_w = 1'b1;
       end else if (is_ecall) begin
         trap_enter = 1'b1;
@@ -546,11 +550,6 @@ module sisRvCore #(
         trap_epc   = pc;
       end else if (is_mret) begin
         mret_exec = 1'b1;
-      end else if (!dec_is_legal) begin
-        trap_enter = 1'b1;
-        trap_cause = 32'd2; // Illegal instruction
-        trap_val   = instr_reg;
-        trap_epc   = pc;
       end else if (irq_pending) begin
         trap_enter = 1'b1;
         trap_cause = {1'b1, 31'd7}; // Machine timer interrupt (bit 31 = interrupt flag)
