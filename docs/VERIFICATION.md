@@ -7,7 +7,7 @@ tests, randomized cocotb unit tests, and formal proofs. All tests run on Verilat
 
 ## Verification Tiers
 
-### Tier 1: Directed Assembly Tests (25 tests)
+### Tier 1: Directed Assembly Tests (27 tests)
 
 Self-checking assembly tests that write 1 to `0x10000000` (PASS) or 0 (FAIL).
 Compiled with `rv32i_zicsr` ISA and run on the full platform simulation.
@@ -23,13 +23,13 @@ Compiled with `rv32i_zicsr` ISA and run on the full platform simulation.
 | Jump | test_jal_jalr, test_jalr_align | JAL/JALR, bit[0] masking, rd=x0 |
 | Memory | test_load_store, test_mem_edge, test_ram_walk | All load/store variants, byte lanes, walking patterns |
 | CSR | test_csr, test_csr_edge | All CSR instructions, rs1=x0 read-only behavior |
-| Trap | test_ecall, test_ebreak, test_illegal | ECALL/EBREAK/illegal instr trap + MRET |
-| Timer | test_timer | MTIP interrupt, ISR handler, MTIME/MTIMECMP, MRET |
+| Trap | test_ecall, test_ebreak, test_illegal, test_illegal_funct | ECALL/EBREAK/illegal opcode + funct-level traps + MRET |
+| Timer | test_timer, test_mtime_write | MTIP interrupt, ISR handler, MTIME/MTIMECMP, deterministic MTIME writes |
 | Timer | test_mret_boundary | MRET exact resume point, no skipped/repeated instructions |
 | System | test_fence, test_lui_auipc, test_x0, test_pass | FENCE NOP, LUI/AUIPC, x0=0 invariant |
 | Stress | test_back_to_back | Fibonacci, register stress, tight loops |
 
-### Tier 2: cocotb Randomized Tests (40 tests)
+### Tier 2: cocotb Randomized Tests (41 tests)
 
 Unit-level tests using cocotb with constrained random stimulus on Verilator 5.038.
 
@@ -44,9 +44,10 @@ Unit-level tests using cocotb with constrained random stimulus on Verilator 5.03
 - Write isolation (modifying one register doesn't corrupt others)
 - 500 random read/write cycles with shadow model
 
-**Decoder (10 tests)**:
+**Decoder (11 tests)**:
 - Type flag decode for all 11 legal opcodes (exactly one flag set)
 - Illegal opcode detection (117 illegal opcodes tested)
+- Illegal funct3/funct7/system/fence encoding detection
 - Register field extraction (rd, rs1, rs2) with corner values
 - I-type immediate sign extension (7 test vectors)
 - S-type immediate sign extension (5 test vectors)
@@ -54,7 +55,7 @@ Unit-level tests using cocotb with constrained random stimulus on Verilator 5.03
 - B-type immediate (13-bit signed, bit 0 always 0)
 - J-type immediate (21-bit signed, bit 0 always 0)
 - funct3/funct7 extraction
-- 1000 random instructions with field/legality verification
+- 1000 random instructions with RV32I field/legality verification
 
 **CSR (12 tests)**:
 - Reset values (all 8 CSRs read as 0)
@@ -96,7 +97,7 @@ Unit-level tests using cocotb with constrained random stimulus on Verilator 5.03
 **Decoder** (`formal/decode_legal.sv`):
 - Field extraction correct for all 2^32 instructions
 - U/B/J immediate alignment invariants proven
-- is_legal consistent with type flags OR
+- is_legal matches RV32I encoding rules (opcode + funct3/funct7/system/fence)
 - Proven using Yosys SAT solver
 
 **AXI-Lite Bridge** (`formal/axil_master.sv`):
@@ -110,10 +111,10 @@ Unit-level tests using cocotb with constrained random stimulus on Verilator 5.03
 ## Running Tests
 
 ```bash
-# Run all assembly tests (25 tests)
+# Run all assembly tests (27 tests)
 make regress
 
-# Run cocotb tests (40 tests)
+# Run cocotb tests (41 tests)
 make cocotb
 
 # Run formal proofs
@@ -130,9 +131,10 @@ make lint && make regress && make cocotb && make formal
 
 GitHub Actions workflow (`.github/workflows/ci.yml`) runs on every push/PR:
 1. **Lint** — Verilator lint check
-2. **Regression** — 24 assembly tests
-3. **cocotb** — 40 randomized unit tests
-4. **Formal** — ALU + RegFile + Decoder proofs
+2. **Regression** — 27 assembly tests (corebus + AXI4-Lite paths)
+3. **cocotb** — 41 randomized unit tests
+4. **Formal** — ALU + RegFile + Decoder + AXI-Lite proofs
+5. **Synth** — Yosys synthesis (`make synth`)
 
 ## Debug Knobs
 

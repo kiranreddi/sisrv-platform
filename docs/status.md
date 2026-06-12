@@ -1,12 +1,12 @@
 # Implementation Status
 
-**Last updated**: 2026-03-03
+**Last updated**: 2026-06-12
 
 ## Summary
 
 The sisrv-platform project implements a fully functional RV32I RISC-V processor core
 with M-mode CSRs, trap handling, timer interrupts, and an AXI4-Lite master bridge.
-The core is verified through 25 directed assembly tests, 40 cocotb randomized unit tests,
+The core is verified through 27 directed assembly tests, 41 cocotb randomized unit tests,
 and 4 formal proofs — all running on Verilator 5.038.
 
 ## Milestone Status
@@ -41,7 +41,7 @@ and 4 formal proofs — all running on Verilator 5.038.
 | `sisDecode.sv` | ✅ Done | All RV32I instruction types decoded |
 | `sisMemFabric.sv` | ✅ Done | Address decoder: ROM/RAM/MMIO routing |
 
-**Test coverage** (25 directed tests, all passing):
+**Test coverage** (27 directed tests, all passing):
 
 | Test | Instructions Covered |
 |------|---------------------|
@@ -128,7 +128,7 @@ x0 always 0 ✅, PC word-aligned ✅, correct sign/zero extension ✅
 | `USE_AXIL` param switch | ✅ Done | `sisPlatformTop`: 0=corebus, 1=AXI-Lite |
 | AXI-Lite slave TB model | ✅ Done | `tb/models/sisAxiLiteSlave.sv` with independent per-channel stalls |
 | AXI-Lite timer support | ✅ Done | `tb/models/sisAxiLiteSlave.sv` models MTIME/MTIMECMP and MTIP |
-| AXI-Lite system regression | ✅ Done | `make regress-axil` runs all 25 assembly tests through the AXI path |
+| AXI-Lite system regression | ✅ Done | `make regress-axil` runs all 27 assembly tests through the AXI path |
 | cocotb bridge tests | ✅ Done | 11 tests: reset, R/W, errors, stalls, 100-txn random stress |
 | Formal AXI-Lite bridge | ✅ Done | VALID stability, deadlock freedom, mutual exclusion, data stability |
 
@@ -225,15 +225,15 @@ Planned:
 | Verilator version | 5.038 |
 | Lint status | ✅ Clean (Wall, no warnings) |
 | Compiler | riscv64-linux-gnu-gcc 13.3 |
-| Assembly test suite | 25 tests |
-| Assembly regression | 25/25 passing through corebus and AXI4-Lite paths |
-| cocotb unit tests | 40 tests (3 ALU + 4 RegFile + 10 Decode + 12 CSR + 11 AXI-Lite) |
-| cocotb status | 40/40 passing |
+| Assembly test suite | 27 tests |
+| Assembly regression | 27/27 passing through corebus and AXI4-Lite paths |
+| cocotb unit tests | 41 tests (3 ALU + 4 RegFile + 11 Decode + 12 CSR + 11 AXI-Lite) |
+| cocotb status | 41/41 passing |
 | Formal proofs | ALU (all 10 ops), RegFile (x0=0), Decode (fields + legality), AXI-Lite (VALID stability + deadlock freedom) |
 | Formal status | All proofs PASS |
 | Simulation time | < 2s per test |
 | Waveform format | FST |
-| CI pipeline | GitHub Actions (lint, regress, cocotb, formal) |
+| CI pipeline | GitHub Actions (lint, regress, cocotb, formal, synth) |
 | Synthesis | Yosys (make synth) |
 
 ## Files Implemented
@@ -257,7 +257,7 @@ Planned:
 - `tb/models/sisAxiLiteSlave.sv` — AXI-Lite slave TB model (random stalls)
 - `tb/cocotb/test_alu.py` — ALU cocotb tests (3 tests)
 - `tb/cocotb/test_regfile.py` — RegFile cocotb tests (4 tests)
-- `tb/cocotb/test_decode.py` — Decoder cocotb tests (10 tests)
+- `tb/cocotb/test_decode.py` — Decoder cocotb tests (11 tests)
 - `tb/cocotb/test_csr.py` — CSR unit cocotb tests (12 tests)
 - `tb/cocotb/test_axil_bridge.py` — AXI-Lite bridge cocotb tests (11 tests)
 
@@ -275,9 +275,9 @@ Planned:
 ### Software
 - `sw/bsp/crt0.S` — C runtime startup
 - `sw/bsp/link.ld` — Linker script
-- `sw/tests/asm/test_*.S` — 25 assembly test programs
+- `sw/tests/asm/test_*.S` — 27 assembly test programs
 
 ### Build & CI
 - `Makefile` — Build, lint, sim, regression, cocotb, formal, synth targets
-- `.github/workflows/ci.yml` — CI pipeline (lint, regress, cocotb, formal)
+- `.github/workflows/ci.yml` — CI pipeline (lint, regress, cocotb, formal, synth)
 - `scripts/yosys_synth.tcl` — Yosys synthesis script

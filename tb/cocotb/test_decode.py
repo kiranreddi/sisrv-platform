@@ -67,6 +67,50 @@ LEGAL_OPCODES = [OP_LUI, OP_AUIPC, OP_JAL, OP_JALR, OP_BRANCH,
                  OP_LOAD, OP_STORE, OP_ALU_IMM, OP_ALU_REG, OP_FENCE, OP_SYSTEM]
 
 
+def is_rv32i_legal(instr):
+    """Return True when instr matches RV32I encoding rules."""
+    opcode = instr & 0x7F
+    funct3 = (instr >> 12) & 0x7
+    funct7 = (instr >> 25) & 0x7F
+    csr = (instr >> 20) & 0xFFF
+
+    if opcode == OP_LUI or opcode == OP_AUIPC or opcode == OP_JAL:
+        return True
+    if opcode == OP_JALR:
+        return funct3 == 0
+    if opcode == OP_BRANCH:
+        return funct3 in (0, 1, 4, 5, 6, 7)
+    if opcode == OP_LOAD:
+        return funct3 in (0, 1, 2, 4, 5)
+    if opcode == OP_STORE:
+        return funct3 in (0, 1, 2)
+    if opcode == OP_ALU_IMM:
+        if funct3 in (0, 2, 3, 4, 6, 7):
+            return True
+        if funct3 == 1:
+            return funct7 == 0
+        if funct3 == 5:
+            return funct7 in (0, 0x20)
+        return False
+    if opcode == OP_ALU_REG:
+        if funct7 == 0x01:
+            return False
+        if funct3 == 0:
+            return funct7 in (0, 0x20)
+        if funct3 in (1, 2, 3, 4, 6, 7):
+            return funct7 == 0
+        if funct3 == 5:
+            return funct7 in (0, 0x20)
+        return False
+    if opcode == OP_SYSTEM:
+        if funct3 == 0:
+            return csr in (0x000, 0x001, 0x302)
+        return funct3 in (1, 2, 3, 5, 6, 7)
+    if opcode == OP_FENCE:
+        return funct3 == 0
+    return False
+
+
 @cocotb.test()
 async def test_decode_type_flags(dut):
     """Verify that each legal opcode sets exactly one type flag."""
@@ -125,6 +169,47 @@ async def test_decode_illegal_opcodes(dut):
         count += 1
 
     dut._log.info(f"Illegal opcode detection: PASS ({count} illegal opcodes tested)")
+
+
+@cocotb.test()
+async def test_decode_illegal_funct_combos(dut):
+    """Verify illegal funct3/funct7/system encodings are flagged illegal."""
+    illegal_cases = [
+        ("RV32M MUL", encode_r(0x01, 3, 2, 0, 1, OP_ALU_REG)),
+        ("invalid ALU reg funct7", encode_r(0x01, 0, 0, 4, 0, OP_ALU_REG)),
+        ("invalid load funct3", encode_i(0, 0, 6, 0, OP_LOAD)),
+        ("invalid store funct3", encode_s(0, 0, 0, 3, OP_STORE)),
+        ("invalid branch funct3", encode_b(0, 0, 0, 2, OP_BRANCH)),
+        ("invalid JALR funct3", encode_i(0, 0, 1, 0, OP_JALR)),
+        ("invalid SYSTEM imm", encode_i(0x100, 0, 0, 0, OP_SYSTEM)),
+        ("invalid FENCE funct3", encode_i(0, 0, 1, 0, OP_FENCE)),
+        ("invalid SLLI funct7", encode_i(0x80, 0, 1, 1, OP_ALU_IMM)),
+    ]
+
+    for name, instr in illegal_cases:
+        dut.instr.value = instr
+        await Timer(1, units="ns")
+        assert int(dut.is_legal.value) == 0, \
+            f"{name}: instr=0x{instr:08x} should be illegal"
+
+    legal_cases = [
+        ("ADD", encode_r(0, 0, 0, 0, 1, OP_ALU_REG)),
+        ("SUB", encode_r(0x20, 0, 0, 0, 1, OP_ALU_REG)),
+        ("SLLI", encode_i(4, 0, 1, 1, OP_ALU_IMM)),
+        ("LW", encode_i(0, 0, 2, 1, OP_LOAD)),
+        ("SW", encode_s(0, 2, 1, 2, OP_STORE)),
+        ("BEQ", encode_b(0, 2, 1, 0, OP_BRANCH)),
+        ("ECALL", encode_i(0, 0, 0, 0, OP_SYSTEM)),
+        ("FENCE", encode_i(0, 0, 0, 0, OP_FENCE)),
+    ]
+
+    for name, instr in legal_cases:
+        dut.instr.value = instr
+        await Timer(1, units="ns")
+        assert int(dut.is_legal.value) == 1, \
+            f"{name}: instr=0x{instr:08x} should be legal"
+
+    dut._log.info("Illegal funct combo detection: PASS")
 
 
 @cocotb.test()
@@ -283,12 +368,10 @@ async def test_decode_random_instructions(dut):
         dut.instr.value = instr
         await Timer(1, units="ns")
 
-        opcode = instr & 0x7F
-        expected_legal = 1 if opcode in LEGAL_OPCODES else 0
+        expected_legal = 1 if is_rv32i_legal(instr) else 0
         got_legal = int(dut.is_legal.value)
         assert got_legal == expected_legal, \
-            f"instr=0x{instr:08x} opcode=0x{opcode:02x}: " \
-            f"is_legal expected={expected_legal} got={got_legal}"
+            f"instr=0x{instr:08x}: is_legal expected={expected_legal} got={got_legal}"
 
         # Verify register field extraction
         assert int(dut.rd.value) == (instr >> 7) & 0x1F

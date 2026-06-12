@@ -67,6 +67,7 @@ module sisAxiLiteSlave #(
   logic [31:0] ram [0:RAM_DEPTH_WORDS-1];
   logic [63:0] mtime;
   logic [63:0] mtimecmp;
+  logic [63:0] mtime_next;
 
   // Initialize memories
   initial begin
@@ -248,6 +249,17 @@ module sisAxiLiteSlave #(
   logic [1:0]  wr_resp_reg;
   logic [3:0]  wr_stall_cnt;
 
+  always_comb begin
+    mtime_next = mtime + 64'd1;
+    if (wr_state == WR_EXEC && is_timer(wr_addr_reg)) begin
+      unique case (wr_addr_reg[3:0])
+        4'h0: mtime_next[31:0]  = apply_wstrb(mtime_next[31:0], wr_data_reg, wr_strb_reg);
+        4'h4: mtime_next[63:32] = apply_wstrb(mtime_next[63:32], wr_data_reg, wr_strb_reg);
+        default: ;
+      endcase
+    end
+  end
+
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
       wr_state     <= WR_IDLE;
@@ -262,7 +274,7 @@ module sisAxiLiteSlave #(
       mtime        <= 64'h0;
       mtimecmp     <= 64'hFFFF_FFFF_FFFF_FFFF;
     end else begin
-      mtime <= mtime + 64'd1;
+      mtime <= mtime_next;
       case (wr_state)
         WR_IDLE: begin
           if (awvalid && awready && wvalid && wready) begin
@@ -310,8 +322,6 @@ module sisAxiLiteSlave #(
           end
           if (is_timer(wr_addr_reg)) begin
             case (wr_addr_reg[3:0])
-              4'h0: mtime[31:0]     <= apply_wstrb(mtime[31:0], wr_data_reg, wr_strb_reg);
-              4'h4: mtime[63:32]    <= apply_wstrb(mtime[63:32], wr_data_reg, wr_strb_reg);
               4'h8: mtimecmp[31:0]  <= apply_wstrb(mtimecmp[31:0], wr_data_reg, wr_strb_reg);
               4'hC: mtimecmp[63:32] <= apply_wstrb(mtimecmp[63:32], wr_data_reg, wr_strb_reg);
               default: ;
