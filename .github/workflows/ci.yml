@@ -96,6 +96,7 @@ jobs:
   formal:
     name: Formal Verification (ALU + RegFile + Decoder + AXI-Lite)
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     needs: lint
     steps:
       - uses: actions/checkout@v4
