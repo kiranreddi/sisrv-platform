@@ -33,7 +33,7 @@ jobs:
         run: make lint
 
   regress:
-    name: Assembly Regression (25 tests)
+    name: Assembly Regression (27 tests)
     runs-on: ubuntu-latest
     needs: lint
     steps:
@@ -62,7 +62,7 @@ jobs:
         run: make regress-axil
 
   cocotb:
-    name: cocotb Tests (ALU + RegFile + Decode + CSR + AXI-Lite)
+    name: cocotb Tests (41 tests)
     runs-on: ubuntu-latest
     needs: lint
     steps:
@@ -107,3 +107,18 @@ jobs:
 
       - name: Run Formal Proofs
         run: make formal
+
+  synth:
+    name: Yosys Synthesis
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Yosys
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y yosys
+
+      - name: Run Synthesis
+        run: make synth
