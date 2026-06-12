@@ -3,7 +3,7 @@ prove
 
 [options]
 prove: mode prove
-prove: depth 12
+prove: depth 8
 
 [engines]
 prove: smtbmc z3
