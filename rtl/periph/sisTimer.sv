@@ -9,6 +9,7 @@
 //   +0x0C: MTIMECMP_HI  (RW) — upper 32 bits of MTIMECMP
 //
 // The timer increments MTIME every clock cycle after reset.
+// MMIO writes overlay strobed bytes in the same cycle (write wins over increment).
 // MTIP output is combinationally set when MTIME >= MTIMECMP.
 
 module sisTimer #(
@@ -37,6 +38,7 @@ module sisTimer #(
   // Timer registers
   logic [63:0] mtime;
   logic [63:0] mtimecmp;
+  logic [63:0] mtime_next;
 
   // Response tracking
   logic        pending;
@@ -54,6 +56,28 @@ module sisTimer #(
 
   assign req_ready = !pending || rsp_ready;
 
+  // Increment first; MMIO writes overlay strobed bytes in the same cycle.
+  always_comb begin
+    mtime_next = mtime + 64'd1;
+    if (req_valid && req_ready && addr_match && req_we) begin
+      unique case (reg_offset)
+        OFF_MTIME_LO: begin
+          if (req_wstrb[0]) mtime_next[7:0]   = req_wdata[7:0];
+          if (req_wstrb[1]) mtime_next[15:8]  = req_wdata[15:8];
+          if (req_wstrb[2]) mtime_next[23:16] = req_wdata[23:16];
+          if (req_wstrb[3]) mtime_next[31:24] = req_wdata[31:24];
+        end
+        OFF_MTIME_HI: begin
+          if (req_wstrb[0]) mtime_next[39:32] = req_wdata[7:0];
+          if (req_wstrb[1]) mtime_next[47:40] = req_wdata[15:8];
+          if (req_wstrb[2]) mtime_next[55:48] = req_wdata[23:16];
+          if (req_wstrb[3]) mtime_next[63:56] = req_wdata[31:24];
+        end
+        default: ;
+      endcase
+    end
+  end
+
   // MTIME increments every cycle; writes/reads handled synchronously
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
@@ -62,8 +86,7 @@ module sisTimer #(
       pending  <= 1'b0;
       rdata_reg <= 32'h0;
     end else begin
-      // Free-running counter (always increments)
-      mtime <= mtime + 64'd1;
+      mtime <= mtime_next;
 
       if (req_valid && req_ready) begin
         pending <= 1'b1;
@@ -71,18 +94,6 @@ module sisTimer #(
         if (addr_match && req_we) begin
           // Write
           case (reg_offset)
-            OFF_MTIME_LO: begin
-              if (req_wstrb[0]) mtime[7:0]   <= req_wdata[7:0];
-              if (req_wstrb[1]) mtime[15:8]  <= req_wdata[15:8];
-              if (req_wstrb[2]) mtime[23:16] <= req_wdata[23:16];
-              if (req_wstrb[3]) mtime[31:24] <= req_wdata[31:24];
-            end
-            OFF_MTIME_HI: begin
-              if (req_wstrb[0]) mtime[39:32] <= req_wdata[7:0];
-              if (req_wstrb[1]) mtime[47:40] <= req_wdata[15:8];
-              if (req_wstrb[2]) mtime[55:48] <= req_wdata[23:16];
-              if (req_wstrb[3]) mtime[63:56] <= req_wdata[31:24];
-            end
             OFF_MTIMECMP_LO: begin
               if (req_wstrb[0]) mtimecmp[7:0]   <= req_wdata[7:0];
               if (req_wstrb[1]) mtimecmp[15:8]  <= req_wdata[15:8];

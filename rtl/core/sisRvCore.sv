@@ -546,7 +546,7 @@ module sisRvCore #(
         trap_epc   = pc;
       end else if (is_mret) begin
         mret_exec = 1'b1;
-      end else if (!dec_is_legal && !dec_is_fence) begin
+      end else if (!dec_is_legal) begin
         trap_enter = 1'b1;
         trap_cause = 32'd2; // Illegal instruction
         trap_val   = instr_reg;

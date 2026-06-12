@@ -79,10 +79,66 @@ module sisDecode (
   assign is_system  = (opcode == OP_SYSTEM);
   assign is_fence   = (opcode == OP_FENCE);
 
-  // Legality check (basic: known opcode)
-  assign is_legal = is_lui | is_auipc | is_jal | is_jalr |
-                    is_branch | is_load | is_store |
-                    is_alu_imm | is_alu_reg |
-                    is_system | is_fence;
+  // RV32I encoding legality (opcode + funct3/funct7/system/fence fields)
+  logic legal_lui, legal_auipc, legal_jal, legal_jalr;
+  logic legal_branch, legal_load, legal_store;
+  logic legal_alu_imm, legal_alu_reg;
+  logic legal_system, legal_fence;
+
+  assign legal_lui   = is_lui;
+  assign legal_auipc = is_auipc;
+  assign legal_jal   = is_jal;
+  assign legal_jalr  = is_jalr && (funct3 == 3'b000);
+
+  assign legal_branch = is_branch && (
+      (funct3 == 3'b000) || (funct3 == 3'b001) ||
+      (funct3 == 3'b100) || (funct3 == 3'b101) ||
+      (funct3 == 3'b110) || (funct3 == 3'b111)
+  );
+
+  assign legal_load = is_load && (
+      (funct3 == 3'b000) || (funct3 == 3'b001) || (funct3 == 3'b010) ||
+      (funct3 == 3'b100) || (funct3 == 3'b101)
+  );
+
+  assign legal_store = is_store && (
+      (funct3 == 3'b000) || (funct3 == 3'b001) || (funct3 == 3'b010)
+  );
+
+  assign legal_alu_imm = is_alu_imm && (
+      (funct3 == 3'b000) || (funct3 == 3'b010) || (funct3 == 3'b011) ||
+      (funct3 == 3'b100) || (funct3 == 3'b110) || (funct3 == 3'b111) ||
+      ((funct3 == 3'b001) && (funct7 == 7'b0000000)) ||
+      ((funct3 == 3'b101) && ((funct7 == 7'b0000000) || (funct7 == 7'b0100000)))
+  );
+
+  assign legal_alu_reg = is_alu_reg && (funct7 != 7'b0000001) && (
+      ((funct3 == 3'b000) && ((funct7 == 7'b0000000) || (funct7 == 7'b0100000))) ||
+      ((funct3 == 3'b001) && (funct7 == 7'b0000000)) ||
+      ((funct3 == 3'b010) && (funct7 == 7'b0000000)) ||
+      ((funct3 == 3'b011) && (funct7 == 7'b0000000)) ||
+      ((funct3 == 3'b100) && (funct7 == 7'b0000000)) ||
+      ((funct3 == 3'b101) && ((funct7 == 7'b0000000) || (funct7 == 7'b0100000))) ||
+      ((funct3 == 3'b110) && (funct7 == 7'b0000000)) ||
+      ((funct3 == 3'b111) && (funct7 == 7'b0000000))
+  );
+
+  // ECALL/EBREAK/MRET or CSR ops with valid funct3
+  assign legal_system = is_system && (
+      ((funct3 == 3'b000) && (
+          (instr[31:20] == 12'h000) || // ECALL
+          (instr[31:20] == 12'h001) || // EBREAK
+          (instr[31:20] == 12'h302)    // MRET
+      )) ||
+      (funct3 == 3'b001) || (funct3 == 3'b010) || (funct3 == 3'b011) ||
+      (funct3 == 3'b101) || (funct3 == 3'b110) || (funct3 == 3'b111)
+  );
+
+  assign legal_fence = is_fence && (funct3 == 3'b000);
+
+  assign is_legal = legal_lui | legal_auipc | legal_jal | legal_jalr |
+                    legal_branch | legal_load | legal_store |
+                    legal_alu_imm | legal_alu_reg |
+                    legal_system | legal_fence;
 
 endmodule
