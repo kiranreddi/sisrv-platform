@@ -498,19 +498,19 @@ module sisRvCore #(
     rf_rd_data = 32'h0;
 
     if (state == S_WB) begin
-      if (dec_is_alu_reg || dec_is_alu_imm) begin
+      if (dec_is_legal && (dec_is_alu_reg || dec_is_alu_imm)) begin
         rf_wr_en  = 1'b1;
         rf_rd_data = alu_result_reg;
-      end else if (dec_is_lui || dec_is_auipc) begin
+      end else if (dec_is_legal && (dec_is_lui || dec_is_auipc)) begin
         rf_wr_en  = 1'b1;
         rf_rd_data = alu_result_reg;
-      end else if (dec_is_jal || dec_is_jalr) begin
+      end else if (dec_is_legal && (dec_is_jal || dec_is_jalr)) begin
         rf_wr_en  = 1'b1;
         rf_rd_data = alu_result_reg; // pc+4 (return address)
-      end else if (dec_is_load) begin
+      end else if (dec_is_legal && dec_is_load) begin
         rf_wr_en  = 1'b1;
         rf_rd_data = load_result;
-      end else if (is_csr_op) begin
+      end else if (dec_is_legal && is_csr_op) begin
         rf_wr_en  = 1'b1;
         rf_rd_data = csr_rdata_w;
       end
@@ -538,7 +538,7 @@ module sisRvCore #(
         trap_cause = 32'd2; // Illegal instruction
         trap_val   = instr_reg;
         trap_epc   = pc;
-      end else if (is_csr_op) begin
+      end else if (dec_is_legal && is_csr_op) begin
         csr_wen_w = 1'b1;
       end else if (is_ecall) begin
         trap_enter = 1'b1;

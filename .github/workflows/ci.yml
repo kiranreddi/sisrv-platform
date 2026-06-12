@@ -103,8 +103,9 @@ jobs:
       - name: Install SymbiYosys + Yosys + z3
         run: |
           sudo apt-get update
-          sudo apt-get install -y yosys z3 python3-pip
-          pip install symbiyosys
+          sudo apt-get install -y yosys z3 python3-pip git make
+          git clone --depth 1 https://github.com/YosysHQ/sby.git /tmp/sby
+          sudo make -C /tmp/sby install
 
       - name: Run Formal Proofs
         run: make formal
