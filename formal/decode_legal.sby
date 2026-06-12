@@ -1,0 +1,18 @@
+[tasks]
+prove
+
+[options]
+prove: mode prove
+prove: depth 0
+
+[engines]
+smtbmc z3
+
+[script]
+read -formal -sv sisDecode.sv
+read -formal -sv decode_legal.sv
+prep -top decode_legal_wrapper
+
+[files]
+decode_legal.sv
+../rtl/core/sisDecode.sv

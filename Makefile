@@ -139,7 +139,7 @@ formal:
 	@echo "=== Running formal proofs ==="
 	@cd formal && sby -f regfile_x0.sby
 	@cd formal && yosys -s alu_prove.ys
-	@cd formal && yosys -s decode_prove.ys
+	@cd formal && sby -f decode_legal.sby
 	@cd formal && sby -f axil_master.sby
 	@echo "=== Formal proofs PASSED ==="
 
