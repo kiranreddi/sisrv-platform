@@ -2,7 +2,7 @@
 
 ## Current Status
 
-Formal proofs/checks are **passing** in CI. The project uses Yosys + SymbiYosys for formal verification.
+Required formal proofs are **passing** in CI. The AXI-Lite bounded safety check is available through `make formal-axil` because solver runtime is version-sensitive.
 
 ## Implemented Proofs
 

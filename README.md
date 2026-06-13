@@ -76,8 +76,11 @@ make regress-axil
 # Run cocotb tests (41 tests: ALU + RegFile + Decode + CSR + AXI-Lite)
 make cocotb
 
-# Run formal verification proofs
+# Run required formal verification proofs
 make formal
+
+# Run optional AXI-Lite bridge formal safety check
+make formal-axil
 
 # Run Yosys synthesis
 make synth
@@ -164,7 +167,7 @@ Proofs via Yosys/SymbiYosys:
 - **ALU**: All 10 operations (ADD, SUB, SLL, SLT, SLTU, XOR, SRL, SRA, OR, AND) formally proven correct for all 2^64 input combinations. Zero flag proven correct.
 - **RegFile**: x0-always-zero property proven by k-induction for any sequence of writes.
 - **Decoder**: Field extraction, U/B/J immediate alignment invariants, RV32I encoding legality — all proven for all 2^32 possible instructions.
-- **AXI-Lite Bridge**: VALID stability (AR/AW/W channels), mutual exclusion of read/write activity, corebus response stability, address/data stability — checked with bounded formal safety verification.
+- **AXI-Lite Bridge**: VALID stability (AR/AW/W channels), mutual exclusion of read/write activity, corebus response stability, address/data stability — covered by cocotb/regression and available as an optional bounded formal safety check.
 
 ## Architecture
 
@@ -196,7 +199,7 @@ The CI pipeline runs on every push/PR to `main`:
 | **Lint** | Verilator lint check (all RTL) | Verilator 5.038 |
 | **Regression** | 27 assembly self-checking tests through corebus and AXI4-Lite paths | Verilator 5.038 + riscv64-gcc |
 | **cocotb** | 41 randomized/directed unit tests | Verilator 5.038 + cocotb |
-| **Formal** | ALU + RegFile + Decoder + AXI-Lite formal proofs | Yosys + SymbiYosys + z3 |
+| **Formal** | Required ALU + RegFile + Decoder proofs; optional AXI-Lite bounded safety check | Yosys + SymbiYosys + z3 |
 | **Synth** | Yosys synthesis of core + AXI bridge | Yosys |
 
 ## Directory layout

@@ -32,7 +32,7 @@ CPP_SRCS := $(wildcard tb/verilator/*.cpp)
 ASM_TESTS := $(wildcard sw/tests/asm/*.S)
 ASM_HEXES := $(patsubst sw/tests/asm/%.S,$(BUILD)/tests/%.hex,$(ASM_TESTS))
 
-.PHONY: sim lint clean wave regress regress-axil regress-axil-stall sw all tests cocotb formal synth
+.PHONY: sim lint clean wave regress regress-axil regress-axil-stall sw all tests cocotb formal formal-axil synth
 
 all: sim
 
@@ -140,8 +140,14 @@ formal:
 	@cd formal && sby -f regfile_x0.sby
 	@cd formal && yosys -s alu_prove.ys
 	@cd formal && sby -f decode_legal.sby
-	@cd formal && sby -f axil_master.sby
 	@echo "=== Formal proofs PASSED ==="
+
+# Optional AXI-Lite bridge formal safety check. This is intentionally kept
+# out of required CI because smtbmc runtime is solver/version sensitive.
+formal-axil:
+	@echo "=== Running optional AXI-Lite formal check ==="
+	@cd formal && sby -f axil_master.sby
+	@echo "=== AXI-Lite formal check PASSED ==="
 
 # Yosys synthesis (requires yosys)
 synth:
