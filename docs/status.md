@@ -110,7 +110,7 @@ x0 always 0 ✅, PC word-aligned ✅, correct sign/zero extension ✅
 | Formal ALU proof | ✅ Done | All 10 ops proven correct (yosys SAT, < 1s) |
 | Formal RegFile proof | ✅ Done | x0-always-zero (k-induction, SymbiYosys + z3) |
 | Formal Decode proof | ✅ Done | Field extraction, immediate invariants, legality consistency (yosys SAT) |
-| Formal AXI-Lite proof | ✅ Done | VALID stability, deadlock freedom, mutual exclusion, data stability |
+| Formal AXI-Lite check | ✅ Done | Bounded VALID stability, mutual exclusion, data stability |
 | CI pipeline | ✅ Done | GitHub Actions: lint, regress, cocotb, formal |
 
 ---
@@ -130,7 +130,7 @@ x0 always 0 ✅, PC word-aligned ✅, correct sign/zero extension ✅
 | AXI-Lite timer support | ✅ Done | `tb/models/sisAxiLiteSlave.sv` models MTIME/MTIMECMP and MTIP |
 | AXI-Lite system regression | ✅ Done | `make regress-axil` runs all 27 assembly tests through the AXI path |
 | cocotb bridge tests | ✅ Done | 11 tests: reset, R/W, errors, stalls, 100-txn random stress |
-| Formal AXI-Lite bridge | ✅ Done | VALID stability, deadlock freedom, mutual exclusion, data stability |
+| Formal AXI-Lite bridge | ✅ Done | Bounded VALID stability, mutual exclusion, data stability |
 
 **Exit criteria**: Full regression suite passes through the AXI path ✅,
 timer interrupt tests run with the AXI slave timer model ✅, CI covers `make regress-axil` ✅
@@ -229,7 +229,7 @@ Planned:
 | Assembly regression | 27/27 passing through corebus and AXI4-Lite paths |
 | cocotb unit tests | 41 tests (3 ALU + 4 RegFile + 11 Decode + 12 CSR + 11 AXI-Lite) |
 | cocotb status | 41/41 passing |
-| Formal proofs | ALU (all 10 ops), RegFile (x0=0), Decode (fields + legality), AXI-Lite (VALID stability + deadlock freedom) |
+| Formal proofs/checks | ALU (all 10 ops), RegFile (x0=0), Decode (fields + legality), AXI-Lite bounded safety (VALID/data stability + mutual exclusion) |
 | Formal status | All proofs PASS |
 | Simulation time | < 2s per test |
 | Waveform format | FST |
@@ -269,7 +269,7 @@ Planned:
 - `formal/regfile_x0.sby` — SymbiYosys config (RegFile)
 - `formal/decode_legal.sv` — Decoder proof wrapper (fields + legality)
 - `formal/decode_prove.ys` — Yosys SAT proof script (Decoder)
-- `formal/axil_master.sv` — AXI-Lite bridge proof wrapper (VALID stability, deadlock freedom)
+- `formal/axil_master.sv` — AXI-Lite bridge proof wrapper (VALID/data stability, mutual exclusion)
 - `formal/axil_master.sby` — SymbiYosys config (AXI-Lite bridge)
 
 ### Software

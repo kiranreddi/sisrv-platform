@@ -2,7 +2,7 @@
 
 ## Current Status
 
-All formal proofs are **passing**. The project uses Yosys + SymbiYosys for formal verification.
+Formal proofs/checks are **passing** in CI. The project uses Yosys + SymbiYosys for formal verification.
 
 ## Implemented Proofs
 

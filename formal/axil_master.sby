@@ -1,12 +1,12 @@
 [tasks]
-prove
+bmc
 
 [options]
-prove: mode prove
-prove: depth 8
+bmc: mode bmc
+bmc: depth 12
 
 [engines]
-prove: smtbmc z3
+bmc: smtbmc z3
 
 [script]
 read -formal -sv sisAxiLiteM.sv

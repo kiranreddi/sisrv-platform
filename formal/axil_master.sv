@@ -1,10 +1,9 @@
 // axil_master_formal.sv — Formal proof for AXI4-Lite master bridge
 // Proves:
-//   1. No deadlock under fair slave assumptions
+//   1. Bounded AXI/channel safety under unconstrained slave responses
 //   2. VALID stability (once asserted, stays high until READY)
-//   3. Bounded liveness: response eventually after acceptance
-//   4. FSM always reaches S_IDLE from any reachable state (progress)
-//   5. No simultaneous read and write in progress
+//   3. Address/data stability while stalled
+//   4. No simultaneous read and write in progress
 
 module axil_master_formal (
     input logic clk

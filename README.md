@@ -164,7 +164,7 @@ Proofs via Yosys/SymbiYosys:
 - **ALU**: All 10 operations (ADD, SUB, SLL, SLT, SLTU, XOR, SRL, SRA, OR, AND) formally proven correct for all 2^64 input combinations. Zero flag proven correct.
 - **RegFile**: x0-always-zero property proven by k-induction for any sequence of writes.
 - **Decoder**: Field extraction, U/B/J immediate alignment invariants, RV32I encoding legality — all proven for all 2^32 possible instructions.
-- **AXI-Lite Bridge**: VALID stability (AR/AW/W channels), deadlock freedom (mutual exclusion of read/write), corebus response stability, address/data stability — proven by k-induction (depth 20).
+- **AXI-Lite Bridge**: VALID stability (AR/AW/W channels), mutual exclusion of read/write activity, corebus response stability, address/data stability — checked with bounded formal safety verification.
 
 ## Architecture
 
@@ -220,7 +220,7 @@ formal/        Formal verification
   regfile_x0.sby   SymbiYosys configuration (RegFile)
   decode_legal.sv  Decoder proof wrapper (fields + legality)
   decode_prove.ys  Yosys SAT proof script (Decoder)
-  axil_master.sv   AXI-Lite bridge proof wrapper (VALID stability, deadlock)
+  axil_master.sv   AXI-Lite bridge proof wrapper (VALID/data stability, mutual exclusion)
   axil_master.sby  SymbiYosys configuration (AXI-Lite bridge)
 scripts/       Build scripts
   yosys_synth.tcl  Yosys synthesis script

@@ -133,7 +133,7 @@ GitHub Actions workflow (`.github/workflows/ci.yml`) runs on every push/PR:
 1. **Lint** — Verilator lint check
 2. **Regression** — 27 assembly tests (corebus + AXI4-Lite paths)
 3. **cocotb** — 41 randomized unit tests
-4. **Formal** — ALU + RegFile + Decoder + AXI-Lite proofs
+4. **Formal** — ALU + RegFile + Decoder proofs plus AXI-Lite bounded safety checks
 5. **Synth** — Yosys synthesis (`make synth`)
 
 ## Debug Knobs
@@ -152,8 +152,8 @@ GitHub Actions workflow (`.github/workflows/ci.yml`) runs on every push/PR:
 - ✅ ALU edge cases (overflow, boundary values)
 - ✅ Memory byte lane coverage
 - ✅ Register file x0 invariant (formal proof)
-- ✅ AXI-Lite handshake compliance (assertions + cocotb tests + formal proofs)
+- ✅ AXI-Lite handshake compliance (assertions + cocotb tests + bounded formal checks)
 - ✅ AXI-Lite VALID stability formally proven (ARVALID/AWVALID/WVALID)
-- ✅ AXI-Lite deadlock freedom formally proven (mutual exclusion, no stuck states)
+- ✅ AXI-Lite read/write mutual exclusion and stalled-channel stability formally checked
 - ✅ Timer interrupt end-to-end (ISR execution + return)
 - ✅ MRET exact resume point (no skipped/repeated instructions)
