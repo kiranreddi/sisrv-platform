@@ -16,7 +16,11 @@ module sisPlatformTop #(
     // Status outputs (directly accessible by testbench)
     output logic        tohost_pass,
     output logic        tohost_fail,
-    output logic [31:0] tohost_code
+    output logic [31:0] tohost_code,
+
+    input  logic [31:0] gpio_in,
+    output logic [31:0] gpio_out,
+    output logic [31:0] gpio_oe
 );
 
   // ---------------------------------------------------------------
@@ -85,6 +89,10 @@ module sisPlatformTop #(
   logic        tohost_rsp_valid, tohost_rsp_ready;
   logic [31:0] tohost_rsp_rdata;
   logic        tohost_rsp_err;
+  logic        gpio_req_valid, gpio_req_ready;
+  logic        gpio_rsp_valid, gpio_rsp_ready;
+  logic [31:0] gpio_rsp_rdata;
+  logic        gpio_rsp_err;
   logic        mtip_wire;
 
   // ---------------------------------------------------------------
@@ -116,32 +124,46 @@ module sisPlatformTop #(
       wire unused_axil_stall_rate = |AXIL_STALL_RATE;
 
       // ---------------------------------------------------------------
-      // MMIO sub-router: tohost (0x1000_0xxx) vs timer (0x1000_2xxx)
+      // MMIO sub-router:
+      //   0x1000_0xxx -> tohost
+      //   0x1000_2xxx -> timer
+      //   0x1000_3xxx -> GPIO
       // ---------------------------------------------------------------
       wire sel_timer = (mmio_req_addr[15:12] == 4'h2); // 0x1000_2xxx
+      wire sel_gpio  = (mmio_req_addr[15:12] == 4'h3); // 0x1000_3xxx
 
-      assign tohost_req_valid = mmio_req_valid && !sel_timer;
+      assign tohost_req_valid = mmio_req_valid && !sel_timer && !sel_gpio;
       assign timer_req_valid  = mmio_req_valid && sel_timer;
+      assign gpio_req_valid   = mmio_req_valid && sel_gpio;
       assign timer_req_addr   = mmio_req_addr;
       assign timer_req_we     = mmio_req_we;
       assign timer_req_wdata  = mmio_req_wdata;
       assign timer_req_wstrb  = mmio_req_wstrb;
-      assign mmio_req_ready   = sel_timer ? timer_req_ready : tohost_req_ready;
+      assign mmio_req_ready   = sel_timer ? timer_req_ready :
+                                sel_gpio  ? gpio_req_ready  :
+                                            tohost_req_ready;
 
       // MMIO response mux
-      logic mmio_sel_timer_r;
+      logic [1:0] mmio_sel_r;
       always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n)
-          mmio_sel_timer_r <= 1'b0;
+          mmio_sel_r <= 2'd0;
         else if (mmio_req_valid && mmio_req_ready)
-          mmio_sel_timer_r <= sel_timer;
+          mmio_sel_r <= sel_timer ? 2'd1 : sel_gpio ? 2'd2 : 2'd0;
       end
 
-      assign mmio_rsp_valid = mmio_sel_timer_r ? timer_rsp_valid : tohost_rsp_valid;
-      assign mmio_rsp_rdata = mmio_sel_timer_r ? timer_rsp_rdata : tohost_rsp_rdata;
-      assign mmio_rsp_err   = mmio_sel_timer_r ? timer_rsp_err   : tohost_rsp_err;
-      assign timer_rsp_ready  = mmio_rsp_ready && mmio_sel_timer_r;
-      assign tohost_rsp_ready = mmio_rsp_ready && !mmio_sel_timer_r;
+      assign mmio_rsp_valid = (mmio_sel_r == 2'd1) ? timer_rsp_valid :
+                              (mmio_sel_r == 2'd2) ? gpio_rsp_valid  :
+                                                      tohost_rsp_valid;
+      assign mmio_rsp_rdata = (mmio_sel_r == 2'd1) ? timer_rsp_rdata :
+                              (mmio_sel_r == 2'd2) ? gpio_rsp_rdata  :
+                                                      tohost_rsp_rdata;
+      assign mmio_rsp_err   = (mmio_sel_r == 2'd1) ? timer_rsp_err :
+                              (mmio_sel_r == 2'd2) ? gpio_rsp_err  :
+                                                      tohost_rsp_err;
+      assign timer_rsp_ready  = mmio_rsp_ready && (mmio_sel_r == 2'd1);
+      assign gpio_rsp_ready   = mmio_rsp_ready && (mmio_sel_r == 2'd2);
+      assign tohost_rsp_ready = mmio_rsp_ready && (mmio_sel_r == 2'd0);
 
       // ---------------------------------------------------------------
       // Direct corebus routing (default)
@@ -278,6 +300,29 @@ module sisPlatformTop #(
         .mtip      (mtip_wire)
       );
 
+      // ---------------------------------------------------------------
+      // GPIO (corebus path) — via sub-router
+      // ---------------------------------------------------------------
+      sisGpio #(
+        .BASE_ADDR(32'h1000_3000)
+      ) u_gpio (
+        .clk       (clk),
+        .rst_n     (rst_n),
+        .req_valid (gpio_req_valid),
+        .req_ready (gpio_req_ready),
+        .req_addr  (mmio_req_addr),
+        .req_we    (mmio_req_we),
+        .req_wdata (mmio_req_wdata),
+        .req_wstrb (mmio_req_wstrb),
+        .rsp_valid (gpio_rsp_valid),
+        .rsp_ready (gpio_rsp_ready),
+        .rsp_rdata (gpio_rsp_rdata),
+        .rsp_err   (gpio_rsp_err),
+        .gpio_in   (gpio_in),
+        .gpio_out  (gpio_out),
+        .gpio_oe   (gpio_oe)
+      );
+
     end else begin : gen_axilite
       // ---------------------------------------------------------------
       // AXI4-Lite path: core -> bridge -> AXI-Lite slave model
@@ -365,7 +410,10 @@ module sisPlatformTop #(
         .pass      (tohost_pass),
         .fail      (tohost_fail),
         .last_code (tohost_code),
-        .mtip      (mtip_wire)
+        .mtip      (mtip_wire),
+        .gpio_in   (gpio_in),
+        .gpio_out  (gpio_out),
+        .gpio_oe   (gpio_oe)
       );
 
       // Tie off unused corebus slave signals in AXI path
@@ -384,6 +432,12 @@ module sisPlatformTop #(
       assign timer_rsp_ready  = 1'b0;
       assign tohost_req_valid = 1'b0;
       assign tohost_rsp_ready = 1'b0;
+      assign gpio_req_valid   = 1'b0;
+      assign gpio_req_ready   = 1'b0;
+      assign gpio_rsp_ready   = 1'b0;
+      assign gpio_rsp_valid   = 1'b0;
+      assign gpio_rsp_rdata   = 32'h0;
+      assign gpio_rsp_err     = 1'b0;
       assign mmio_req_ready   = 1'b0;
       assign mmio_rsp_valid   = 1'b0;
       assign mmio_rsp_rdata   = 32'h0;

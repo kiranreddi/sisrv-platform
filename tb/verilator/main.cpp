@@ -23,6 +23,7 @@ int main(int argc, char** argv) {
   // Initialize
   top->clk   = 0;
   top->rst_n = 0;
+  top->gpio_in = 0;
 
   int exit_code = 0;
   uint64_t cycle = 0;

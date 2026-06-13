@@ -5,7 +5,7 @@
 ASIC-first, open-source end-to-end RISC-V (RV32I) platform using **Verilator** as the primary simulator.
 
 This repo implements a complete RV32I multi-cycle FSM core with M-mode CSRs, trap handling,
-timer interrupts, and AXI4-Lite bridge integration — connected to ROM, RAM, timer, and MMIO
+timer interrupts, and AXI4-Lite bridge integration — connected to ROM, RAM, timer, GPIO, and MMIO
 peripherals via a configurable bus path (corebus or AXI4-Lite).
 
 ## Current status
@@ -13,7 +13,7 @@ peripherals via a configurable bus path (corebus or AXI4-Lite).
 | Milestone | Status |
 |-----------|--------|
 | M0 — Sim harness & golden flow | ✅ Complete |
-| M1 — RV32I multi-cycle core | ✅ Complete (27/27 tests pass) |
+| M1 — RV32I multi-cycle core | ✅ Complete (28/28 tests pass) |
 | M2 — CSRs + traps (M-mode) | ✅ Complete |
 | M2.5 — Verification infrastructure | ✅ Complete (41 cocotb + 4 formal) |
 | M3 — AXI4-Lite master bridge | ✅ Complete |
@@ -67,7 +67,7 @@ make sw
 # Run a single test (the basic PASS test)
 make sim
 
-# Run full regression suite (27 tests)
+# Run full regression suite (28 tests)
 make regress
 
 # Run full regression suite through AXI4-Lite path
@@ -114,6 +114,7 @@ $ make regress
   PASS: test_ebreak
   PASS: test_ecall
   PASS: test_fence
+  PASS: test_gpio
   PASS: test_illegal
   PASS: test_illegal_funct
   PASS: test_jal_jalr
@@ -130,12 +131,12 @@ $ make regress
   PASS: test_slt
   PASS: test_timer
   PASS: test_x0
-=== Results: 27/27 passed, 0 failed ===
+=== Results: 28/28 passed, 0 failed ===
 ```
 
 ## Verification
 
-### Assembly Tests (27 tests)
+### Assembly Tests (28 tests)
 Directed self-checking tests covering all RV32I instructions:
 
 | Category | Tests | Coverage |
@@ -149,6 +150,7 @@ Directed self-checking tests covering all RV32I instructions:
 | Trap | test_ecall, test_ebreak, test_illegal, test_illegal_funct | ECALL/EBREAK/illegal opcode + funct-level traps, mcause, MRET |
 | Timer | test_timer, test_mtime_write | MTIP interrupt, ISR handler, MTIME/MTIMECMP, deterministic MTIME writes |
 | Timer | test_mret_boundary | MRET exact resume point, no skipped/repeated instructions |
+| GPIO | test_gpio | DATA/DIR/IN/SET/CLR MMIO registers |
 | System | test_fence, test_lui_auipc, test_x0 | FENCE, LUI/AUIPC, x0 hardwired zero |
 | Stress | test_back_to_back | Fibonacci, register file stress, data dependencies, loops |
 
@@ -183,6 +185,7 @@ Proofs via Yosys/SymbiYosys:
 | ROM | `0x0000_0000` | 64 KB | Reset vector, program code |
 | MMIO | `0x1000_0000` | 64 KB | tohost (pass/fail signaling) |
 | Timer | `0x1000_2000` | 16 B | MTIME/MTIMECMP registers |
+| GPIO | `0x1000_3000` | 20 B | DATA/DIR/IN/SET/CLR registers |
 | RAM | `0x8000_0000` | 256 KB | Data/stack memory |
 
 ### Bus Architecture
@@ -197,7 +200,7 @@ The CI pipeline runs on every push/PR to `main`:
 | Job | Description | Tool |
 |-----|-------------|------|
 | **Lint** | Verilator lint check (all RTL) | Verilator 5.038 |
-| **Regression** | 27 assembly self-checking tests through corebus and AXI4-Lite paths | Verilator 5.038 + riscv64-gcc |
+| **Regression** | 28 assembly self-checking tests through corebus and AXI4-Lite paths | Verilator 5.038 + riscv64-gcc |
 | **cocotb** | 41 randomized/directed unit tests | Verilator 5.038 + cocotb |
 | **Formal** | Required ALU + RegFile + Decoder proofs; optional AXI-Lite bounded safety check | Yosys + SymbiYosys + z3 |
 | **Synth** | Yosys synthesis of core + AXI bridge | Yosys |
@@ -208,14 +211,14 @@ The CI pipeline runs on every push/PR to `main`:
 rtl/           Synthesizable RTL (ASIC-first)
   core/        CPU core: sisRvCore, sisAlu, sisDecode, sisRegFile, sisCsr
   bus/         Bus infrastructure: sisMemFabric, sisAxiLiteM
-  periph/      Peripherals: sisRom, sisRam, sisTohost, sisTimer
+  periph/      Peripherals: sisRom, sisRam, sisTohost, sisTimer, sisGpio
 tb/            Testbench
   verilator/   Verilator C++ harness
   cocotb/      cocotb Python tests (ALU, RegFile, Decode, CSR, AXI-Lite)
   models/      Behavioral models (AXI-Lite slave)
 sw/            Bare-metal BSP + assembly tests
   bsp/         crt0.S, link.ld
-  tests/asm/   Assembly test programs (27 tests)
+  tests/asm/   Assembly test programs (28 tests)
 formal/        Formal verification
   alu_add.sv       ALU formal proof wrapper (all 10 ops)
   alu_prove.ys     Yosys SAT proof script (ALU)
@@ -233,6 +236,7 @@ docs/          Architecture docs + plan
 ## Documentation
 
 - `docs/PLAN.md` — Complete milestone plan + exit criteria
+- `docs/EXTENSION_ROADMAP.md` — Extension order, use cases, and acceptance checks
 - `docs/MEMORY_MAP.md` — Address map
 - `docs/INTERFACES.md` — Internal bus + AXI-Lite profile
 - `docs/VERIFICATION.md` — Verification strategy
