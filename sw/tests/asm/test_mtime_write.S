@@ -3,20 +3,20 @@
 # Because MTIME keeps running, reads after separate instructions observe
 # written_value + elapsed_cycles, not the exact write data.
 #
-# Timer registers at 0x1000_2000:
-#   +0x00: MTIME_LO   +0x04: MTIME_HI
+# Timer registers at CLINT 0x02000000 (MTIMECMP 0x02004000, MTIME 0x0200BFF8)
 
 .section .text.init
 .globl _start
 _start:
-    li    x8, 0x10002000
+    li    x8, 0x02004000
 
     # Keep MTIMECMP out of the way for this test.
     li    x9, 0xFFFFFFFF
-    sw    x9, 8(x8)
-    sw    x9, 12(x8)
+    sw    x9, 0(x8)
+    sw    x9, 4(x8)
 
-    # Double-write snaps MTIME_LO; readback should be >= snap and bounded.
+    # Write MTIME via CLINT layout (lo at 0xBFF8)
+    li    x8, 0x0200BFF8
     li    x9, 50
     sw    x9, 0(x8)
     sw    x9, 0(x8)

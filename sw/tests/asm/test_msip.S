@@ -1,5 +1,4 @@
-# test_timer.S — CLINT timer interrupt (standard layout 0x0200_0000)
-# MTIMECMP at 0x02004000, MTIME at 0x0200BFF8
+# test_msip.S — Machine software interrupt via CLINT MSIP (0x02000000)
 
 .section .text.init
 .globl _start
@@ -7,18 +6,16 @@ _start:
     j     setup
 
     .align 2
-timer_handler:
+msip_handler:
     csrr  x5, mcause
     lui   x7, 0x80000
-    ori   x7, x7, 7
+    ori   x7, x7, 3
     bne   x5, x7, fail
 
     addi  x20, x20, 1
 
-    li    x8, 0x02004000
-    li    x9, 0x7FFFFFFF
-    sw    x9, 0(x8)
-    sw    x9, 4(x8)
+    li    x8, 0x02000000
+    sw    x0, 0(x8)
 
     mret
 
@@ -29,17 +26,16 @@ setup:
     li    x19, 0
     li    x20, 0
 
-    li    x8, 0x02004000
-    li    x9, 500
-    sw    x9, 0(x8)
-    sw    x0, 4(x8)
-
-    li    x1, 0x80
+    li    x1, 0x8
     csrw  mie, x1
 
     csrr  x1, mstatus
     ori   x1, x1, 0x8
     csrw  mstatus, x1
+
+    li    x8, 0x02000000
+    li    x9, 1
+    sw    x9, 0(x8)
 
 main_loop:
     addi  x19, x19, 1

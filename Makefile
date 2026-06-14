@@ -21,7 +21,7 @@ RV_ARCH   := rv32im_zicsr
 RV_ABI    := ilp32
 RV_CFLAGS := -march=$(RV_ARCH) -mabi=$(RV_ABI) -nostdlib -nostartfiles -ffreestanding -static -O2 -Wl,--build-id=none
 
-RTL_DIRS := rtl rtl/core rtl/bus rtl/periph
+RTL_DIRS := rtl rtl/core rtl/bus rtl/periph rtl/debug
 TB_DIRS  := tb/verilator tb/models
 
 RTL_SRCS := $(wildcard $(addsuffix /*.sv,$(RTL_DIRS)))
@@ -32,7 +32,7 @@ CPP_SRCS := $(wildcard tb/verilator/*.cpp)
 ASM_TESTS := $(wildcard sw/tests/asm/*.S)
 ASM_HEXES := $(patsubst sw/tests/asm/%.S,$(BUILD)/tests/%.hex,$(ASM_TESTS))
 
-.PHONY: sim lint clean wave regress regress-axil regress-axil-stall sw all tests cocotb formal formal-axil synth \
+.PHONY: sim lint clean wave regress regress-axil regress-axil-stall sw all tests cocotb formal formal-axil synth sta cosim-lockstep \
         riscof-check-tools riscof-smoke riscof-rv32i riscof-rv32im
 
 
@@ -41,9 +41,9 @@ all: sim
 # Build Verilator simulation binary
 $(SIM): $(RTL_SRCS) $(TB_SRCS) $(CPP_SRCS)
 	@mkdir -p $(BUILD)
-	$(VERILATOR) -Wall -Wno-UNUSEDSIGNAL --cc --exe --build \
+	$(VERILATOR) -Wall -Wno-UNUSEDSIGNAL -Wno-WIDTHTRUNC -Wno-WIDTHEXPAND -Wno-SELRANGE -Wno-UNUSEDPARAM --cc --exe --build \
 	  -O3 --trace-fst \
-	  -Irtl -Irtl/core -Irtl/bus -Irtl/periph -Itb/models \
+	  -Irtl -Irtl/core -Irtl/bus -Irtl/periph -Irtl/debug -Itb/models \
 	  --top-module $(TOP) \
 	  -GROM_INIT_FILE='"rom.hex"' \
 	  -GRAM_INIT_FILE='"ram.hex"' \
@@ -62,9 +62,9 @@ sim: $(SIM) $(BUILD)/tests/test_pass.hex
 
 # Lint all RTL
 lint:
-	$(VERILATOR) -Wall -Wno-UNUSEDSIGNAL --lint-only \
+	$(VERILATOR) -Wall -Wno-UNUSEDSIGNAL -Wno-WIDTHTRUNC -Wno-WIDTHEXPAND -Wno-SELRANGE -Wno-UNUSEDPARAM --lint-only \
 	  --top-module $(TOP) \
-	  -Irtl -Irtl/core -Irtl/bus -Irtl/periph \
+	  -Irtl -Irtl/core -Irtl/bus -Irtl/periph -Irtl/debug -Itb/models \
 	  $(RTL_SRCS)
 
 wave:
@@ -75,11 +75,16 @@ $(BUILD)/tests/%.elf: sw/tests/asm/%.S sw/bsp/link.ld
 	@mkdir -p $(BUILD)/tests
 	$(RV_GCC) $(RV_CFLAGS) -T sw/bsp/link.ld -o $@ $<
 
+$(BUILD)/tests/test_compressed.elf: sw/tests/asm/test_compressed.S sw/bsp/link.ld
+	@mkdir -p $(BUILD)/tests
+	$(RV_GCC) -march=rv32imc_zicsr -mabi=$(RV_ABI) -nostdlib -nostartfiles -ffreestanding -static -O2 -Wl,--build-id=none -T sw/bsp/link.ld -o $@ $<
+
 $(BUILD)/tests/%.bin: $(BUILD)/tests/%.elf
 	$(RV_OBJCOPY) -O binary $< $@
 
 $(BUILD)/tests/%.hex: $(BUILD)/tests/%.bin
-	od -An -tx4 -w4 -v $< | sed 's/^ *//' > $@
+	python3 -c "import pathlib,sys; d=pathlib.Path(sys.argv[1]).read_bytes(); \
+	  print('\n'.join(f'{int.from_bytes(d[i:i+4],\"little\"):08x}' for i in range(0,len(d),4)))" $< > $@
 
 $(BUILD)/tests/%.objdump: $(BUILD)/tests/%.elf
 	$(RV_OBJDUMP) -d -M no-aliases $< > $@
@@ -161,6 +166,19 @@ synth:
 	@mkdir -p $(BUILD)
 	yosys -s scripts/yosys_synth.tcl
 	@echo "=== Synthesis complete ==="
+
+sta: synth
+	@echo "=== STA reference (OpenSTA when LIBERTY_FILE set) ==="
+	@if command -v sta >/dev/null 2>&1 && [ -n "$$LIBERTY_FILE" ]; then \
+	  LIBERTY_FILE=$$LIBERTY_FILE NETLIST_FILE=$(BUILD)/sisPlatformTop_syn.v \
+	    sta -no_splash scripts/sta_opensta.tcl; \
+	else \
+	  echo "OpenSTA/Liberty not configured; SDC at scripts/constraints.sdc"; \
+	  echo "See docs/PPA_DATASHEET.md"; \
+	fi
+
+cosim-lockstep: build/sim_sisPlatformTop
+	python3 verification/cosim/spike_lockstep.py --seeds 100
 
 # ---------------------------------------------------------------------------
 # RISCOF architectural compliance (optional; requires external tools)

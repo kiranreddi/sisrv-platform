@@ -23,6 +23,12 @@ module sisPlatformTop #(
     output logic [31:0] gpio_out,
     output logic [31:0] gpio_oe,
 
+    input  logic [7:0]  plic_irq,
+    input  logic        jtag_tck,
+    input  logic        jtag_tms,
+    input  logic        jtag_tdi,
+    output logic        jtag_tdo,
+
     output logic        uart_tx_valid,
     output logic [7:0]  uart_tx_data
 );
@@ -79,16 +85,28 @@ module sisPlatformTop #(
   logic        mmio_rsp_err;
 
   // ---------------------------------------------------------------
-  // Timer MMIO signals
+  // Timer / CLINT / PLIC signals
   // ---------------------------------------------------------------
-  logic        timer_req_valid, timer_req_ready;
-  logic [31:0] timer_req_addr;
-  logic        timer_req_we;
-  logic [31:0] timer_req_wdata;
-  logic [3:0]  timer_req_wstrb;
-  logic        timer_rsp_valid, timer_rsp_ready;
-  logic [31:0] timer_rsp_rdata;
-  logic        timer_rsp_err;
+  logic        clint_req_valid, clint_req_ready;
+  logic [31:0] clint_req_addr;
+  logic        clint_req_we;
+  logic [31:0] clint_req_wdata;
+  logic [3:0]  clint_req_wstrb;
+  logic        clint_rsp_valid, clint_rsp_ready;
+  logic [31:0] clint_rsp_rdata;
+  logic        clint_rsp_err;
+  logic        plic_req_valid, plic_req_ready;
+  logic [31:0] plic_req_addr;
+  logic        plic_req_we;
+  logic [31:0] plic_req_wdata;
+  logic [3:0]  plic_req_wstrb;
+  logic        plic_rsp_valid, plic_rsp_ready;
+  logic [31:0] plic_rsp_rdata;
+  logic        plic_rsp_err;
+  logic        msip_wire, mtip_wire, meip_wire;
+  logic        mtip_clint, msip_clint, meip_plic;
+  logic        mtip_axil, msip_axil, meip_axil;
+
   logic        tohost_req_valid, tohost_req_ready;
   logic        tohost_rsp_valid, tohost_rsp_ready;
   logic [31:0] tohost_rsp_rdata;
@@ -101,17 +119,37 @@ module sisPlatformTop #(
   logic        uart_rsp_valid, uart_rsp_ready;
   logic [31:0] uart_rsp_rdata;
   logic        uart_rsp_err;
-  logic        mtip_wire;
 
-  // ---------------------------------------------------------------
-  // CPU Core
-  // ---------------------------------------------------------------
+  logic [8:1]  plic_irq_mux;
+
+  // Map TB GPIO + package IRQ pins to PLIC sources 1..8 (1-indexed)
+  genvar gi;
+  generate
+    for (gi = 1; gi <= 8; gi++) begin : gen_plic_irq
+      assign plic_irq_mux[gi] = plic_irq[gi-1] | gpio_out[gi];
+    end
+  endgenerate
+  logic        dm_halt_req, dm_resume_req, dm_single_step, core_halted;
+  logic        dmi_req_valid, dmi_req_ready, dmi_req_write;
+  logic [6:0]  dmi_req_addr;
+  logic [31:0] dmi_req_wdata, dmi_rsp_rdata;
+  logic        dmi_rsp_valid, dmi_rsp_ready;
+  logic        abs_valid, abs_ready, abs_write;
+  logic [4:0]  abs_regaddr;
+  logic [31:0] abs_wdata, abs_rdata;
   sisRvCore #(
-    .RESET_VECTOR(32'h0000_0000)
+    .RESET_VECTOR(32'h0000_0000),
+    .ENABLE_C    (1'b1)
   ) u_core (
-    .clk       (clk),
-    .rst_n     (rst_n),
-    .ext_mtip  (mtip_wire),
+    .clk            (clk),
+    .rst_n          (rst_n),
+    .dbg_halt_req   (dm_halt_req),
+    .dbg_resume_req (dm_resume_req),
+    .dbg_single_step(dm_single_step),
+    .dbg_halted     (core_halted),
+    .ext_msip       (msip_wire),
+    .ext_mtip       (mtip_wire),
+    .ext_meip       (meip_wire),
     .req_valid (core_req_valid),
     .req_ready (core_req_ready),
     .req_addr  (core_req_addr),
@@ -125,58 +163,123 @@ module sisPlatformTop #(
   );
 
   // ---------------------------------------------------------------
+  // CLINT + PLIC + Debug (shared by corebus and AXI paths)
+  // ---------------------------------------------------------------
+  sisClint u_clint (
+    .clk       (clk),
+    .rst_n     (rst_n),
+    .req_valid (clint_req_valid),
+    .req_ready (clint_req_ready),
+    .req_addr  (clint_req_addr),
+    .req_we    (clint_req_we),
+    .req_wdata (clint_req_wdata),
+    .req_wstrb (clint_req_wstrb),
+    .rsp_valid (clint_rsp_valid),
+    .rsp_ready (clint_rsp_ready),
+    .rsp_rdata (clint_rsp_rdata),
+    .rsp_err   (clint_rsp_err),
+    .mtip      (mtip_clint),
+    .msip      (msip_clint)
+  );
+
+  sisPlic #(
+    .NUM_SOURCES(8)
+  ) u_plic (
+    .clk       (clk),
+    .rst_n     (rst_n),
+    .req_valid (plic_req_valid),
+    .req_ready (plic_req_ready),
+    .req_addr  (plic_req_addr),
+    .req_we    (plic_req_we),
+    .req_wdata (plic_req_wdata),
+    .req_wstrb (plic_req_wstrb),
+    .rsp_valid (plic_rsp_valid),
+    .rsp_ready (plic_rsp_ready),
+    .rsp_rdata (plic_rsp_rdata),
+    .rsp_err   (plic_rsp_err),
+    .irq_src   (plic_irq_mux),
+    .meip      (meip_plic)
+  );
+
+  sisJtagDtm u_jtag_dtm (
+    .clk           (clk),
+    .rst_n         (rst_n),
+    .tck           (jtag_tck),
+    .tms           (jtag_tms),
+    .tdi           (jtag_tdi),
+    .tdo           (jtag_tdo),
+    .dmi_req_valid (dmi_req_valid),
+    .dmi_req_ready (dmi_req_ready),
+    .dmi_req_write (dmi_req_write),
+    .dmi_req_addr  (dmi_req_addr),
+    .dmi_req_wdata (dmi_req_wdata),
+    .dmi_rsp_valid (dmi_rsp_valid),
+    .dmi_rsp_ready (dmi_rsp_ready),
+    .dmi_rsp_rdata (dmi_rsp_rdata)
+  );
+
+  sisDm u_dm (
+    .clk           (clk),
+    .rst_n         (rst_n),
+    .dmi_req_valid (dmi_req_valid),
+    .dmi_req_ready (dmi_req_ready),
+    .dmi_req_write (dmi_req_write),
+    .dmi_req_addr  (dmi_req_addr),
+    .dmi_req_wdata (dmi_req_wdata),
+    .dmi_rsp_valid (dmi_rsp_valid),
+    .dmi_rsp_ready (dmi_rsp_ready),
+    .dmi_rsp_rdata (dmi_rsp_rdata),
+    .halt_req      (dm_halt_req),
+    .resume_req    (dm_resume_req),
+    .single_step   (dm_single_step),
+    .core_halted   (core_halted),
+    .core_running  (~core_halted),
+    .abs_valid     (abs_valid),
+    .abs_ready     (abs_ready),
+    .abs_write     (abs_write),
+    .abs_regaddr   (abs_regaddr),
+    .abs_wdata     (abs_wdata),
+    .abs_rdata     (abs_rdata)
+  );
+
+  assign abs_ready = 1'b1;
+  assign abs_rdata = 32'h0;
+
+  // ---------------------------------------------------------------
   // Memory Fabric — generate-selected path
   // ---------------------------------------------------------------
   generate
     if (USE_AXIL == 0) begin : gen_corebus
       wire unused_axil_stall_rate = |AXIL_STALL_RATE;
 
-      // ---------------------------------------------------------------
-      // MMIO sub-router:
-      //   0x1000_0xxx -> tohost
-      //   0x1000_2xxx -> timer
-      //   0x1000_3xxx -> GPIO
-      //   0x1000_4xxx -> UART
-      // ---------------------------------------------------------------
-      wire sel_timer = (mmio_req_addr[15:12] == 4'h2); // 0x1000_2xxx
-      wire sel_gpio  = (mmio_req_addr[15:12] == 4'h3); // 0x1000_3xxx
-      wire sel_uart  = (mmio_req_addr[15:12] == 4'h4); // 0x1000_4xxx
+      // MMIO sub-router: 0x1000_0xxx tohost, 0x1000_3xxx GPIO, 0x1000_4xxx UART
+      wire sel_gpio  = (mmio_req_addr[15:12] == 4'h3);
+      wire sel_uart  = (mmio_req_addr[15:12] == 4'h4);
 
-      assign tohost_req_valid = mmio_req_valid && !sel_timer && !sel_gpio && !sel_uart;
-      assign timer_req_valid  = mmio_req_valid && sel_timer;
+      assign tohost_req_valid = mmio_req_valid && !sel_gpio && !sel_uart;
       assign gpio_req_valid   = mmio_req_valid && sel_gpio;
       assign uart_req_valid   = mmio_req_valid && sel_uart;
-      assign timer_req_addr   = mmio_req_addr;
-      assign timer_req_we     = mmio_req_we;
-      assign timer_req_wdata  = mmio_req_wdata;
-      assign timer_req_wstrb  = mmio_req_wstrb;
-      assign mmio_req_ready   = sel_timer ? timer_req_ready :
-                                sel_gpio  ? gpio_req_ready  :
-                                sel_uart  ? uart_req_ready  :
-                                            tohost_req_ready;
+      assign mmio_req_ready   = sel_gpio ? gpio_req_ready :
+                                sel_uart ? uart_req_ready :
+                                           tohost_req_ready;
 
-      // MMIO response mux
       logic [1:0] mmio_sel_r;
       always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n)
           mmio_sel_r <= 2'd0;
         else if (mmio_req_valid && mmio_req_ready)
-          mmio_sel_r <= sel_timer ? 2'd1 : sel_gpio ? 2'd2 : sel_uart ? 2'd3 : 2'd0;
+          mmio_sel_r <= sel_gpio ? 2'd2 : sel_uart ? 2'd3 : 2'd0;
       end
 
-      assign mmio_rsp_valid = (mmio_sel_r == 2'd1) ? timer_rsp_valid :
-                              (mmio_sel_r == 2'd2) ? gpio_rsp_valid  :
+      assign mmio_rsp_valid = (mmio_sel_r == 2'd2) ? gpio_rsp_valid  :
                               (mmio_sel_r == 2'd3) ? uart_rsp_valid  :
                                                       tohost_rsp_valid;
-      assign mmio_rsp_rdata = (mmio_sel_r == 2'd1) ? timer_rsp_rdata :
-                              (mmio_sel_r == 2'd2) ? gpio_rsp_rdata  :
+      assign mmio_rsp_rdata = (mmio_sel_r == 2'd2) ? gpio_rsp_rdata  :
                               (mmio_sel_r == 2'd3) ? uart_rsp_rdata  :
                                                       tohost_rsp_rdata;
-      assign mmio_rsp_err   = (mmio_sel_r == 2'd1) ? timer_rsp_err :
-                              (mmio_sel_r == 2'd2) ? gpio_rsp_err  :
+      assign mmio_rsp_err   = (mmio_sel_r == 2'd2) ? gpio_rsp_err  :
                               (mmio_sel_r == 2'd3) ? uart_rsp_err   :
                                                       tohost_rsp_err;
-      assign timer_rsp_ready  = mmio_rsp_ready && (mmio_sel_r == 2'd1);
       assign gpio_rsp_ready   = mmio_rsp_ready && (mmio_sel_r == 2'd2);
       assign uart_rsp_ready   = mmio_rsp_ready && (mmio_sel_r == 2'd3);
       assign tohost_rsp_ready = mmio_rsp_ready && (mmio_sel_r == 2'd0);
@@ -230,7 +333,29 @@ module sisPlatformTop #(
         .s2_rsp_valid(mmio_rsp_valid),
         .s2_rsp_ready(mmio_rsp_ready),
         .s2_rsp_rdata(mmio_rsp_rdata),
-        .s2_rsp_err  (mmio_rsp_err)
+        .s2_rsp_err  (mmio_rsp_err),
+
+        .s3_req_valid(clint_req_valid),
+        .s3_req_ready(clint_req_ready),
+        .s3_req_addr (clint_req_addr),
+        .s3_req_we   (clint_req_we),
+        .s3_req_wdata(clint_req_wdata),
+        .s3_req_wstrb(clint_req_wstrb),
+        .s3_rsp_valid(clint_rsp_valid),
+        .s3_rsp_ready(clint_rsp_ready),
+        .s3_rsp_rdata(clint_rsp_rdata),
+        .s3_rsp_err  (clint_rsp_err),
+
+        .s4_req_valid(plic_req_valid),
+        .s4_req_ready(plic_req_ready),
+        .s4_req_addr (plic_req_addr),
+        .s4_req_we   (plic_req_we),
+        .s4_req_wdata(plic_req_wdata),
+        .s4_req_wstrb(plic_req_wstrb),
+        .s4_rsp_valid(plic_rsp_valid),
+        .s4_rsp_ready(plic_rsp_ready),
+        .s4_rsp_rdata(plic_rsp_rdata),
+        .s4_rsp_err  (plic_rsp_err)
       );
 
       // ---------------------------------------------------------------
@@ -294,27 +419,6 @@ module sisPlatformTop #(
         .pass      (tohost_pass),
         .fail      (tohost_fail),
         .last_code (tohost_code)
-      );
-
-      // ---------------------------------------------------------------
-      // Timer (corebus path) — via sub-router
-      // ---------------------------------------------------------------
-      sisTimer #(
-        .BASE_ADDR(32'h1000_2000)
-      ) u_timer (
-        .clk       (clk),
-        .rst_n     (rst_n),
-        .req_valid (timer_req_valid),
-        .req_ready (timer_req_ready),
-        .req_addr  (timer_req_addr),
-        .req_we    (timer_req_we),
-        .req_wdata (timer_req_wdata),
-        .req_wstrb (timer_req_wstrb),
-        .rsp_valid (timer_rsp_valid),
-        .rsp_ready (timer_rsp_ready),
-        .rsp_rdata (timer_rsp_rdata),
-        .rsp_err   (timer_rsp_err),
-        .mtip      (mtip_wire)
       );
 
       // ---------------------------------------------------------------
@@ -449,7 +553,10 @@ module sisPlatformTop #(
         .pass      (tohost_pass),
         .fail      (tohost_fail),
         .last_code (tohost_code),
-        .mtip      (mtip_wire),
+        .mtip      (mtip_axil),
+        .msip      (msip_axil),
+        .meip      (meip_axil),
+        .plic_irq  (plic_irq),
         .gpio_in   (gpio_in),
         .gpio_out  (gpio_out),
         .gpio_oe   (gpio_oe),
@@ -463,14 +570,12 @@ module sisPlatformTop #(
       assign rom_rsp_ready    = 1'b0;
       assign ram_rsp_ready    = 1'b0;
       // MMIO sub-router: tie off all signals (not used in AXI path)
+      assign clint_req_valid  = 1'b0;
+      assign clint_rsp_ready  = 1'b0;
+      assign plic_req_valid   = 1'b0;
+      assign plic_rsp_ready   = 1'b0;
       assign mmio_req_valid   = 1'b0;
       assign mmio_rsp_ready   = 1'b0;
-      assign timer_req_valid  = 1'b0;
-      assign timer_req_addr   = 32'h0;
-      assign timer_req_we     = 1'b0;
-      assign timer_req_wdata  = 32'h0;
-      assign timer_req_wstrb  = 4'h0;
-      assign timer_rsp_ready  = 1'b0;
       assign tohost_req_valid = 1'b0;
       assign tohost_rsp_ready = 1'b0;
       assign gpio_req_valid   = 1'b0;
@@ -490,6 +595,18 @@ module sisPlatformTop #(
       assign mmio_rsp_rdata   = 32'h0;
       assign mmio_rsp_err     = 1'b0;
 
+    end
+  endgenerate
+
+  generate
+    if (USE_AXIL == 0) begin : gen_irq_mux
+      assign mtip_wire = mtip_clint;
+      assign msip_wire = msip_clint;
+      assign meip_wire = meip_plic;
+    end else begin : gen_irq_mux_axil
+      assign mtip_wire = mtip_axil;
+      assign msip_wire = msip_axil;
+      assign meip_wire = meip_axil;
     end
   endgenerate
 

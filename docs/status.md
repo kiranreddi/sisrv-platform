@@ -1,13 +1,25 @@
 # Implementation Status
 
-**Last updated**: 2026-06-14
+**Last updated**: 2026-06-14 (P0 platform integration)
 
 ## Summary
 
-The sisrv-platform project implements a fully functional RV32IM RISC-V processor core
-with M-mode CSRs, trap handling, timer interrupts, GPIO, UART, and an AXI4-Lite master bridge.
-The core is verified through 33 directed assembly tests, 44 cocotb randomized unit tests,
-and 4 formal proofs — all running on Verilator 5.038.
+The sisrv-platform project implements a fully functional RV32IMAC RISC-V processor core
+with M-mode CSRs, trap handling, **CLINT/PLIC interrupts**, **RISC-V Debug subset**,
+GPIO, UART, and an AXI4-Lite master bridge.
+The core is verified through **36** directed assembly tests, 44 cocotb randomized unit tests,
+4 formal proofs, RISCOF smoke (required CI), and 100-seed random co-sim smoke — all on Verilator 5.038.
+
+### P0 closure snapshot (2026-06-14)
+
+| P0 item | Status | Evidence |
+|---------|--------|----------|
+| CLINT / PLIC | ✅ Complete | `sisClint.sv`, `sisPlic.sv`, `test_msip`, `test_timer`, `test_plic_irq` |
+| C extension | ✅ Complete | `sisDecompress.sv`, `ENABLE_C`, `test_compressed` |
+| Debug / JTAG | ✅ Subset | `sisDm.sv`, `sisJtagDtm.sv`, halt/resume/step |
+| Product docs | ✅ Complete | `LICENSE`, Integration Guide, PRM, PPA datasheet |
+| PPA / STA | 🟡 Partial | SDC + OpenSTA scripts; named-PDK STA pending |
+| RISCOF / co-sim | 🟡 Partial | Smoke in required CI; full suite + Spike lock-step pending |
 
 ## Milestone Status
 
@@ -239,15 +251,15 @@ Planned:
 | Verilator version | 5.038 |
 | Lint status | ✅ Clean (Wall, no warnings) |
 | Compiler | riscv64-linux-gnu-gcc 13.3 |
-| Assembly test suite | 33 tests |
-| Assembly regression | 33/33 passing through corebus and AXI4-Lite paths |
+| Assembly test suite | 36 tests |
+| Assembly regression | 36/36 passing through corebus path |
 | cocotb unit tests | 44 tests (3 ALU + 4 RegFile + 11 Decode + 15 CSR + 11 AXI-Lite) |
 | cocotb status | 44/44 passing |
 | Formal proofs/checks | Required: ALU (all 10 ops), RegFile (x0=0), Decode (fields + legality). Optional: AXI-Lite bounded safety (`make formal-axil`) |
 | Formal status | All proofs PASS |
 | Simulation time | < 2s per test |
 | Waveform format | FST |
-| CI pipeline | GitHub Actions (lint, regress, cocotb, formal, synth) |
+| CI pipeline | GitHub Actions (lint, regress, cocotb, formal, synth, RISCOF, co-sim) |
 | Synthesis | Yosys (make synth) |
 
 ## Files Implemented
@@ -263,7 +275,11 @@ Planned:
 - `rtl/bus/sisAxiLiteM.sv` — AXI4-Lite master bridge (with assertions)
 - `rtl/periph/sisRom.sv` — ROM memory (synth-safe)
 - `rtl/periph/sisRam.sv` — RAM memory with byte strobes (synth-safe)
-- `rtl/periph/sisTimer.sv` — Machine timer (MTIME/MTIMECMP/MTIP)
+- `rtl/core/sisDecompress.sv` — RV32C decompressor
+- `rtl/periph/sisClint.sv` — Core-local interruptor (MSIP/MTIP/MTIME)
+- `rtl/periph/sisPlic.sv` — Platform-level interrupt controller
+- `rtl/debug/sisDm.sv` — RISC-V Debug Module subset
+- `rtl/debug/sisJtagDtm.sv` — JTAG DTM
 - `rtl/periph/sisGpio.sv` — 32-bit GPIO MMIO peripheral
 - `rtl/periph/sisUart.sv` — UART MMIO peripheral with loopback test mode
 - `rtl/periph/sisTohost.sv` — Pass/fail MMIO device

@@ -2,7 +2,8 @@
 // Extracts immediates, register addresses, and control signals.
 
 module sisDecode #(
-    parameter bit ENABLE_M = 1'b1
+    parameter bit ENABLE_M = 1'b1,
+    parameter bit ENABLE_C = 1'b1
 )(
     input  logic [31:0] instr,
 

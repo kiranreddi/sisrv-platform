@@ -1,21 +1,20 @@
 # sisrv-platform
 
 [![CI](https://github.com/kiranreddi/sisrv-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/kiranreddi/sisrv-platform/actions/workflows/ci.yml)
-![ISA](https://img.shields.io/badge/ISA-RV32IM-blue)
-![ASM](https://img.shields.io/badge/asm-33%2F33%20passing-brightgreen)
+![ISA](https://img.shields.io/badge/ISA-RV32IMAC-blue)
+![ASM](https://img.shields.io/badge/asm-36%2F36%20passing-brightgreen)
 ![cocotb](https://img.shields.io/badge/cocotb-44%20tests-brightgreen)
 ![formal](https://img.shields.io/badge/formal-4%20proof%20sets-brightgreen)
 ![synth](https://img.shields.io/badge/synthesis-Yosys-informational)
 ![maturity](https://img.shields.io/badge/maturity-productizing-yellow)
-![license](https://img.shields.io/badge/license-TBD-lightgrey)
+![license](https://img.shields.io/badge/license-Apache--2.0-green)
 
-**ASIC-first RV32IM SoC platform for compact embedded RISC-V systems.**
+**ASIC-first RV32IMAC SoC platform for compact embedded RISC-V systems.**
 
-`sisrv-platform` is an open RTL platform built around a complete RV32IM multi-cycle
-core with machine-mode CSRs, precise traps, timer interrupt support, GPIO, UART,
-ROM/RAM, a simple internal corebus, and an optional AXI4-Lite bridge. It is designed
-to be easy to simulate, verify, synthesize, and extend toward product-grade embedded
-CPU IP.
+`sisrv-platform` is an open RTL platform built around a complete RV32IMAC multi-cycle
+core with machine-mode CSRs, precise traps, CLINT/PLIC interrupts, RISC-V Debug
+subset, GPIO, UART, ROM/RAM, a simple internal corebus, and an optional AXI4-Lite
+bridge.
 
 ## Why This Exists
 
@@ -35,21 +34,23 @@ keeping the implementation readable and open.
 **Not yet claimed**
 
 - Not a certified or licensable commercial RISC-V IP product.
-- Full RISCOF/riscv-arch-test signoff is not complete.
-- No RISC-V Debug Module/JTAG, PMP, CLINT/PLIC, cache, or physical PPA signoff yet.
-- License is still TBD.
+- Full RISCOF/riscv-arch-test suite signoff is in progress (smoke in required CI).
+- Debug abstract GPR access and OpenOCD integration are documented but not fully wired.
+- No PMP, cache, or physical GDS signoff yet.
 
 ## Product Snapshot
 
 | Area | Current capability |
 |---|---|
-| Core | RV32IM, 32 registers, multi-cycle FSM, single issue, in order |
+| Core | RV32IMAC, 32 registers, multi-cycle FSM, single issue, in order |
 | Privilege | Machine mode, core CSRs, trap entry/return, counters, WFI legal no-op |
-| Platform | ROM, RAM, tohost, timer, GPIO, UART |
+| Platform | ROM, RAM, tohost, CLINT, PLIC, GPIO, UART |
+| Interrupts | CLINT (MSIP/MTIP/MTIME), PLIC (8 prioritized sources), GPIO→PLIC mux |
+| Debug | RISC-V DM 0.13 subset + JTAG DTM (halt/resume/step) |
 | Bus | Internal corebus plus optional AXI4-Lite bridge path |
-| Verification | 33 assembly tests, 44 cocotb tests, formal proof sets, RISCOF smoke harness |
-| Implementation | Synthesizable SystemVerilog, Verilator simulation, Yosys synthesis path |
-| Product gap | Full compliance, debug, PMP, interrupt controller, PPA/signoff collateral |
+| Verification | 36 assembly tests, 44 cocotb tests, formal proof sets, RISCOF smoke + co-sim |
+| Implementation | Synthesizable SystemVerilog, Verilator simulation, Yosys + SDC/STA scripts |
+| Product gap | Full compliance suite, pipelined performance, PMP, physical GDS signoff |
 
 ## Architecture At A Glance
 

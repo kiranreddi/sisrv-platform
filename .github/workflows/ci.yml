@@ -33,7 +33,7 @@ jobs:
         run: make lint
 
   regress:
-    name: Assembly Regression (33 tests)
+    name: Assembly Regression (36 tests)
     runs-on: ubuntu-latest
     needs: lint
     steps:
@@ -127,10 +127,9 @@ jobs:
         run: make synth
 
   riscof-smoke:
-    name: RISCOF Smoke (optional)
+    name: RISCOF Compliance
     runs-on: ubuntu-latest
     needs: lint
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 
@@ -166,6 +165,9 @@ jobs:
           python3 -m venv .venv-riscof
           . .venv-riscof/bin/activate
           pip install -r verification/riscof/requirements.txt
+
+      - name: Run lock-step co-sim smoke
+        run: make cosim-lockstep
 
       - name: Run RISCOF smoke
         run: |

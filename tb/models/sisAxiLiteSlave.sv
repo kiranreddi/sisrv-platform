@@ -54,6 +54,9 @@ module sisAxiLiteSlave #(
     output logic        fail,
     output logic [31:0] last_code,
     output logic        mtip,
+    output logic        msip,
+    output logic        meip,
+    input  logic [7:0]  plic_irq,
     input  logic [31:0] gpio_in,
     output logic [31:0] gpio_out,
     output logic [31:0] gpio_oe,
@@ -83,6 +86,8 @@ module sisAxiLiteSlave #(
   endfunction
 `endif
 
+  logic        msip_reg;
+  logic        meip_reg;
   logic [63:0] mtime;
   logic [63:0] mtimecmp;
   logic [63:0] mtime_next;
@@ -148,8 +153,16 @@ module sisAxiLiteSlave #(
     return (addr[31:16] == 16'h1000);
   endfunction
 
+  function automatic logic is_clint(input [31:0] addr);
+    return (addr[31:16] == 16'h0200);
+  endfunction
+
+  function automatic logic is_plic(input [31:0] addr);
+    return (addr[31:16] == 16'h0C00);
+  endfunction
+
   function automatic logic is_timer(input [31:0] addr);
-    return (addr[31:4] == 28'h1000200);
+    return is_clint(addr);
   endfunction
 
   function automatic logic is_gpio(input [31:0] addr);
@@ -197,13 +210,14 @@ module sisAxiLiteSlave #(
       return rom[addr[ROM_AW+1:2]];
     else if (is_ram(addr))
       return ram[addr[RAM_AW+1:2]];
-    else if (is_timer(addr)) begin
-      case (addr[3:0])
-        4'h0: return mtime[31:0];
-        4'h4: return mtime[63:32];
-        4'h8: return mtimecmp[31:0];
-        4'hC: return mtimecmp[63:32];
-        default: return 32'h0;
+    else if (is_clint(addr)) begin
+      unique case (addr[15:0])
+        16'h0000: mem_read = {31'b0, msip_reg};
+        16'h4000: mem_read = mtimecmp[31:0];
+        16'h4004: mem_read = mtimecmp[63:32];
+        16'hBFF8: mem_read = mtime[31:0];
+        16'hBFFC: mem_read = mtime[63:32];
+        default:  mem_read = 32'h0;
       endcase
     end
     else if (is_gpio(addr)) begin
@@ -247,7 +261,7 @@ module sisAxiLiteSlave #(
               rd_stall_cnt <= lfsr_r[3:0] & 4'hF;
             end else begin
               rd_data_reg <= mem_read(araddr);
-              rd_resp_reg <= (is_rom(araddr) || is_ram(araddr) || is_timer(araddr) || is_gpio(araddr) || is_uart(araddr) || is_mmio(araddr)) ? 2'b00 : 2'b11;
+              rd_resp_reg <= (is_rom(araddr) || is_ram(araddr) || is_clint(araddr) || is_gpio(araddr) || is_uart(araddr) || is_mmio(araddr)) ? 2'b00 : 2'b11;
               rd_state    <= RD_RESP;
             end
           end
@@ -256,7 +270,7 @@ module sisAxiLiteSlave #(
         RD_WAIT: begin
           if (rd_stall_cnt == 0) begin
             rd_data_reg <= mem_read(rd_addr_reg);
-            rd_resp_reg <= (is_rom(rd_addr_reg) || is_ram(rd_addr_reg) || is_timer(rd_addr_reg) || is_gpio(rd_addr_reg) || is_uart(rd_addr_reg) || is_mmio(rd_addr_reg)) ? 2'b00 : 2'b11;
+            rd_resp_reg <= (is_rom(rd_addr_reg) || is_ram(rd_addr_reg) || is_clint(rd_addr_reg) || is_gpio(rd_addr_reg) || is_uart(rd_addr_reg) || is_mmio(rd_addr_reg)) ? 2'b00 : 2'b11;
             rd_state    <= RD_RESP;
           end else begin
             rd_stall_cnt <= rd_stall_cnt - 1;
@@ -300,10 +314,10 @@ module sisAxiLiteSlave #(
 
   always_comb begin
     mtime_next = mtime + 64'd1;
-    if (wr_state == WR_EXEC && is_timer(wr_addr_reg)) begin
-      unique case (wr_addr_reg[3:0])
-        4'h0: mtime_next[31:0]  = apply_wstrb(mtime_next[31:0], wr_data_reg, wr_strb_reg);
-        4'h4: mtime_next[63:32] = apply_wstrb(mtime_next[63:32], wr_data_reg, wr_strb_reg);
+    if (wr_state == WR_EXEC && is_clint(wr_addr_reg)) begin
+      unique case (wr_addr_reg[15:0])
+        16'hBFF8: mtime_next[31:0]  = apply_wstrb(mtime_next[31:0], wr_data_reg, wr_strb_reg);
+        16'hBFFC: mtime_next[63:32] = apply_wstrb(mtime_next[63:32], wr_data_reg, wr_strb_reg);
         default: ;
       endcase
     end
@@ -320,7 +334,8 @@ module sisAxiLiteSlave #(
       pass         <= 1'b0;
       fail         <= 1'b0;
       last_code    <= 32'h0;
-      mtime        <= 64'h0;
+      msip_reg     <= 1'b0;
+      meip_reg     <= 1'b0;
       mtimecmp     <= 64'hFFFF_FFFF_FFFF_FFFF;
       gpio_out     <= 32'h0;
       gpio_oe      <= 32'h0;
@@ -385,10 +400,11 @@ module sisAxiLiteSlave #(
             if (wr_data_reg == 32'h0000_0001) pass <= 1'b1;
             if (wr_data_reg == 32'h0000_0000) fail <= 1'b1;
           end
-          if (is_timer(wr_addr_reg)) begin
-            case (wr_addr_reg[3:0])
-              4'h8: mtimecmp[31:0]  <= apply_wstrb(mtimecmp[31:0], wr_data_reg, wr_strb_reg);
-              4'hC: mtimecmp[63:32] <= apply_wstrb(mtimecmp[63:32], wr_data_reg, wr_strb_reg);
+          if (is_clint(wr_addr_reg)) begin
+            unique case (wr_addr_reg[15:0])
+              16'h0000: if (wr_strb_reg[0]) msip_reg <= |wr_data_reg[0];
+              16'h4000: mtimecmp[31:0]  <= apply_wstrb(mtimecmp[31:0], wr_data_reg, wr_strb_reg);
+              16'h4004: mtimecmp[63:32] <= apply_wstrb(mtimecmp[63:32], wr_data_reg, wr_strb_reg);
               default: ;
             endcase
           end
@@ -419,7 +435,7 @@ module sisAxiLiteSlave #(
               default: ;
             endcase
           end
-          wr_resp_reg <= (is_rom(wr_addr_reg) || is_ram(wr_addr_reg) || is_timer(wr_addr_reg) || is_gpio(wr_addr_reg) || is_uart(wr_addr_reg) || is_mmio(wr_addr_reg)) ? 2'b00 : 2'b11;
+          wr_resp_reg <= (is_rom(wr_addr_reg) || is_ram(wr_addr_reg) || is_clint(wr_addr_reg) || is_gpio(wr_addr_reg) || is_uart(wr_addr_reg) || is_mmio(wr_addr_reg)) ? 2'b00 : 2'b11;
           if (should_stall(lfsr_b)) begin
             wr_state     <= WR_WAIT;
             wr_stall_cnt <= lfsr_b[3:0] & 4'h7;
@@ -450,6 +466,8 @@ module sisAxiLiteSlave #(
   assign wready  = (wr_state == WR_IDLE || wr_state == WR_GOT_AW) && !should_stall(lfsr_w);
   assign bvalid  = (wr_state == WR_RESP);
   assign bresp   = wr_resp_reg;
-  assign mtip    = (mtime >= mtimecmp);
+  assign mtip = (mtime >= mtimecmp);
+  assign msip = msip_reg;
+  assign meip = |plic_irq;
 
 endmodule

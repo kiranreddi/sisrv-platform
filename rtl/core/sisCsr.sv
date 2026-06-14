@@ -10,7 +10,9 @@
 //   - mtvec: Direct mode only (MODE=0, no vectored mode)
 //   - Trap priority: external interrupts checked between instructions
 
-module sisCsr (
+module sisCsr #(
+    parameter bit ENABLE_C = 1'b1
+)(
     input  logic        clk,
     input  logic        rst_n,
 
@@ -30,12 +32,15 @@ module sisCsr (
     input  logic        mret_exec,    // MRET instruction executed
     input  logic        instr_retire, // one instruction retired this cycle
 
-    // External interrupt input
-    input  logic        ext_mtip,     // Machine timer interrupt pending (from timer)
+    // External interrupt inputs (CLINT + PLIC)
+    input  logic        ext_msip,     // Machine software interrupt pending
+    input  logic        ext_mtip,     // Machine timer interrupt pending
+    input  logic        ext_meip,     // Machine external interrupt pending (PLIC)
 
     output logic [31:0] mtvec_out,    // trap vector address
     output logic [31:0] mepc_out,     // return address for MRET
-    output logic        irq_pending   // interrupt pending and enabled
+    output logic        irq_pending,  // interrupt pending and enabled
+    output logic [31:0] irq_cause     // mcause value for highest-priority IRQ
 );
 
   // CSR addresses
@@ -72,14 +77,15 @@ module sisCsr (
   logic [63:0] mcycle;
   logic [63:0] minstret;
 
-  localparam logic [31:0] MISA_VALUE = 32'h4000_1100; // MXL=1, RV32 I + M
+  localparam logic [31:0] MISA_BASE  = 32'h4000_1100;
+  localparam logic [31:0] MISA_VALUE = ENABLE_C ? (MISA_BASE | 32'h0000_0004) : MISA_BASE;
 
   // mstatus bits
   // bit 3: MIE (machine interrupt enable)
   // bit 7: MPIE (previous MIE)
 
-  // Reflect external MTIP into mip (bit 7) — read-only from external source
-  wire [31:0] mip_effective = {mip[31:8], ext_mtip, mip[6:0]};
+  // Reflect external IRQ lines into mip (MSIP=3, MTIP=7, MEIP=11)
+  wire [31:0] mip_effective = {mip[31:12], ext_meip, mip[10:8], ext_mtip, mip[6:4], ext_msip, mip[2:0]};
 
   // CSR read
   always_comb begin
@@ -173,7 +179,22 @@ module sisCsr (
   assign mtvec_out = mtvec;
   assign mepc_out  = mepc;
 
-  // Interrupt pending: mstatus.MIE && (mie & mip) has any enabled+pending bits
-  assign irq_pending = mstatus[3] && ((mie & mip_effective) != 32'h0);
+  // Interrupt pending: mstatus.MIE && any enabled+pending IRQ bit
+  wire meip_on = mstatus[3] && mie[11] && ext_meip;
+  wire mtip_on = mstatus[3] && mie[7]  && ext_mtip;
+  wire msip_on = mstatus[3] && mie[3]  && ext_msip;
+
+  assign irq_pending = meip_on | mtip_on | msip_on;
+
+  // Priority: MEIP > MTIP > MSIP (standard platform convention)
+  always_comb begin
+    irq_cause = 32'h0;
+    if (meip_on)
+      irq_cause = {1'b1, 31'd11};
+    else if (mtip_on)
+      irq_cause = {1'b1, 31'd7};
+    else if (msip_on)
+      irq_cause = {1'b1, 31'd3};
+  end
 
 endmodule

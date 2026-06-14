@@ -31,11 +31,11 @@ irq_handler:                   # 0x04: interrupt handler
     # Mark that ISR ran (x24 = 1)
     li    x24, 1
 
-    # Acknowledge timer: push MTIMECMP far to clear MTIP
-    li    x26, 0x10002000      # Timer base
+    # Acknowledge timer: push MTIMECMP far to clear MTIP (CLINT layout)
+    li    x26, 0x02004000      # MTIMECMP_LO
     li    x27, 0x7FFFFFFF
-    sw    x27, 8(x26)          # MTIMECMP_LO = max
-    sw    x27, 12(x26)         # MTIMECMP_HI = max
+    sw    x27, 0(x26)
+    sw    x27, 4(x26)
 
     mret
 
@@ -52,13 +52,6 @@ setup:
     li    x24, 0               # ISR-ran flag
     li    x25, 0               # saved mepc
 
-    # Set MTIMECMP to fire soon (small offset from current MTIME)
-    li    x8, 0x10002000       # Timer base
-    lw    x9, 0(x8)            # Read MTIME_LO
-    addi  x9, x9, 30          # Fire 30 cycles from now
-    sw    x9, 8(x8)            # MTIMECMP_LO
-    sw    x0, 12(x8)           # MTIMECMP_HI = 0
-
     # Enable timer interrupt: mie.MTIE (bit 7)
     li    x1, 0x80
     csrw  mie, x1
@@ -70,14 +63,20 @@ setup:
 
     # -------------------------------------------------------------------
     # Instruction sequence: write recognizable pattern with known PCs
-    # The interrupt will fire somewhere in this sequence.
-    # After MRET, we verify that no instruction was skipped or repeated.
+    # Arm timer just before markers so IRQ lands inside the sequence.
     # -------------------------------------------------------------------
-    nop                        # burn cycles to let timer fire
     nop
     nop
     nop
     nop
+    nop
+
+    li    x8, 0x0200BFF8
+    lw    x9, 0(x8)
+    addi  x9, x9, 40
+    li    x8, 0x02004000
+    sw    x9, 0(x8)
+    sw    x0, 4(x8)
 
 marker_a:
     li    x10, 0xAA            # marker A

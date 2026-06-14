@@ -192,7 +192,11 @@ int main(int argc, char** argv) {
 
   top->clk     = 0;
   top->rst_n   = 0;
-  top->gpio_in = 0;
+  top->gpio_in  = 0;
+  top->plic_irq = 0;
+  top->jtag_tck = 0;
+  top->jtag_tms = 0;
+  top->jtag_tdi = 0;
 
   int exit_code = 0;
   uint64_t cycle = 0;

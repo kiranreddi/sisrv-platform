@@ -4,13 +4,22 @@
 
 module sisRvCore #(
     parameter logic [31:0] RESET_VECTOR = 32'h0000_0000,
-    parameter bit          ENABLE_M     = 1'b1
+    parameter bit          ENABLE_M     = 1'b1,
+    parameter bit          ENABLE_C     = 1'b1
 )(
     input  logic        clk,
     input  logic        rst_n,
 
-    // External interrupt
-    input  logic        ext_mtip,     // Machine timer interrupt pending
+    // Debug halt interface
+    input  logic        dbg_halt_req,
+    input  logic        dbg_resume_req,
+    input  logic        dbg_single_step,
+    output logic        dbg_halted,
+
+    // External interrupts (CLINT + PLIC)
+    input  logic        ext_msip,
+    input  logic        ext_mtip,
+    input  logic        ext_meip,
 
     // corebus request
     output logic        req_valid,
@@ -52,7 +61,11 @@ module sisRvCore #(
   // PC and instruction register
   // ---------------------------------------------------------------
   logic [31:0] pc, pc_next;
+  logic [31:0] fetch_word;
+  logic [31:0] instr_raw;
   logic [31:0] instr_reg;
+  logic [1:0]  instr_len; // 2=16-bit, 0=32-bit (encoded as 2 or 0 for PC add)
+  logic        instr_is_compressed;
 
   // ---------------------------------------------------------------
   // Decoder wires
@@ -68,10 +81,26 @@ module sisRvCore #(
   logic        dec_is_system, dec_is_fence;
   logic        dec_is_legal;
 
+  logic [31:0] decomp_instr;
+  logic        decomp_illegal;
+  logic [31:0] decoded_instr;
+
+  logic        decomp_is_c;
+
+  sisDecompress u_decompress (
+    .c_instr         (instr_raw[15:0]),
+    .instr_o         (decomp_instr),
+    .is_compressed_o (decomp_is_c),
+    .illegal_o       (decomp_illegal)
+  );
+
+  assign decoded_instr = instr_is_compressed ? decomp_instr : instr_raw;
+
   sisDecode #(
-    .ENABLE_M (ENABLE_M)
+    .ENABLE_M (ENABLE_M),
+    .ENABLE_C (ENABLE_C)
   ) u_decode (
-    .instr     (instr_reg),
+    .instr     (decoded_instr),
     .rs1       (dec_rs1),
     .rs2       (dec_rs2),
     .rd        (dec_rd),
@@ -217,8 +246,12 @@ module sisRvCore #(
   logic [31:0] mtvec_out;
   logic [31:0] mepc_out;
   logic        irq_pending;
+  logic [31:0] irq_cause;
+  logic        halted;
 
-  sisCsr u_csr (
+  sisCsr #(
+    .ENABLE_C (ENABLE_C)
+  ) u_csr (
     .clk        (clk),
     .rst_n      (rst_n),
     .csr_addr   (csr_addr_w),
@@ -232,11 +265,16 @@ module sisRvCore #(
     .trap_epc   (trap_epc),
     .mret_exec  (mret_exec),
     .instr_retire(instr_retire),
+    .ext_msip   (ext_msip),
     .ext_mtip   (ext_mtip),
+    .ext_meip   (ext_meip),
     .mtvec_out  (mtvec_out),
     .mepc_out   (mepc_out),
-    .irq_pending(irq_pending)
+    .irq_pending(irq_pending),
+    .irq_cause  (irq_cause)
   );
+
+  assign dbg_halted = halted;
 
   // ---------------------------------------------------------------
   // Execution results (latched in EXECUTE)
@@ -316,9 +354,12 @@ module sisRvCore #(
     end
   end
 
-  assign instr_addr_misaligned = dec_is_legal &&
+  wire dec_is_legal_eff = ENABLE_C ? (dec_is_legal && !(instr_is_compressed && decomp_illegal)) :
+                                     (dec_is_legal && !instr_is_compressed);
+  assign instr_addr_misaligned = dec_is_legal_eff &&
                                  (dec_is_jal || dec_is_jalr || (dec_is_branch && branch_taken)) &&
-                                 (next_pc_target[1:0] != 2'b00);
+                                 (instr_is_compressed ? (next_pc_target[0] != 1'b0) :
+                                                        (next_pc_target[1:0] != 2'b00));
 
   function automatic logic is_mem_misaligned(
       input logic [31:0] addr,
@@ -356,9 +397,9 @@ module sisRvCore #(
   // SYSTEM instruction decode helpers
   // ---------------------------------------------------------------
   logic is_ecall, is_ebreak, is_mret, is_csr_op;
-  assign is_ecall  = dec_is_system && (dec_funct3 == 3'b000) && (instr_reg[31:20] == 12'h000);
-  assign is_ebreak = dec_is_system && (dec_funct3 == 3'b000) && (instr_reg[31:20] == 12'h001);
-  assign is_mret   = dec_is_system && (dec_funct3 == 3'b000) && (instr_reg[31:20] == 12'h302);
+  assign is_ecall  = dec_is_system && (dec_funct3 == 3'b000) && (decoded_instr[31:20] == 12'h000);
+  assign is_ebreak = dec_is_system && (dec_funct3 == 3'b000) && (decoded_instr[31:20] == 12'h001);
+  assign is_mret   = dec_is_system && (dec_funct3 == 3'b000) && (decoded_instr[31:20] == 12'h302);
   assign is_csr_op = dec_is_system && (dec_funct3 != 3'b000);
 
   // CSR operation type from funct3
@@ -474,7 +515,11 @@ module sisRvCore #(
     if (!rst_n) begin
       state <= S_FETCH_REQ;
       pc    <= RESET_VECTOR;
-      instr_reg     <= 32'h0000_0013; // NOP (addi x0, x0, 0)
+      instr_reg            <= 32'h0000_0013;
+      instr_raw            <= 32'h0000_0013;
+      instr_is_compressed  <= 1'b0;
+      instr_len            <= 2'd0;
+      halted               <= 1'b0;
       rs1_val       <= 32'h0;
       rs2_val       <= 32'h0;
       alu_result_reg <= 32'h0;
@@ -483,11 +528,17 @@ module sisRvCore #(
       fetch_err_reg <= 1'b0;
       mem_err_reg   <= 1'b0;
       mem_misaligned_reg <= 1'b0;
+    end else if (dbg_halt_req) begin
+      halted <= 1'b1;
+    end else if (dbg_resume_req) begin
+      halted <= 1'b0;
+    end else if (dbg_single_step && state == S_WB && !halted) begin
+      halted <= 1'b1;
     end else begin
       case (state)
         // ----- FETCH REQUEST -----
         S_FETCH_REQ: begin
-          if (req_ready) begin
+          if (!halted && req_ready) begin
             fetch_err_reg <= 1'b0;
             mem_err_reg   <= 1'b0;
             mem_misaligned_reg <= 1'b0;
@@ -498,14 +549,30 @@ module sisRvCore #(
         // ----- FETCH WAIT (wait for response) -----
         S_FETCH_WAIT: begin
           if (rsp_valid) begin
-            instr_reg <= rsp_rdata;
+            fetch_word <= rsp_rdata;
+            if (pc[1] == 1'b0) begin
+              if (ENABLE_C && (rsp_rdata[1:0] != 2'b11)) begin
+                instr_raw           <= {16'h0, rsp_rdata[15:0]};
+                instr_is_compressed <= 1'b1;
+                instr_len           <= 2'd2;
+              end else begin
+                instr_raw           <= rsp_rdata;
+                instr_is_compressed <= 1'b0;
+                instr_len           <= 2'd0;
+              end
+            end else begin
+              instr_raw           <= {16'h0, rsp_rdata[31:16]};
+              instr_is_compressed <= 1'b1;
+              instr_len           <= 2'd2;
+            end
             fetch_err_reg <= rsp_err;
-            state     <= S_DECODE;
+            state         <= S_DECODE;
           end
         end
 
         // ----- DECODE -----
         S_DECODE: begin
+          instr_reg <= decoded_instr;
           rs1_val <= rf_rs1_data;
           rs2_val <= rf_rs2_data;
           state   <= S_EXECUTE;
@@ -543,7 +610,7 @@ module sisRvCore #(
         // ----- WRITEBACK + PC UPDATE -----
         S_WB: begin
           // PC update (illegal instructions trap before any control-flow effect)
-          if (fetch_err_reg || mem_err_reg || mem_misaligned_reg || instr_addr_misaligned || !dec_is_legal) begin
+          if (fetch_err_reg || mem_err_reg || mem_misaligned_reg || instr_addr_misaligned || !dec_is_legal_eff) begin
             pc <= mtvec_out;
           end else if (dec_is_jal) begin
             pc <= jal_target;
@@ -559,7 +626,7 @@ module sisRvCore #(
             // Timer interrupt: take between instructions
             pc <= mtvec_out;
           end else begin
-            pc <= pc + 32'd4;
+            pc <= pc + (instr_len == 2'd2 ? 32'd2 : 32'd4);
           end
 
           state <= S_FETCH_REQ;
@@ -617,23 +684,23 @@ module sisRvCore #(
 
     if (state == S_WB) begin
       if (!fetch_err_reg && !mem_err_reg && !mem_misaligned_reg && !instr_addr_misaligned &&
-          dec_is_legal && (dec_is_alu_reg || dec_is_alu_imm)) begin
+          dec_is_legal_eff && (dec_is_alu_reg || dec_is_alu_imm)) begin
         rf_wr_en  = 1'b1;
         rf_rd_data = alu_result_reg;
       end else if (!fetch_err_reg && !mem_err_reg && !mem_misaligned_reg && !instr_addr_misaligned &&
-                   dec_is_legal && (dec_is_lui || dec_is_auipc)) begin
+                   dec_is_legal_eff && (dec_is_lui || dec_is_auipc)) begin
         rf_wr_en  = 1'b1;
         rf_rd_data = alu_result_reg;
       end else if (!fetch_err_reg && !mem_err_reg && !mem_misaligned_reg && !instr_addr_misaligned &&
-                   dec_is_legal && (dec_is_jal || dec_is_jalr)) begin
+                   dec_is_legal_eff && (dec_is_jal || dec_is_jalr)) begin
         rf_wr_en  = 1'b1;
         rf_rd_data = alu_result_reg; // pc+4 (return address)
       end else if (!fetch_err_reg && !mem_err_reg && !mem_misaligned_reg && !instr_addr_misaligned &&
-                   dec_is_legal && dec_is_load) begin
+                   dec_is_legal_eff && dec_is_load) begin
         rf_wr_en  = 1'b1;
         rf_rd_data = load_result;
       end else if (!fetch_err_reg && !mem_err_reg && !mem_misaligned_reg && !instr_addr_misaligned &&
-                   dec_is_legal && is_csr_op) begin
+                   dec_is_legal_eff && is_csr_op) begin
         rf_wr_en  = 1'b1;
         rf_rd_data = csr_rdata_w;
       end
@@ -645,7 +712,7 @@ module sisRvCore #(
   // CSR control logic
   // ---------------------------------------------------------------
   always_comb begin
-    csr_addr_w  = instr_reg[31:20]; // CSR address from instruction
+    csr_addr_w  = decoded_instr[31:20];
     csr_wdata_w = csr_src_val;
     csr_op_w    = csr_op_type;
     csr_wen_w   = 1'b0;
@@ -657,7 +724,7 @@ module sisRvCore #(
     instr_retire = 1'b0;
 
     if (state == S_WB) begin
-      instr_retire = !(fetch_err_reg || mem_err_reg || mem_misaligned_reg || instr_addr_misaligned || !dec_is_legal ||
+      instr_retire = !(fetch_err_reg || mem_err_reg || mem_misaligned_reg || instr_addr_misaligned || !dec_is_legal_eff ||
                        is_ecall || is_ebreak || irq_pending);
 
       if (fetch_err_reg) begin
@@ -684,13 +751,13 @@ module sisRvCore #(
         trap_val   = next_pc_target;
         trap_epc   = pc;
         instr_retire = 1'b0;
-      end else if (!dec_is_legal) begin
+      end else if (!dec_is_legal_eff) begin
         trap_enter = 1'b1;
-        trap_cause = 32'd2; // Illegal instruction
-        trap_val   = instr_reg;
+        trap_cause = 32'd2;
+        trap_val   = instr_is_compressed ? {16'h0, instr_raw[15:0]} : instr_raw;
         trap_epc   = pc;
         instr_retire = 1'b0;
-      end else if (dec_is_legal && is_csr_op) begin
+      end else if (dec_is_legal_eff && is_csr_op) begin
         csr_wen_w = 1'b1;
       end else if (is_ecall) begin
         trap_enter = 1'b1;
@@ -706,8 +773,8 @@ module sisRvCore #(
         mret_exec = 1'b1;
       end else if (irq_pending) begin
         trap_enter = 1'b1;
-        trap_cause = {1'b1, 31'd7}; // Machine timer interrupt (bit 31 = interrupt flag)
-        trap_epc   = pc + 32'd4;    // Return to next instruction
+        trap_cause = irq_cause;
+        trap_epc   = pc + (instr_len == 2'd2 ? 32'd2 : 32'd4);
         instr_retire = 1'b0;
       end
     end

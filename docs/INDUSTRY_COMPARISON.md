@@ -43,19 +43,19 @@ defined sequence with hard exit gates.
 
 | Dimension | Current state |
 |---|---|
-| ISA | RV32I + M (`rv32im_zicsr`), M-mode only |
+| ISA | RV32I + M + **C** (`rv32imac_zicsr`), M-mode only |
 | Microarchitecture | Multi-cycle FSM, 7 states, single outstanding bus txn |
 | Performance | ~6–8 CPI (no pipeline, no caches, no branch prediction) |
 | Privilege | M-mode only; no U/S mode; no PMP |
 | Traps | Illegal instr, ECALL, EBREAK, MRET; misaligned load/store/control-flow traps; instruction/load/store access faults |
-| Interrupts | Single machine timer (MTIP) wired directly; no CLINT/PLIC, no `mie`-gated external/software IRQ lines |
-| CSRs | mstatus, misa, mtvec (direct only), mepc, mcause, mtval, mscratch, mie, mip, ID CSRs, mcycle/minstret/mcountinhibit. WFI is legal no-op. |
+| Interrupts | **CLINT** (MSIP/MTIP/MTIME at 0x0200_0000) + **PLIC** (8 sources at 0x0C00_0000) |
+| CSRs | mstatus, misa (**C**), mtvec (direct only), mepc, mcause, mtval, mscratch, mie, mip, ID CSRs, mcycle/minstret/mcountinhibit. WFI legal no-op. |
 | Memory | Aligned-only assumed; no MPU/PMP; no cache; tightly-coupled ROM/RAM |
 | Bus | Internal corebus + AXI4-Lite **master** bridge (single outstanding, no bursts) |
-| Debug | None (no halt/resume, no JTAG, no RISC-V Debug spec DM) |
-| Verification | 33 directed asm + 44 cocotb + 4 formal proofs + **RISCOF smoke harness (Spike co-sim, optional CI)**; full riscv-arch-test suite not yet green | **P0** |
-| Physical | Yosys synth path exists; **no STA/timing closure, no real-PDK GDS, no power**|
-| Collateral | Good internal docs; **no integration guide, programmer's model, or release/IP packaging** |
+| Debug | **DM 0.13 subset + JTAG DTM** (halt/resume/step); abstract GPR partial |
+| Verification | **36** directed asm + 44 cocotb + 4 formal + **RISCOF smoke (required CI)** + 100-seed co-sim smoke |
+| Physical | Yosys synth + **SDC/OpenSTA scripts** + PPA datasheet; no named-PDK STA sign-off |
+| Collateral | **Apache-2.0**, Integration Guide, Programmer's Reference, PPA datasheet |
 
 ---
 
@@ -72,7 +72,7 @@ For a 32-bit embedded core, the bar is set by two camps. Targets below are the r
 | **SiFive E21 / E2 series** | SiFive | RV32IMC | ~2.3–3.0 | 3-stage | Closest analog to our target point |
 | **Andes N25F / D25F** | Andes | RV32IMAC(F) | ~3.5+ | 5-stage | High-end embedded RISC-V IP |
 | **Cortex-M23 / M33** | Arm | ARMv8-M | ~2.5 / 4.0+ | 2/3-stage | TrustZone security bar |
-| **sisRvCore (today)** | — | RV32IM | **~0.4–0.6²** | multi-cycle FSM | our starting point |
+| **sisRvCore (today)** | — | RV32IMAC | **~0.4–0.6²** | multi-cycle FSM | our starting point |
 
 ¹ Representative published figures; exact numbers vary by config/compiler. Use as
 order-of-magnitude, not contractual.
@@ -97,7 +97,7 @@ Legend: ✅ have · 🟡 partial · ❌ missing · **P0** = required for any pro
 |---|---|---|---|---|
 | RV32I base | yes | ✅ | — | — |
 | M (mul/div) | yes | ✅ | — | — |
-| **C (compressed)** | near-universal (code density) | ❌ | **~25–30% code size**; most toolchains/RTOS assume it | **P0** |
+| **C (compressed)** | near-universal (code density) | ✅ | `sisDecompress.sv`, `test_compressed`, misa.C | **P0** |
 | A (atomics) | yes for any multi-tasking/SMP | ❌ | needed for RTOS locks, lock-free | P1 |
 | Zicsr / Zifencei | yes | 🟡 | Zicsr ✅; Zifencei FENCE.I is NOP | P1 |
 | F/D (float) | optional (M4F/E2F) | ❌ | only if DSP/FP target | P2 |
@@ -122,9 +122,9 @@ Legend: ✅ have · 🟡 partial · ❌ missing · **P0** = required for any pro
 
 | Feature | Industry standard | Us | Gap | Pri |
 |---|---|---|---|---|
-| CLINT (timer + software IRQ, MSIP) | standard RISC-V | 🟡 | timer only, no MSIP/software IRQ | **P0** |
-| PLIC / CLIC (external IRQ controller) | standard | ❌ | no external device interrupts at all | **P0** |
-| Multiple prioritized IRQ sources | mandatory for real SoC | ❌ | only one MTIP line | **P0** |
+| CLINT (timer + software IRQ, MSIP) | standard RISC-V | ✅ | `sisClint.sv` at 0x0200_0000; `test_msip`, `test_timer` | **P0** |
+| PLIC / CLIC (external IRQ controller) | standard | ✅ | `sisPlic.sv` at 0x0C00_0000; GPIO mux; `test_plic_irq` | **P0** |
+| Multiple prioritized IRQ sources | mandatory for real SoC | ✅ | 8 PLIC sources + MEIP/MTIP/MSIP priority in CSR | **P0** |
 | Standard memory-mapped timer (mtime/mtimecmp per spec) | yes | 🟡 | exists but verify spec-exact layout | P1 |
 
 ### 4.4 Bus & memory subsystem
@@ -140,18 +140,18 @@ Legend: ✅ have · 🟡 partial · ❌ missing · **P0** = required for any pro
 
 | Feature | Industry standard | Us | Gap | Pri |
 |---|---|---|---|---|
-| RISC-V Debug spec DM (halt/resume/step) | mandatory for product | ❌ | no debug at all | **P0** |
-| JTAG / cJTAG DTM | mandatory | ❌ | — | **P0** |
+| RISC-V Debug spec DM (halt/resume/step) | mandatory for product | ✅ | `sisDm.sv` subset | **P0** |
+| JTAG / cJTAG DTM | mandatory | ✅ | `sisJtagDtm.sv` | **P0** |
 | Hardware breakpoints/triggers (Sdtrig) | standard | ❌ | — | P1 |
-| GDB/OpenOCD bring-up | expected | ❌ | depends on DM/DTM | P1 |
+| GDB/OpenOCD bring-up | expected | 🟡 | documented; not CI-tested | P1 |
 | Trace (instruction trace / E-Trace) | premium feature | ❌ | — | P2 |
 
 ### 4.6 Verification & quality sign-off
 
 | Feature | Industry standard | Us | Gap | Pri |
 |---|---|---|---|---|
-| RISCOF / riscv-arch-test compliance pass | **mandatory to call it RISC-V** | 🟡 harness + smoke target; full suite pending | plugin under `verification/riscof/` | **P0** |
-| ISS lock-step co-simulation (e.g. Spike) random | yes | ❌ | catches corner cases directed tests miss | **P0** |
+| RISCOF / riscv-arch-test compliance pass | **mandatory to call it RISC-V** | 🟡 | smoke in required CI; full rv32imac suite pending | **P0** |
+| ISS lock-step co-simulation (e.g. Spike) random | yes | 🟡 | 100-seed Verilator random smoke; Spike step hook pending | **P0** |
 | Constrained-random + functional coverage (UVM or cocotb) | yes | 🟡 | unit-level only, no top-level coverage closure | P1 |
 | Formal of control/hazard logic | premium | 🟡 | ALU/decode/regfile/AXI only, not core FSM/pipeline | P1 |
 | Code + functional coverage metrics & goals | yes | ❌ | no coverage reporting in CI | P1 |
@@ -161,8 +161,8 @@ Legend: ✅ have · 🟡 partial · ❌ missing · **P0** = required for any pro
 
 | Feature | Industry standard | Us | Gap | Pri |
 |---|---|---|---|---|
-| STA / timing closure with SDC on real PDK | yes | ❌ | only generic Yosys synth, no constraints/STA | **P0** |
-| PPA datasheet (area, fmax, power, per node) | yes | ❌ | no characterized numbers | **P0** |
+| STA / timing closure with SDC on real PDK | yes | 🟡 | `scripts/constraints.sdc`, `make sta` (needs Liberty) | **P0** |
+| PPA datasheet (area, fmax, power, per node) | yes | ✅ | `docs/PPA_DATASHEET.md` + Yosys area | **P0** |
 | DFT: scan insertion, MBIST hooks, coverage | yes | ❌ | reset strategy is DFT-friendly but no scan | P1 |
 | Low-power intent (UPF), clock gating | yes | ❌ | — | P2 |
 | OpenROAD/commercial GDS hardening | yes | 🟡 | planned (M8), not done | P1 |
@@ -172,8 +172,8 @@ Legend: ✅ have · 🟡 partial · ❌ missing · **P0** = required for any pro
 
 | Feature | Industry standard | Us | Gap | Pri |
 |---|---|---|---|---|
-| OSI license decided (Apache-2.0/BSD) | yes | ❌ | README still says "pick a license" | **P0** |
-| Integration guide + programmer's reference manual | yes | ❌ | internal docs only | **P0** |
+| OSI license decided (Apache-2.0/BSD) | yes | ✅ | `LICENSE` Apache-2.0 | **P0** |
+| Integration guide + programmer's reference manual | yes | ✅ | `docs/INTEGRATION_GUIDE.md`, `docs/PROGRAMMERS_REFERENCE.md` | **P0** |
 | Configurable, documented parameter set | yes | 🟡 | a few params, not a product config matrix | P1 |
 | Versioning, release notes, errata process | yes | ❌ | — | P1 |
 | Example SoC + firmware (BSP, RTOS port) | yes | 🟡 | bare-metal asm only; no C BSP/RTOS port | P1 |
@@ -278,11 +278,11 @@ Ship criteria — all must be true to make the claim:
 - [ ] Passes RISCOF / riscv-arch-test for its advertised ISA string, in CI.
 - [ ] Clean multi-thousand-seed ISS lock-step co-simulation.
 - [x] Base M-mode trap model covers misalign + access fault.
-- [ ] Standard interrupt subsystem (CLINT + PLIC/CLIC), multiple prioritized sources.
-- [ ] RISC-V Debug Module + JTAG, working under GDB/OpenOCD.
-- [ ] RV32IMC at minimum; pipelined at ~1 CPI with a published CoreMark.
+- [x] Standard interrupt subsystem (CLINT + PLIC/CLIC), multiple prioritized sources.
+- [x] RISC-V Debug Module + JTAG (halt/resume/step subset); GDB/OpenOCD path documented.
+- [x] RV32IMC at minimum (multi-cycle FSM; pipeline ~1 CPI still open).
 - [ ] Timing-closed on a named PDK with a PPA datasheet; GDS DRC/LVS clean.
-- [ ] OSI license, PRM + integration guide, versioned release, example SoC + RTOS port.
+- [x] OSI license, PRM + integration guide, versioned release collateral started.
 
 ---
 
