@@ -115,6 +115,14 @@ def parse_rtl_commits(path: Path) -> list[tuple[int, int]]:
     return commits
 
 
+def _as_str(data) -> str:
+    if data is None:
+        return ""
+    if isinstance(data, bytes):
+        return data.decode("utf-8", errors="replace")
+    return str(data)
+
+
 def run_spike(elf: Path, log_path: Path) -> list[tuple[int, int]]:
     cmd = [
         "spike",
@@ -131,11 +139,11 @@ def run_spike(elf: Path, log_path: Path) -> list[tuple[int, int]]:
             timeout=3,
         )
     except subprocess.TimeoutExpired as exc:
-        log = (exc.stdout or "") + (exc.stderr or "")
+        log = _as_str(exc.stdout) + _as_str(exc.stderr)
         log_path.write_text(log)
         return parse_spike_commits(log)
 
-    log = (proc.stdout or "") + (proc.stderr or "")
+    log = _as_str(proc.stdout) + _as_str(proc.stderr)
     log_path.write_text(log)
     commits = parse_spike_commits(log)
     if not commits and proc.returncode != 0:
@@ -164,7 +172,7 @@ def run_verilator(rom_hex: Path, ram_hex: Path, commit_log: Path) -> list[tuple[
             capture_output=True,
             text=True,
         )
-        out = proc.stdout + proc.stderr
+        out = _as_str(proc.stdout) + _as_str(proc.stderr)
         if "FAIL" in out or "illegal" in out.lower():
             print(out, file=sys.stderr)
             raise RuntimeError("Verilator reported failure")
