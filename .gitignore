@@ -17,9 +17,16 @@ _codeql_detected_source_root
 tb/cocotb/sim_build/
 tb/cocotb/results.xml
 tb/cocotb/__pycache__/
+verification/**/__pycache__/
 
 # Formal verification artifacts
 formal/*/
 
 # Synthesis artifacts
 build/*_synth.v
+
+# RISCOF / architectural test artifacts
+.venv-riscof/
+verification/riscof/riscv-arch-test/
+verification/riscof/work/
+ram.hex

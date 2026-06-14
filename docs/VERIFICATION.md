@@ -137,6 +137,26 @@ make synth
 make lint && make regress && make cocotb && make formal
 ```
 
+### Tier 4: RISCOF Architectural Compliance (optional smoke)
+
+RISCOF compares memory signatures from the Verilator DUT against Spike for tests drawn
+from `riscv-arch-test`. Harness lives under `verification/riscof/`.
+
+**Claimed profile:** `RV32IM_Zicsr_Zifencei`, machine-mode only (`rv32im_zicsr` / `ilp32`).
+
+**Explicitly excluded:** PMP, debug, CLINT/PLIC/interrupts, S/U modes, C/A/F/D/H extensions.
+
+```bash
+# One-test smoke (default: add-01)
+make riscof-smoke
+
+# Broader local runs (not required CI)
+make riscof-rv32i
+make riscof-rv32im
+```
+
+See `verification/riscof/README.md` for toolchain install, signature dump flow, and mismatch triage.
+
 ## CI Pipeline
 
 GitHub Actions workflow (`.github/workflows/ci.yml`) runs on every push/PR:
@@ -145,6 +165,7 @@ GitHub Actions workflow (`.github/workflows/ci.yml`) runs on every push/PR:
 3. **cocotb** — 44 randomized unit tests
 4. **Formal** — ALU + RegFile + Decoder proofs
 5. **Synth** — Yosys synthesis (`make synth`)
+6. **RISCOF smoke** — optional; runs when Spike + `riscv64-unknown-elf-gcc` are available
 
 ## Debug Knobs
 

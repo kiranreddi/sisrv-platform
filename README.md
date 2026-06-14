@@ -166,8 +166,22 @@ Randomized and directed unit tests using Verilator 5.038:
 - **ALU** (3 tests): 1000 directed edge-case checks, 1000 random stimulus, full shift amount sweep
 - **RegFile** (4 tests): x0-always-zero, write/read all registers, write isolation, 500 random read/write cycles
 - **Decoder** (11 tests): Type flag decode for all 11 opcodes, illegal opcode/funct detection, register extraction, I/S/U/B/J immediate sign-extension, funct3/funct7 extraction, 1000 random instructions
-- **CSR** (14 tests): Reset values, CSRRW/CSRRS/CSRRC operations, unknown CSR reads zero, trap entry (mepc/mcause/mtval/mstatus), MRET restore, MEPC word alignment, mtvec/mepc output ports, MTIP/irq_pending, ID CSRs, counters/mcountinhibit
+- **CSR** (15 tests): Reset values, CSRRW/CSRRS/CSRRC operations, unknown CSR reads zero, trap entry (mepc/mcause/mtval/mstatus), MRET restore, MEPC word alignment, mtvec/mepc output ports, MTIP/irq_pending, ID CSRs, counters/mcountinhibit, sync trap causes
 - **AXI-Lite Bridge** (11 tests): Reset state, basic read/write, error responses (DECERR/SLVERR), stalled channels, back-to-back transactions, 100-transaction random stress, write strobe variations, VALID stability
+
+### RISCOF / Architectural Tests (optional)
+
+Reusable Spike co-simulation harness under `verification/riscof/`. Smoke target runs one RV32I
+test (`add-01` by default) and compares memory signatures.
+
+```bash
+make riscof-smoke          # requires Spike + riscv64-unknown-elf-gcc + Python venv
+make riscof-rv32i          # broader local RV32I directory
+make riscof-rv32im         # rv32i_m tree (ISA-filtered)
+```
+
+Excluded until implemented: PMP, debug, interrupts, S/U modes, C/A/F/D. See
+`verification/riscof/README.md`.
 
 ### Formal Verification
 Proofs via Yosys/SymbiYosys:
@@ -211,6 +225,7 @@ The CI pipeline runs on every push/PR to `main`:
 | **cocotb** | 44 randomized/directed unit tests | Verilator 5.038 + cocotb |
 | **Formal** | Required ALU + RegFile + Decoder proofs; optional AXI-Lite bounded safety check | Yosys + SymbiYosys + z3 |
 | **Synth** | Yosys synthesis of core + AXI bridge | Yosys |
+| **RISCOF smoke** | Optional one-test Spike co-sim (skipped if tools missing) | RISCOF + Spike + Verilator |
 
 ## Directory layout
 
@@ -227,6 +242,7 @@ sw/            Bare-metal BSP + assembly tests
   bsp/         crt0.S, link.ld
   tests/asm/   Assembly test programs (33 tests)
 formal/        Formal verification
+verification/  RISCOF architectural-test harness (plugins, scripts, config)
   alu_add.sv       ALU formal proof wrapper (all 10 ops)
   alu_prove.ys     Yosys SAT proof script (ALU)
   regfile_x0.sv    RegFile x0 proof wrapper

@@ -32,7 +32,9 @@ CPP_SRCS := $(wildcard tb/verilator/*.cpp)
 ASM_TESTS := $(wildcard sw/tests/asm/*.S)
 ASM_HEXES := $(patsubst sw/tests/asm/%.S,$(BUILD)/tests/%.hex,$(ASM_TESTS))
 
-.PHONY: sim lint clean wave regress regress-axil regress-axil-stall sw all tests cocotb formal formal-axil synth
+.PHONY: sim lint clean wave regress regress-axil regress-axil-stall sw all tests cocotb formal formal-axil synth \
+        riscof-check-tools riscof-smoke riscof-rv32i riscof-rv32im
+
 
 all: sim
 
@@ -44,6 +46,7 @@ $(SIM): $(RTL_SRCS) $(TB_SRCS) $(CPP_SRCS)
 	  -Irtl -Irtl/core -Irtl/bus -Irtl/periph -Itb/models \
 	  --top-module $(TOP) \
 	  -GROM_INIT_FILE='"rom.hex"' \
+	  -GRAM_INIT_FILE='"ram.hex"' \
 	  -GUSE_AXIL=$(USE_AXIL) \
 	  -GAXIL_STALL_RATE=$(AXIL_STALL_RATE) \
 	  $(RTL_SRCS) $(TB_SRCS) $(CPP_SRCS) \
@@ -53,8 +56,9 @@ $(SIM): $(RTL_SRCS) $(TB_SRCS) $(CPP_SRCS)
 
 # Run simulation with a specific test hex
 sim: $(SIM) $(BUILD)/tests/test_pass.hex
+	@touch ram.hex
 	@cp $(BUILD)/tests/test_pass.hex rom.hex
-	@$(SIM) && rm -f rom.hex || (rm -f rom.hex; exit 1)
+	@$(SIM) && rm -f rom.hex ram.hex || (rm -f rom.hex ram.hex; exit 1)
 
 # Lint all RTL
 lint:
@@ -92,6 +96,7 @@ regress: $(SIM) $(ASM_HEXES)
 	  name=$$(basename $$hex .hex); \
 	  total=$$((total + 1)); \
 	  cp $$hex rom.hex; \
+	  touch ram.hex; \
 	  if $(SIM) > $(BUILD)/tests/$$name.log 2>&1; then \
 	    echo "  PASS: $$name"; \
 	    pass=$$((pass + 1)); \
@@ -99,7 +104,7 @@ regress: $(SIM) $(ASM_HEXES)
 	    echo "  FAIL: $$name (exit=$$?)"; \
 	    fail=$$((fail + 1)); \
 	  fi; \
-	  rm -f rom.hex; \
+	  rm -f rom.hex ram.hex; \
 	done; \
 	echo "=== Results: $$pass/$$total passed, $$fail failed ==="; \
 	[ $$fail -eq 0 ]
@@ -114,8 +119,9 @@ regress-axil-stall:
 
 # Run a single test
 run-%: $(SIM) $(BUILD)/tests/%.hex
+	@touch ram.hex
 	@cp $(BUILD)/tests/$*.hex rom.hex
-	@$(SIM) && rm -f rom.hex || (rm -f rom.hex; exit 1)
+	@$(SIM) && rm -f rom.hex ram.hex || (rm -f rom.hex ram.hex; exit 1)
 
 clean:
 	rm -rf $(BUILD) obj_dir rom.hex
@@ -155,3 +161,63 @@ synth:
 	@mkdir -p $(BUILD)
 	yosys -s scripts/yosys_synth.tcl
 	@echo "=== Synthesis complete ==="
+
+# ---------------------------------------------------------------------------
+# RISCOF architectural compliance (optional; requires external tools)
+# ---------------------------------------------------------------------------
+RISCOF_DIR        ?= verification/riscof
+RISCOF_VENV       ?= .venv-riscof
+RISCOF_CONFIG     ?= $(RISCOF_DIR)/config.ini
+RISCOF_WORK       ?= $(RISCOF_DIR)/work
+ARCH_TEST_REPO    ?= https://github.com/riscv-non-isa/riscv-arch-test.git
+ARCH_TEST_TAG     ?= 59075f8f
+ARCH_TEST_ROOT    ?= $(RISCOF_DIR)/riscv-arch-test
+ARCH_TEST_SUITE   ?= $(ARCH_TEST_ROOT)/riscv-test-suite
+ARCH_TEST_ENV     ?= $(ARCH_TEST_ROOT)/riscv-test-suite/env
+RISCOF_SMOKE_TEST ?= add-01
+
+$(ARCH_TEST_ROOT):
+	@echo "=== Cloning riscv-arch-test ($(ARCH_TEST_TAG)) ==="
+	git clone https://github.com/riscv-non-isa/riscv-arch-test.git $(ARCH_TEST_ROOT)
+	cd $(ARCH_TEST_ROOT) && git checkout $(ARCH_TEST_TAG)
+
+$(RISCOF_VENV)/bin/activate:
+	python3 -m venv $(RISCOF_VENV)
+	. $(RISCOF_VENV)/bin/activate && pip install -r $(RISCOF_DIR)/requirements.txt
+
+riscof-check-tools: $(RISCOF_VENV)/bin/activate
+	@. $(RISCOF_VENV)/bin/activate && riscof --version
+	@command -v spike >/dev/null || (echo "SKIP: spike not found (reference model)"; exit 1)
+	@command -v $(RV_PREFIX)gcc >/dev/null || (echo "SKIP: $(RV_PREFIX)gcc not found"; exit 1)
+	@test -x $(SIM) || $(MAKE) build/sim_sisPlatformTop USE_AXIL=0
+	@echo "RISCOF prerequisites OK"
+
+$(RISCOF_WORK)/smoke.testlist: $(ARCH_TEST_ROOT) $(RISCOF_VENV)/bin/activate
+	@mkdir -p $(RISCOF_WORK)
+	@. $(RISCOF_VENV)/bin/activate && \
+	  riscof testlist --config $(RISCOF_CONFIG) \
+	    --suite $(ARCH_TEST_SUITE) --env $(ARCH_TEST_ENV) \
+	    --work-dir $(RISCOF_WORK)
+	@python3 $(RISCOF_DIR)/scripts/filter_testlist.py \
+	  $(RISCOF_WORK)/test_list.yaml $(RISCOF_SMOKE_TEST) > $(RISCOF_WORK)/smoke.testlist
+
+riscof-smoke: $(RISCOF_WORK)/smoke.testlist build/sim_sisPlatformTop
+	@. $(RISCOF_VENV)/bin/activate && \
+	  RISCOF_TOOLCHAIN_PREFIX=$(RV_PREFIX) \
+	  riscof run --config $(RISCOF_CONFIG) --no-browser \
+	    --suite $(ARCH_TEST_SUITE) --env $(ARCH_TEST_ENV) \
+	    --work-dir $(RISCOF_WORK) --testfile $(RISCOF_WORK)/smoke.testlist
+
+riscof-rv32i: $(ARCH_TEST_ROOT) build/sim_sisPlatformTop $(RISCOF_VENV)/bin/activate
+	@. $(RISCOF_VENV)/bin/activate && \
+	  RISCOF_TOOLCHAIN_PREFIX=$(RV_PREFIX) \
+	  riscof run --config $(RISCOF_CONFIG) --no-browser \
+	    --suite $(ARCH_TEST_SUITE)/rv32i_m/I --env $(ARCH_TEST_ENV) \
+	    --work-dir $(RISCOF_WORK)/rv32i
+
+riscof-rv32im: $(ARCH_TEST_ROOT) build/sim_sisPlatformTop $(RISCOF_VENV)/bin/activate
+	@. $(RISCOF_VENV)/bin/activate && \
+	  RISCOF_TOOLCHAIN_PREFIX=$(RV_PREFIX) \
+	  riscof run --config $(RISCOF_CONFIG) --no-browser \
+	    --suite $(ARCH_TEST_SUITE)/rv32i_m --env $(ARCH_TEST_ENV) \
+	    --work-dir $(RISCOF_WORK)/rv32im

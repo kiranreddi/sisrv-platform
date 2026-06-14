@@ -27,6 +27,16 @@ module sisRam #(
 
   logic [31:0] mem [0:DEPTH_WORDS-1];
 
+`ifndef SYNTHESIS
+  export "DPI-C" function dpi_sisrv_ram_read_word;
+  function int unsigned dpi_sisrv_ram_read_word(input int unsigned word_idx);
+    if (word_idx < DEPTH_WORDS)
+      return mem[word_idx];
+    else
+      return 0;
+  endfunction
+`endif
+
   // Note: initial blocks are sim-only. For synthesis, RAM contents are
   // undefined at power-on (SRAM macro) or zero-initialized (FPGA BRAM).
   initial begin

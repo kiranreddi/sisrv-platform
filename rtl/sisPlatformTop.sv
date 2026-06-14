@@ -7,6 +7,7 @@
 
 module sisPlatformTop #(
     parameter ROM_INIT_FILE = "rom.hex",
+    parameter RAM_INIT_FILE = "",
     parameter int USE_AXIL  = 0,         // 0=corebus, 1=AXI4-Lite path
     parameter int AXIL_STALL_RATE = 0    // stall injection % for AXI slave (TB only)
 )(
@@ -255,7 +256,8 @@ module sisPlatformTop #(
       // RAM (corebus path)
       // ---------------------------------------------------------------
       sisRam #(
-        .DEPTH_WORDS(65536)
+        .DEPTH_WORDS(65536),
+        .INIT_FILE  (RAM_INIT_FILE)
       ) u_ram (
         .clk       (clk),
         .rst_n     (rst_n),

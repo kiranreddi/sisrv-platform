@@ -53,7 +53,7 @@ defined sequence with hard exit gates.
 | Memory | Aligned-only assumed; no MPU/PMP; no cache; tightly-coupled ROM/RAM |
 | Bus | Internal corebus + AXI4-Lite **master** bridge (single outstanding, no bursts) |
 | Debug | None (no halt/resume, no JTAG, no RISC-V Debug spec DM) |
-| Verification | 33 directed asm + 44 cocotb + 4 formal proofs; **no RISCOF/riscv-arch-test compliance, no ISA random co-sim, no UVM/constrained-random at top** |
+| Verification | 33 directed asm + 44 cocotb + 4 formal proofs + **RISCOF smoke harness (Spike co-sim, optional CI)**; full riscv-arch-test suite not yet green | **P0** |
 | Physical | Yosys synth path exists; **no STA/timing closure, no real-PDK GDS, no power**|
 | Collateral | Good internal docs; **no integration guide, programmer's model, or release/IP packaging** |
 
@@ -150,7 +150,7 @@ Legend: ✅ have · 🟡 partial · ❌ missing · **P0** = required for any pro
 
 | Feature | Industry standard | Us | Gap | Pri |
 |---|---|---|---|---|
-| RISCOF / riscv-arch-test compliance pass | **mandatory to call it RISC-V** | ❌ | the single most important missing sign-off | **P0** |
+| RISCOF / riscv-arch-test compliance pass | **mandatory to call it RISC-V** | 🟡 harness + smoke target; full suite pending | plugin under `verification/riscof/` | **P0** |
 | ISS lock-step co-simulation (e.g. Spike) random | yes | ❌ | catches corner cases directed tests miss | **P0** |
 | Constrained-random + functional coverage (UVM or cocotb) | yes | 🟡 | unit-level only, no top-level coverage closure | P1 |
 | Formal of control/hazard logic | premium | 🟡 | ALU/decode/regfile/AXI only, not core FSM/pipeline | P1 |

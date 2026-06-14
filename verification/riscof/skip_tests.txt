@@ -1,0 +1,16 @@
+# Explicit architectural-test exclusions for sisrv-platform
+#
+# These areas are intentionally unsupported in the current DUT profile.
+# RISCOF also filters via sisrv_isa.yaml / sisrv_platform.yaml.
+
+unsupported: PMP
+unsupported: interrupts / CLINT / PLIC
+unsupported: debug mode
+unsupported: compressed instructions (C extension)
+unsupported: supervisor/user modes (S/U)
+unsupported: atomics (A extension)
+unsupported: hypervisor (H extension)
+unsupported: floating-point (F/D extensions)
+
+# Smoke target (Phase 4): start with one RV32I integer test
+smoke_test: add-01
