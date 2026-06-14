@@ -104,7 +104,7 @@ def is_rv32im_legal(instr):
         return False
     if opcode == OP_SYSTEM:
         if funct3 == 0:
-            return csr in (0x000, 0x001, 0x302)
+            return csr in (0x000, 0x001, 0x105, 0x302)
         return funct3 in (1, 2, 3, 5, 6, 7)
     if opcode == OP_FENCE:
         return funct3 == 0
@@ -201,6 +201,7 @@ async def test_decode_illegal_funct_combos(dut):
         ("SW", encode_s(0, 2, 1, 2, OP_STORE)),
         ("BEQ", encode_b(0, 2, 1, 0, OP_BRANCH)),
         ("ECALL", encode_i(0, 0, 0, 0, OP_SYSTEM)),
+        ("WFI", encode_i(0x105, 0, 0, 0, OP_SYSTEM)),
         ("FENCE", encode_i(0, 0, 0, 0, OP_FENCE)),
     ]
 

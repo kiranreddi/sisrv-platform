@@ -1,5 +1,5 @@
-// sisRvCore.sv — Multi-cycle FSM RV32I core
-// Implements complete RV32I ISA + M-mode CSRs/traps.
+// sisRvCore.sv — Multi-cycle FSM RV32IM core
+// Implements complete RV32IM ISA + M-mode CSRs/traps.
 // States: FETCH_REQ -> FETCH_WAIT -> DECODE -> EXECUTE -> MEM_REQ -> MEM_WAIT -> WB
 
 module sisRvCore #(
@@ -213,6 +213,7 @@ module sisRvCore #(
   logic [31:0] trap_val;
   logic [31:0] trap_epc;
   logic        mret_exec;
+  logic        instr_retire;
   logic [31:0] mtvec_out;
   logic [31:0] mepc_out;
   logic        irq_pending;
@@ -230,6 +231,7 @@ module sisRvCore #(
     .trap_val   (trap_val),
     .trap_epc   (trap_epc),
     .mret_exec  (mret_exec),
+    .instr_retire(instr_retire),
     .ext_mtip   (ext_mtip),
     .mtvec_out  (mtvec_out),
     .mepc_out   (mepc_out),
@@ -242,6 +244,14 @@ module sisRvCore #(
   logic [31:0] alu_result_reg;
   logic [31:0] mem_addr_reg;
   logic        branch_taken;
+  logic        fetch_err_reg;
+  logic        mem_err_reg;
+  logic        mem_misaligned_reg;
+  logic        instr_addr_misaligned;
+  logic [31:0] branch_target;
+  logic [31:0] jal_target;
+  logic [31:0] jalr_target;
+  logic [31:0] next_pc_target;
 
   // ---------------------------------------------------------------
   // Memory response data (latched in MEM_WAIT)
@@ -290,6 +300,39 @@ module sisRvCore #(
       alu_op = ALU_ADD; // compute return address = pc + 4
     end
   end
+
+  assign branch_target = pc + dec_imm_b;
+  assign jal_target    = pc + dec_imm_j;
+  assign jalr_target   = (rs1_val + dec_imm_i) & 32'hFFFF_FFFE;
+
+  always_comb begin
+    next_pc_target = pc + 32'd4;
+    if (dec_is_jal) begin
+      next_pc_target = jal_target;
+    end else if (dec_is_jalr) begin
+      next_pc_target = jalr_target;
+    end else if (dec_is_branch && branch_taken) begin
+      next_pc_target = branch_target;
+    end
+  end
+
+  assign instr_addr_misaligned = dec_is_legal &&
+                                 (dec_is_jal || dec_is_jalr || (dec_is_branch && branch_taken)) &&
+                                 (next_pc_target[1:0] != 2'b00);
+
+  function automatic logic is_mem_misaligned(
+      input logic [31:0] addr,
+      input logic [2:0]  funct3
+  );
+    begin
+      case (funct3[1:0])
+        2'b00: is_mem_misaligned = 1'b0;              // byte
+        2'b01: is_mem_misaligned = addr[0];           // halfword
+        2'b10: is_mem_misaligned = |addr[1:0];        // word
+        default: is_mem_misaligned = 1'b0;
+      endcase
+    end
+  endfunction
 
   // ---------------------------------------------------------------
   // Branch condition evaluation
@@ -437,11 +480,17 @@ module sisRvCore #(
       alu_result_reg <= 32'h0;
       mem_addr_reg  <= 32'h0;
       mem_rdata_reg <= 32'h0;
+      fetch_err_reg <= 1'b0;
+      mem_err_reg   <= 1'b0;
+      mem_misaligned_reg <= 1'b0;
     end else begin
       case (state)
         // ----- FETCH REQUEST -----
         S_FETCH_REQ: begin
           if (req_ready) begin
+            fetch_err_reg <= 1'b0;
+            mem_err_reg   <= 1'b0;
+            mem_misaligned_reg <= 1'b0;
             state <= S_FETCH_WAIT;
           end
         end
@@ -450,6 +499,7 @@ module sisRvCore #(
         S_FETCH_WAIT: begin
           if (rsp_valid) begin
             instr_reg <= rsp_rdata;
+            fetch_err_reg <= rsp_err;
             state     <= S_DECODE;
           end
         end
@@ -465,8 +515,9 @@ module sisRvCore #(
         S_EXECUTE: begin
           alu_result_reg <= dec_is_m_op ? m_result : alu_result;
           mem_addr_reg   <= alu_result; // used for load/store address
+          mem_misaligned_reg <= (dec_is_load || dec_is_store) && is_mem_misaligned(alu_result, dec_funct3);
 
-          if (dec_is_load || dec_is_store) begin
+          if ((dec_is_load || dec_is_store) && !is_mem_misaligned(alu_result, dec_funct3)) begin
             state <= S_MEM_REQ;
           end else begin
             state <= S_WB;
@@ -484,6 +535,7 @@ module sisRvCore #(
         S_MEM_WAIT: begin
           if (rsp_valid) begin
             mem_rdata_reg <= rsp_rdata;
+            mem_err_reg   <= rsp_err;
             state         <= S_WB;
           end
         end
@@ -491,14 +543,14 @@ module sisRvCore #(
         // ----- WRITEBACK + PC UPDATE -----
         S_WB: begin
           // PC update (illegal instructions trap before any control-flow effect)
-          if (!dec_is_legal) begin
+          if (fetch_err_reg || mem_err_reg || mem_misaligned_reg || instr_addr_misaligned || !dec_is_legal) begin
             pc <= mtvec_out;
           end else if (dec_is_jal) begin
-            pc <= pc + dec_imm_j;
+            pc <= jal_target;
           end else if (dec_is_jalr) begin
-            pc <= (rs1_val + dec_imm_i) & 32'hFFFF_FFFE;
+            pc <= jalr_target;
           end else if (dec_is_branch && branch_taken) begin
-            pc <= pc + dec_imm_b;
+            pc <= branch_target;
           end else if (is_ecall || is_ebreak) begin
             pc <= mtvec_out;
           end else if (is_mret) begin
@@ -564,19 +616,24 @@ module sisRvCore #(
     rf_rd_data = 32'h0;
 
     if (state == S_WB) begin
-      if (dec_is_legal && (dec_is_alu_reg || dec_is_alu_imm)) begin
+      if (!fetch_err_reg && !mem_err_reg && !mem_misaligned_reg && !instr_addr_misaligned &&
+          dec_is_legal && (dec_is_alu_reg || dec_is_alu_imm)) begin
         rf_wr_en  = 1'b1;
         rf_rd_data = alu_result_reg;
-      end else if (dec_is_legal && (dec_is_lui || dec_is_auipc)) begin
+      end else if (!fetch_err_reg && !mem_err_reg && !mem_misaligned_reg && !instr_addr_misaligned &&
+                   dec_is_legal && (dec_is_lui || dec_is_auipc)) begin
         rf_wr_en  = 1'b1;
         rf_rd_data = alu_result_reg;
-      end else if (dec_is_legal && (dec_is_jal || dec_is_jalr)) begin
+      end else if (!fetch_err_reg && !mem_err_reg && !mem_misaligned_reg && !instr_addr_misaligned &&
+                   dec_is_legal && (dec_is_jal || dec_is_jalr)) begin
         rf_wr_en  = 1'b1;
         rf_rd_data = alu_result_reg; // pc+4 (return address)
-      end else if (dec_is_legal && dec_is_load) begin
+      end else if (!fetch_err_reg && !mem_err_reg && !mem_misaligned_reg && !instr_addr_misaligned &&
+                   dec_is_legal && dec_is_load) begin
         rf_wr_en  = 1'b1;
         rf_rd_data = load_result;
-      end else if (dec_is_legal && is_csr_op) begin
+      end else if (!fetch_err_reg && !mem_err_reg && !mem_misaligned_reg && !instr_addr_misaligned &&
+                   dec_is_legal && is_csr_op) begin
         rf_wr_en  = 1'b1;
         rf_rd_data = csr_rdata_w;
       end
@@ -597,29 +654,61 @@ module sisRvCore #(
     trap_val    = 32'h0;
     trap_epc    = pc;
     mret_exec   = 1'b0;
+    instr_retire = 1'b0;
 
     if (state == S_WB) begin
-      if (!dec_is_legal) begin
+      instr_retire = !(fetch_err_reg || mem_err_reg || mem_misaligned_reg || instr_addr_misaligned || !dec_is_legal ||
+                       is_ecall || is_ebreak || irq_pending);
+
+      if (fetch_err_reg) begin
+        trap_enter = 1'b1;
+        trap_cause = 32'd1; // Instruction access fault
+        trap_val   = pc;
+        trap_epc   = pc;
+        instr_retire = 1'b0;
+      end else if (mem_misaligned_reg) begin
+        trap_enter = 1'b1;
+        trap_cause = dec_is_store ? 32'd6 : 32'd4; // Store/load address misaligned
+        trap_val   = mem_addr_reg;
+        trap_epc   = pc;
+        instr_retire = 1'b0;
+      end else if (mem_err_reg) begin
+        trap_enter = 1'b1;
+        trap_cause = dec_is_store ? 32'd7 : 32'd5; // Store/load access fault
+        trap_val   = mem_addr_reg;
+        trap_epc   = pc;
+        instr_retire = 1'b0;
+      end else if (instr_addr_misaligned) begin
+        trap_enter = 1'b1;
+        trap_cause = 32'd0; // Instruction address misaligned
+        trap_val   = next_pc_target;
+        trap_epc   = pc;
+        instr_retire = 1'b0;
+      end else if (!dec_is_legal) begin
         trap_enter = 1'b1;
         trap_cause = 32'd2; // Illegal instruction
         trap_val   = instr_reg;
         trap_epc   = pc;
+        instr_retire = 1'b0;
       end else if (dec_is_legal && is_csr_op) begin
         csr_wen_w = 1'b1;
       end else if (is_ecall) begin
         trap_enter = 1'b1;
         trap_cause = 32'd11; // Environment call from M-mode
         trap_epc   = pc;
+        instr_retire = 1'b0;
       end else if (is_ebreak) begin
         trap_enter = 1'b1;
         trap_cause = 32'd3; // Breakpoint
         trap_epc   = pc;
+        instr_retire = 1'b0;
       end else if (is_mret) begin
         mret_exec = 1'b1;
       end else if (irq_pending) begin
         trap_enter = 1'b1;
         trap_cause = {1'b1, 31'd7}; // Machine timer interrupt (bit 31 = interrupt flag)
         trap_epc   = pc + 32'd4;    // Return to next instruction
+        instr_retire = 1'b0;
       end
     end
   end

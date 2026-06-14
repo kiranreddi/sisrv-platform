@@ -131,6 +131,7 @@ module sisDecode #(
       ((funct3 == 3'b000) && (
           (instr[31:20] == 12'h000) || // ECALL
           (instr[31:20] == 12'h001) || // EBREAK
+          (instr[31:20] == 12'h105) || // WFI
           (instr[31:20] == 12'h302)    // MRET
       )) ||
       (funct3 == 3'b001) || (funct3 == 3'b010) || (funct3 == 3'b011) ||

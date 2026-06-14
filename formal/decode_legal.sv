@@ -138,6 +138,7 @@ module decode_legal_wrapper (
         ((funct3 == 3'b000) && (
             (instr[31:20] == 12'h000) ||
             (instr[31:20] == 12'h001) ||
+            (instr[31:20] == 12'h105) ||
             (instr[31:20] == 12'h302)
         )) ||
         (funct3 == 3'b001) || (funct3 == 3'b010) || (funct3 == 3'b011) ||

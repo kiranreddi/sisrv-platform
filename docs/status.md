@@ -6,7 +6,7 @@
 
 The sisrv-platform project implements a fully functional RV32IM RISC-V processor core
 with M-mode CSRs, trap handling, timer interrupts, GPIO, UART, and an AXI4-Lite master bridge.
-The core is verified through 30 directed assembly tests, 41 cocotb randomized unit tests,
+The core is verified through 32 directed assembly tests, 43 cocotb randomized unit tests,
 and 4 formal proofs — all running on Verilator 5.038.
 
 ## Milestone Status
@@ -41,7 +41,7 @@ and 4 formal proofs — all running on Verilator 5.038.
 | `sisDecode.sv` | ✅ Done | All RV32I/RV32M instruction types decoded |
 | `sisMemFabric.sv` | ✅ Done | Address decoder: ROM/RAM/MMIO routing |
 
-**Test coverage** (30 directed tests, all passing):
+**Test coverage** (32 directed tests, all passing):
 
 | Test | Instructions Covered |
 |------|---------------------|
@@ -63,10 +63,12 @@ and 4 formal proofs — all running on Verilator 5.038.
 | test_pass | Minimal end-to-end (write PASS to tohost) |
 | test_csr | CSR read/write operations |
 | test_csr_edge | CSRRS/CSRRC with rs1=x0, CSRRWI/SI/CI edge cases |
+| test_machine_counters | misa, ID CSRs, mcycle/minstret, mcountinhibit |
 | test_ecall | ECALL trap + MRET return |
 | test_ebreak | EBREAK trap (mcause=3) + MRET return |
 | test_illegal | Illegal instruction trap (mcause=2) |
 | test_fence | FENCE as NOP |
+| test_trap_faults | Misaligned load/store/control-flow traps and instruction/load/store access faults |
 | test_back_to_back | Fibonacci, register file stress, data dependencies, loops |
 | test_timer | Timer interrupt: MTIP, ISR counter, MRET return |
 | test_mret_boundary | MRET exact resume point: no skipped/repeated instructions |
@@ -84,11 +86,11 @@ x0 always 0 ✅, PC word-aligned ✅, correct sign/zero extension ✅
 
 | Deliverable | Status | Notes |
 |-------------|--------|-------|
-| `sisCsr.sv` | ✅ Done | mstatus, mtvec, mepc, mcause, mtval, mscratch, mie, mip |
+| `sisCsr.sv` | ✅ Done | mstatus, misa, mtvec, mepc, mcause, mtval, mscratch, mie, mip, ID CSRs, counters |
 | CSR instructions | ✅ Done | CSRRW, CSRRS, CSRRC + immediate forms |
 | ECALL/EBREAK | ✅ Done | Trap entry with correct mcause |
 | MRET | ✅ Done | Returns to mepc, restores MIE from MPIE |
-| Trap tests | ✅ Done | test_ecall, test_ebreak, test_illegal, test_csr, test_csr_edge |
+| Trap tests | ✅ Done | test_ecall, test_ebreak, test_illegal, test_csr, test_csr_edge, test_trap_faults |
 
 **Interrupt semantics (documented decisions)**:
 - `mstatus.MIE` (bit 3): Global machine interrupt enable
@@ -108,7 +110,7 @@ x0 always 0 ✅, PC word-aligned ✅, correct sign/zero extension ✅
 | cocotb ALU tests | ✅ Done | 1000 directed + 1000 random + shift sweep (Verilator 5.038) |
 | cocotb RegFile tests | ✅ Done | x0 zero, write/read all, isolation, 500 random cycles |
 | cocotb Decode tests | ✅ Done | Type flags, illegal opcodes, immediates (I/S/U/B/J), register extraction, 1000 random |
-| cocotb CSR tests | ✅ Done | Reset values, RW/RS/RC ops, trap entry, MRET, MEPC alignment, MTIP/irq_pending |
+| cocotb CSR tests | ✅ Done | Reset values, RW/RS/RC ops, trap entry, MRET, MEPC alignment, MTIP/irq_pending, ID CSRs, counters |
 | cocotb AXI-Lite tests | ✅ Done | Reset, read/write, errors, stalls, random stress (100 txns), VALID stability |
 | Formal ALU proof | ✅ Done | All 10 ops proven correct (yosys SAT, < 1s) |
 | Formal RegFile proof | ✅ Done | x0-always-zero (k-induction, SymbiYosys + z3) |
@@ -133,7 +135,7 @@ x0 always 0 ✅, PC word-aligned ✅, correct sign/zero extension ✅
 | AXI-Lite timer support | ✅ Done | `tb/models/sisAxiLiteSlave.sv` models MTIME/MTIMECMP and MTIP |
 | AXI-Lite GPIO support | ✅ Done | `tb/models/sisAxiLiteSlave.sv` models DATA/DIR/IN/SET/CLR |
 | AXI-Lite UART support | ✅ Done | `tb/models/sisAxiLiteSlave.sv` models TXDATA/RXDATA/STATUS/CTRL/BAUDDIV |
-| AXI-Lite system regression | ✅ Done | `make regress-axil` runs all 30 assembly tests through the AXI path |
+| AXI-Lite system regression | ✅ Done | `make regress-axil` runs all 32 assembly tests through the AXI path |
 | cocotb bridge tests | ✅ Done | 11 tests: reset, R/W, errors, stalls, 100-txn random stress |
 | Formal AXI-Lite bridge | Optional | Bounded VALID stability, mutual exclusion, data stability (`make formal-axil`) |
 
@@ -236,10 +238,10 @@ Planned:
 | Verilator version | 5.038 |
 | Lint status | ✅ Clean (Wall, no warnings) |
 | Compiler | riscv64-linux-gnu-gcc 13.3 |
-| Assembly test suite | 30 tests |
-| Assembly regression | 30/30 passing through corebus and AXI4-Lite paths |
-| cocotb unit tests | 41 tests (3 ALU + 4 RegFile + 11 Decode + 12 CSR + 11 AXI-Lite) |
-| cocotb status | 41/41 passing |
+| Assembly test suite | 32 tests |
+| Assembly regression | 32/32 passing through corebus and AXI4-Lite paths |
+| cocotb unit tests | 43 tests (3 ALU + 4 RegFile + 11 Decode + 14 CSR + 11 AXI-Lite) |
+| cocotb status | 43/43 passing |
 | Formal proofs/checks | Required: ALU (all 10 ops), RegFile (x0=0), Decode (fields + legality). Optional: AXI-Lite bounded safety (`make formal-axil`) |
 | Formal status | All proofs PASS |
 | Simulation time | < 2s per test |
@@ -271,7 +273,7 @@ Planned:
 - `tb/cocotb/test_alu.py` — ALU cocotb tests (3 tests)
 - `tb/cocotb/test_regfile.py` — RegFile cocotb tests (4 tests)
 - `tb/cocotb/test_decode.py` — Decoder cocotb tests (11 tests)
-- `tb/cocotb/test_csr.py` — CSR unit cocotb tests (12 tests)
+- `tb/cocotb/test_csr.py` — CSR unit cocotb tests (14 tests)
 - `tb/cocotb/test_axil_bridge.py` — AXI-Lite bridge cocotb tests (11 tests)
 
 ### Formal Verification
@@ -288,7 +290,7 @@ Planned:
 ### Software
 - `sw/bsp/crt0.S` — C runtime startup
 - `sw/bsp/link.ld` — Linker script
-- `sw/tests/asm/test_*.S` — 30 assembly test programs
+- `sw/tests/asm/test_*.S` — 32 assembly test programs
 
 ### Build & CI
 - `Makefile` — Build, lint, sim, regression, cocotb, formal, synth targets

@@ -17,7 +17,7 @@ Goal: keep the core independent of AXI. The core issues *one* request at a time 
 - `rsp_valid`
 - `rsp_ready`
 - `rsp_rdata[31:0]`
-- `rsp_err` (optional for bus errors)
+- `rsp_err` (bus errors; the core raises precise access-fault traps)
 
 ### Rules
 - Single outstanding transaction (MVP).
@@ -45,4 +45,4 @@ Signals (standard AXI-Lite):
 - Complete on `R` or `B` handshake.
 
 ### Error handling
-- Map AXI `RESP != OKAY` to `rsp_err=1` (optional); core may trap later.
+- Map AXI `RESP != OKAY` to `rsp_err=1`; the core raises instruction/load/store access-fault traps.

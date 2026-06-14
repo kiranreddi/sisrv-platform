@@ -8,23 +8,42 @@ MASK32 = 0xFFFFFFFF
 
 # CSR addresses
 CSR_MSTATUS  = 0x300
+CSR_MISA     = 0x301
 CSR_MIE      = 0x304
 CSR_MTVEC    = 0x305
+CSR_MCOUNTINHIBIT = 0x320
 CSR_MSCRATCH = 0x340
 CSR_MEPC     = 0x341
 CSR_MCAUSE   = 0x342
 CSR_MTVAL    = 0x343
 CSR_MIP      = 0x344
+CSR_MCYCLE   = 0xB00
+CSR_MINSTRET = 0xB02
+CSR_MCYCLEH  = 0xB80
+CSR_MINSTRETH = 0xB82
+CSR_MVENDORID = 0xF11
+CSR_MARCHID   = 0xF12
+CSR_MIMPID    = 0xF13
+CSR_MHARTID   = 0xF14
+CSR_MCONFIGPTR = 0xF15
 
 # MIP is read-only (MTIP is driven by ext_mtip).
-RW_CSRS = [CSR_MSTATUS, CSR_MIE, CSR_MTVEC, CSR_MSCRATCH,
-           CSR_MEPC, CSR_MCAUSE, CSR_MTVAL]
-ALL_CSRS = RW_CSRS + [CSR_MIP]
+RW_CSRS = [CSR_MSTATUS, CSR_MIE, CSR_MTVEC, CSR_MCOUNTINHIBIT, CSR_MSCRATCH,
+           CSR_MEPC, CSR_MCAUSE, CSR_MTVAL, CSR_MCYCLE, CSR_MCYCLEH,
+           CSR_MINSTRET, CSR_MINSTRETH]
+RO_CSRS = [CSR_MISA, CSR_MIP, CSR_MVENDORID, CSR_MARCHID, CSR_MIMPID,
+           CSR_MHARTID, CSR_MCONFIGPTR]
+ALL_CSRS = RW_CSRS + RO_CSRS
 
 CSR_NAMES = {
-    CSR_MSTATUS: "mstatus", CSR_MIE: "mie", CSR_MTVEC: "mtvec",
+    CSR_MSTATUS: "mstatus", CSR_MISA: "misa", CSR_MIE: "mie", CSR_MTVEC: "mtvec",
+    CSR_MCOUNTINHIBIT: "mcountinhibit",
     CSR_MSCRATCH: "mscratch", CSR_MEPC: "mepc", CSR_MCAUSE: "mcause",
     CSR_MTVAL: "mtval", CSR_MIP: "mip",
+    CSR_MCYCLE: "mcycle", CSR_MCYCLEH: "mcycleh",
+    CSR_MINSTRET: "minstret", CSR_MINSTRETH: "minstreth",
+    CSR_MVENDORID: "mvendorid", CSR_MARCHID: "marchid",
+    CSR_MIMPID: "mimpid", CSR_MHARTID: "mhartid", CSR_MCONFIGPTR: "mconfigptr",
 }
 
 # CSR operations
@@ -46,6 +65,7 @@ async def reset_dut(dut):
     dut.trap_val.value = 0
     dut.trap_epc.value = 0
     dut.mret_exec.value = 0
+    dut.instr_retire.value = 0
     dut.ext_mtip.value = 0
     await RisingEdge(dut.clk)
     await RisingEdge(dut.clk)
@@ -79,10 +99,14 @@ async def test_csr_reset_values(dut):
     cocotb.start_soon(clock.start())
     await reset_dut(dut)
 
+    expected_reset = {CSR_MISA: 0x40001100}
     for addr in ALL_CSRS:
+        if addr in (CSR_MCYCLE, CSR_MCYCLEH, CSR_MINSTRET, CSR_MINSTRETH):
+            continue
         val = await csr_read(dut, addr)
-        assert val == 0, \
-            f"{CSR_NAMES[addr]} after reset: expected 0, got 0x{val:08x}"
+        expected = expected_reset.get(addr, 0)
+        assert val == expected, \
+            f"{CSR_NAMES[addr]} after reset: expected 0x{expected:08x}, got 0x{val:08x}"
 
     dut._log.info("CSR reset values: PASS")
 
@@ -100,6 +124,8 @@ async def test_csr_rw_all(dut):
         got = await csr_read(dut, addr)
         if addr == CSR_MEPC:
             expected = test_val & 0xFFFFFFFC  # word-aligned
+        elif addr in (CSR_MCYCLE, CSR_MCYCLEH, CSR_MINSTRET, CSR_MINSTRETH):
+            expected = test_val
         else:
             expected = test_val
         assert got == expected, \
@@ -158,7 +184,7 @@ async def test_csr_unknown_reads_zero(dut):
     # Write a non-zero value to mscratch to confirm reads from other CSRs are 0
     await csr_write(dut, CSR_MSCRATCH, 0xDEADBEEF, CSR_OP_RW)
 
-    for unknown_addr in [0x000, 0x001, 0x100, 0xFFF, 0x301, 0xB00]:
+    for unknown_addr in [0x000, 0x001, 0x100, 0xFFF, 0x306, 0xB01]:
         got = await csr_read(dut, unknown_addr)
         assert got == 0, \
             f"Unknown CSR 0x{unknown_addr:03x}: expected 0, got 0x{got:08x}"
@@ -318,3 +344,52 @@ async def test_csr_mtip_irq_pending(dut):
     assert int(dut.irq_pending.value) == 0, "IRQ should not be pending (MTIP=0)"
 
     dut._log.info("MTIP/irq_pending: PASS")
+
+
+@cocotb.test()
+async def test_csr_id_registers(dut):
+    """Verify machine ID CSRs expose stable product-visible values."""
+    clock = Clock(dut.clk, 10, units="ns")
+    cocotb.start_soon(clock.start())
+    await reset_dut(dut)
+
+    misa = await csr_read(dut, CSR_MISA)
+    assert misa == 0x40001100, f"misa expected RV32IM 0x40001100, got 0x{misa:08x}"
+
+    for addr in [CSR_MVENDORID, CSR_MARCHID, CSR_MIMPID, CSR_MHARTID, CSR_MCONFIGPTR]:
+        got = await csr_read(dut, addr)
+        assert got == 0, f"{CSR_NAMES[addr]} expected 0, got 0x{got:08x}"
+
+    dut._log.info("ID CSRs: PASS")
+
+
+@cocotb.test()
+async def test_csr_counters_and_inhibit(dut):
+    """Verify mcycle/minstret count and mcountinhibit can stop them."""
+    clock = Clock(dut.clk, 10, units="ns")
+    cocotb.start_soon(clock.start())
+    await reset_dut(dut)
+
+    c0 = await csr_read(dut, CSR_MCYCLE)
+    await RisingEdge(dut.clk)
+    c1 = await csr_read(dut, CSR_MCYCLE)
+    assert c1 > c0, f"mcycle should increment: before={c0} after={c1}"
+
+    i0 = await csr_read(dut, CSR_MINSTRET)
+    dut.instr_retire.value = 1
+    await RisingEdge(dut.clk)
+    dut.instr_retire.value = 0
+    i1 = await csr_read(dut, CSR_MINSTRET)
+    assert i1 == i0 + 1, f"minstret expected {i0 + 1}, got {i1}"
+
+    await csr_write(dut, CSR_MCOUNTINHIBIT, 0x5, CSR_OP_RW)
+    c_hold = await csr_read(dut, CSR_MCYCLE)
+    i_hold = await csr_read(dut, CSR_MINSTRET)
+    dut.instr_retire.value = 1
+    for _ in range(3):
+        await RisingEdge(dut.clk)
+    dut.instr_retire.value = 0
+    assert await csr_read(dut, CSR_MCYCLE) == c_hold, "mcycle should stop when CY is inhibited"
+    assert await csr_read(dut, CSR_MINSTRET) == i_hold, "minstret should stop when IR is inhibited"
+
+    dut._log.info("Counters and mcountinhibit: PASS")

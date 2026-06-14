@@ -15,10 +15,10 @@ peripherals via a configurable bus path (corebus or AXI4-Lite).
 | M0 — Sim harness & golden flow | ✅ Complete |
 | M1 — RV32I multi-cycle core | ✅ Complete |
 | M2 — CSRs + traps (M-mode) | ✅ Complete |
-| M2.5 — Verification infrastructure | ✅ Complete (41 cocotb + 4 formal) |
+| M2.5 — Verification infrastructure | ✅ Complete (43 cocotb + 4 formal) |
 | M3 — AXI4-Lite master bridge | ✅ Complete |
 | M4 — Timer interrupt | ✅ Complete |
-| M5 — RV32M (mul/div) | ✅ Complete (30/30 tests pass) |
+| M5 — RV32M (mul/div) | ✅ Complete (32/32 tests pass) |
 | M6 — 3-stage pipeline | 🔲 Planned |
 | M7 — Yosys synthesis | ✅ Complete |
 | M8 — OpenROAD hardening | 🔲 Planned |
@@ -67,13 +67,13 @@ make sw
 # Run a single test (the basic PASS test)
 make sim
 
-# Run full regression suite (30 tests)
+# Run full regression suite (32 tests)
 make regress
 
 # Run full regression suite through AXI4-Lite path
 make regress-axil
 
-# Run cocotb tests (41 tests: ALU + RegFile + Decode + CSR + AXI-Lite)
+# Run cocotb tests (43 tests: ALU + RegFile + Decode + CSR + AXI-Lite)
 make cocotb
 
 # Run required formal verification proofs
@@ -122,6 +122,7 @@ $ make regress
   PASS: test_load_store
   PASS: test_logic
   PASS: test_lui_auipc
+  PASS: test_machine_counters
   PASS: test_mem_edge
   PASS: test_mtime_write
   PASS: test_mret_boundary
@@ -131,14 +132,15 @@ $ make regress
   PASS: test_shift
   PASS: test_slt
   PASS: test_timer
+  PASS: test_trap_faults
   PASS: test_uart
   PASS: test_x0
-=== Results: 30/30 passed, 0 failed ===
+=== Results: 32/32 passed, 0 failed ===
 ```
 
 ## Verification
 
-### Assembly Tests (30 tests)
+### Assembly Tests (32 tests)
 Directed self-checking tests covering all RV32I instructions plus RV32M multiply/divide:
 
 | Category | Tests | Coverage |
@@ -149,8 +151,8 @@ Directed self-checking tests covering all RV32I instructions plus RV32M multiply
 | Memory | test_load_store, test_mem_edge, test_ram_walk | LB/LBU/LH/LHU/LW/SB/SH/SW, all byte lanes, walking ones/zeros |
 | Branch | test_branch, test_branch_edge | BEQ/BNE/BLT/BGE/BLTU/BGEU, INT_MIN/MAX boundaries |
 | Jump | test_jal_jalr, test_jalr_align | JAL/JALR, bit[0] masking, rd=x0 |
-| CSR | test_csr, test_csr_edge | CSRRW/CSRRS/CSRRC/CSRRWI/CSRRSI/CSRRCI, rs1=x0 read-only |
-| Trap | test_ecall, test_ebreak, test_illegal, test_illegal_funct | ECALL/EBREAK/illegal opcode + funct-level traps, mcause, MRET |
+| CSR | test_csr, test_csr_edge, test_machine_counters | CSRRW/CSRRS/CSRRC/CSRRWI/CSRRSI/CSRRCI, ID CSRs, machine counters, mcountinhibit |
+| Trap | test_ecall, test_ebreak, test_illegal, test_illegal_funct, test_trap_faults | ECALL/EBREAK/illegal opcode + funct-level traps, misalignment/access faults, mcause/mtval, MRET |
 | Timer | test_timer, test_mtime_write | MTIP interrupt, ISR handler, MTIME/MTIMECMP, deterministic MTIME writes |
 | Timer | test_mret_boundary | MRET exact resume point, no skipped/repeated instructions |
 | GPIO | test_gpio | DATA/DIR/IN/SET/CLR MMIO registers |
@@ -158,13 +160,13 @@ Directed self-checking tests covering all RV32I instructions plus RV32M multiply
 | System | test_fence, test_lui_auipc, test_x0 | FENCE, LUI/AUIPC, x0 hardwired zero |
 | Stress | test_back_to_back | Fibonacci, register file stress, data dependencies, loops |
 
-### cocotb Tests (41 tests)
+### cocotb Tests (43 tests)
 Randomized and directed unit tests using Verilator 5.038:
 
 - **ALU** (3 tests): 1000 directed edge-case checks, 1000 random stimulus, full shift amount sweep
 - **RegFile** (4 tests): x0-always-zero, write/read all registers, write isolation, 500 random read/write cycles
 - **Decoder** (11 tests): Type flag decode for all 11 opcodes, illegal opcode/funct detection, register extraction, I/S/U/B/J immediate sign-extension, funct3/funct7 extraction, 1000 random instructions
-- **CSR** (12 tests): Reset values, CSRRW/CSRRS/CSRRC operations, unknown CSR reads zero, trap entry (mepc/mcause/mtval/mstatus), MRET restore, MEPC word alignment, mtvec/mepc output ports, MTIP/irq_pending
+- **CSR** (14 tests): Reset values, CSRRW/CSRRS/CSRRC operations, unknown CSR reads zero, trap entry (mepc/mcause/mtval/mstatus), MRET restore, MEPC word alignment, mtvec/mepc output ports, MTIP/irq_pending, ID CSRs, counters/mcountinhibit
 - **AXI-Lite Bridge** (11 tests): Reset state, basic read/write, error responses (DECERR/SLVERR), stalled channels, back-to-back transactions, 100-transaction random stress, write strobe variations, VALID stability
 
 ### Formal Verification
@@ -178,10 +180,10 @@ Proofs via Yosys/SymbiYosys:
 ## Architecture
 
 ### CPU Core (`rtl/core/sisRvCore.sv`)
-- **ISA**: RV32IM (complete base integer instruction set plus multiply/divide)
+- **ISA**: RV32IM (complete base integer instruction set plus multiply/divide; WFI legal no-op)
 - **Microarchitecture**: Multi-cycle FSM (FETCH → DECODE → EXECUTE → MEM → WB)
-- **Privilege**: M-mode only with CSRs (mstatus, mtvec, mepc, mcause, mtval, mscratch)
-- **Traps**: ECALL, EBREAK, illegal instruction → handler via mtvec, return via MRET
+- **Privilege**: M-mode only with CSRs (mstatus, misa, mtvec, mepc, mcause, mtval, mscratch, mie, mip, counters)
+- **Traps**: ECALL, EBREAK, illegal instruction, misaligned access, access fault → handler via mtvec, return via MRET
 
 ### Memory Map
 | Region | Base | Size | Notes |
@@ -205,8 +207,8 @@ The CI pipeline runs on every push/PR to `main`:
 | Job | Description | Tool |
 |-----|-------------|------|
 | **Lint** | Verilator lint check (all RTL) | Verilator 5.038 |
-| **Regression** | 30 assembly self-checking tests through corebus and AXI4-Lite paths | Verilator 5.038 + riscv64-gcc |
-| **cocotb** | 41 randomized/directed unit tests | Verilator 5.038 + cocotb |
+| **Regression** | 32 assembly self-checking tests through corebus and AXI4-Lite paths | Verilator 5.038 + riscv64-gcc |
+| **cocotb** | 43 randomized/directed unit tests | Verilator 5.038 + cocotb |
 | **Formal** | Required ALU + RegFile + Decoder proofs; optional AXI-Lite bounded safety check | Yosys + SymbiYosys + z3 |
 | **Synth** | Yosys synthesis of core + AXI bridge | Yosys |
 
@@ -223,7 +225,7 @@ tb/            Testbench
   models/      Behavioral models (AXI-Lite slave)
 sw/            Bare-metal BSP + assembly tests
   bsp/         crt0.S, link.ld
-  tests/asm/   Assembly test programs (30 tests)
+  tests/asm/   Assembly test programs (32 tests)
 formal/        Formal verification
   alu_add.sv       ALU formal proof wrapper (all 10 ops)
   alu_prove.ys     Yosys SAT proof script (ALU)
@@ -240,6 +242,7 @@ docs/          Architecture docs + plan
 
 ## Documentation
 
+- `docs/INDUSTRY_COMPARISON.md` — Benchmark vs. commercial cores + maturity plan to product
 - `docs/PLAN.md` — Complete milestone plan + exit criteria
 - `docs/EXTENSION_ROADMAP.md` — Extension order, use cases, and acceptance checks
 - `docs/MEMORY_MAP.md` — Address map
