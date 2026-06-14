@@ -193,8 +193,25 @@ sta-sky130:
 
 COSIM_SEEDS ?= 10000
 
-cosim-lockstep: build/sim_sisPlatformTop
-	python3 verification/cosim/spike_lockstep.py --seeds $(COSIM_SEEDS)
+COSIM_SIM ?= $(BUILD)/sim_cosim_$(TOP)
+
+$(COSIM_SIM): $(RTL_SRCS) $(TB_SRCS) $(CPP_SRCS)
+	@mkdir -p $(BUILD)
+	$(VERILATOR) -Wall -Wno-UNUSEDSIGNAL -Wno-WIDTHTRUNC -Wno-WIDTHEXPAND -Wno-SELRANGE -Wno-UNUSEDPARAM -Wno-SYNCASYNCNET --cc --exe --build \
+	  -O3 --trace-fst \
+	  -Irtl -Irtl/core -Irtl/bus -Irtl/periph -Irtl/debug -Itb/models \
+	  --top-module $(TOP) \
+	  -GROM_INIT_FILE='"rom.hex"' \
+	  -GRAM_INIT_FILE='"ram.hex"' \
+	  -GUSE_AXIL=0 \
+	  -GAXIL_STALL_RATE=0 \
+	  -GRESET_VECTOR=32\'h8000_0000 \
+	  $(RTL_SRCS) $(TB_SRCS) $(CPP_SRCS) \
+	  -o sim_cosim_$(TOP)
+	@cp obj_dir/sim_cosim_$(TOP) $(COSIM_SIM)
+
+cosim-lockstep: $(COSIM_SIM)
+	COSIM_SIM=$(COSIM_SIM) python3 verification/cosim/spike_lockstep.py --seeds $(COSIM_SEEDS)
 
 # ---------------------------------------------------------------------------
 # RISCOF architectural compliance (optional; requires external tools)

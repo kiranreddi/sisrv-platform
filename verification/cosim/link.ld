@@ -1,9 +1,8 @@
-/* Co-sim linker script: code in ROM at reset vector 0x0. */
+/* Co-sim linker script: code in RAM at 0x80000000 (Spike-friendly map). */
 ENTRY(_start)
 
 MEMORY
 {
-  ROM (rx)  : ORIGIN = 0x00000000, LENGTH = 64K
   RAM (rwx) : ORIGIN = 0x80000000, LENGTH = 256K
 }
 
@@ -12,9 +11,9 @@ SECTIONS
   .text : {
     *(.text.init)
     *(.text*)
-  } > ROM
+  } > RAM
 
-  .rodata : { *(.rodata*) } > ROM
+  .rodata : { *(.rodata*) } > RAM
 
   .data : {
     _data_start = .;

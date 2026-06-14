@@ -195,7 +195,7 @@ jobs:
       - name: Install Yosys and build OpenSTA
         run: |
           sudo apt-get update
-          sudo apt-get install -y yosys curl cmake tcl-dev swig bison flex zlib1g-dev
+          sudo apt-get install -y yosys curl cmake tcl-dev swig bison flex zlib1g-dev libeigen3-dev
           git clone --depth 1 https://github.com/The-OpenROAD-Project/OpenSTA.git /tmp/OpenSTA
           cmake -S /tmp/OpenSTA -B /tmp/OpenSTA/build -DCMAKE_BUILD_TYPE=Release
           cmake --build /tmp/OpenSTA/build -j$(nproc)

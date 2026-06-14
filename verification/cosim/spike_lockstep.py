@@ -2,7 +2,7 @@
 """Retired-instruction Spike vs RTL lock-step co-simulation."""
 from __future__ import annotations
 
-import argparse
+import os
 import random
 import re
 import subprocess
@@ -11,7 +11,7 @@ import tempfile
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
-SIM = REPO / "build" / "sim_sisPlatformTop"
+SIM = Path(os.environ.get("COSIM_SIM", REPO / "build" / "sim_sisPlatformTop"))
 ELF2SISRV = REPO / "verification" / "riscof" / "scripts" / "elf2sisrv.py"
 LINK_LD = REPO / "verification" / "cosim" / "link.ld"
 
@@ -118,7 +118,7 @@ def run_spike(elf: Path, log_path: Path) -> list[tuple[int, int]]:
     cmd = [
         "spike",
         "--isa=rv32im_zicsr",
-        "-m0x0:0x100000,0x80000000:0x100000",
+        "-m0x80000000:0x100000",
         "-l",
         str(elf),
     ]

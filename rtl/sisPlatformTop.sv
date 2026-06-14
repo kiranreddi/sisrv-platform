@@ -9,7 +9,8 @@ module sisPlatformTop #(
     parameter ROM_INIT_FILE = "rom.hex",
     parameter RAM_INIT_FILE = "",
     parameter int USE_AXIL  = 0,         // 0=corebus, 1=AXI4-Lite path
-    parameter int AXIL_STALL_RATE = 0    // stall injection % for AXI slave (TB only)
+    parameter int AXIL_STALL_RATE = 0,   // stall injection % for AXI slave (TB only)
+    parameter logic [31:0] RESET_VECTOR = 32'h0000_0000
 )(
     input  logic clk,
     input  logic rst_n,
@@ -138,7 +139,7 @@ module sisPlatformTop #(
   logic [4:0]  abs_regaddr;
   logic [31:0] abs_wdata, abs_rdata;
   sisRvCore #(
-    .RESET_VECTOR(32'h0000_0000),
+    .RESET_VECTOR(RESET_VECTOR),
     .ENABLE_C    (1'b1)
   ) u_core (
     .clk            (clk),
