@@ -65,6 +65,7 @@ def write_elf(prefix: str, words: list[int], out_dir: Path) -> Path:
         "-march=rv32im_zicsr",
         "-mabi=ilp32",
         "-Wl,-melf32lriscv",
+        "-Wl,--section-start,.text=0x10000",
         "-nostdlib",
         "-nostartfiles",
         "-static",
@@ -111,6 +112,7 @@ def run_spike(elf: Path) -> int:
             [
                 "spike",
                 "--isa=rv32im_zicsr",
+                "-m0x10000:0x100000",
                 "-m0x80000000:0x100000",
                 str(elf),
             ],
