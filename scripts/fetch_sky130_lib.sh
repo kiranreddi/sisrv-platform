@@ -5,10 +5,6 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 LIB_DIR="${ROOT}/third_party/sky130"
 LIB_FILE="${LIB_DIR}/sky130_fd_sc_hd__tt_025C_1v80.lib"
-LIB_URLS=(
-  "https://raw.githubusercontent.com/The-OpenROAD-Project/OpenROAD-flow-scripts/master/flow/platforms/sky130hd/lib/sky130_fd_sc_hd__tt_025C_1v80.lib"
-  "https://raw.githubusercontent.com/efabless/sky130-pdk-libs-sky130_fd_sc_hd/main/timing/sky130_fd_sc_hd__tt_025C_1v80.lib"
-)
 
 mkdir -p "${LIB_DIR}"
 
@@ -17,18 +13,14 @@ if [[ -s "${LIB_FILE}" ]]; then
   exit 0
 fi
 
-echo "Downloading Sky130 HD Liberty..."
-rm -f "${LIB_FILE}.tmp"
-for lib_url in "${LIB_URLS[@]}"; do
-  if curl -fsSL "${lib_url}" -o "${LIB_FILE}.tmp"; then
-    break
-  fi
-done
+echo "Downloading Sky130 HD Liberty via OpenROAD-flow-scripts sparse checkout..."
+TMP_ORFS="$(mktemp -d)"
+trap 'rm -rf "${TMP_ORFS}"' EXIT
 
-if [[ ! -s "${LIB_FILE}.tmp" ]]; then
-  echo "Failed to download Sky130 HD Liberty from known sources" >&2
-  exit 1
-fi
+git clone --depth 1 --filter=blob:none --sparse \
+  https://github.com/The-OpenROAD-Project/OpenROAD-flow-scripts.git "${TMP_ORFS}"
+cd "${TMP_ORFS}"
+git sparse-checkout set flow/platforms/sky130hd/lib
+cp flow/platforms/sky130hd/lib/sky130_fd_sc_hd__tt_025C_1v80.lib "${LIB_FILE}"
 
-mv "${LIB_FILE}.tmp" "${LIB_FILE}"
 echo "Sky130 Liberty ready: ${LIB_FILE}"

@@ -213,7 +213,7 @@ $(COSIM_STAMP): $(RTL_SRCS) $(TB_SRCS) $(CPP_SRCS)
 	@touch $(COSIM_STAMP)
 
 cosim-lockstep: $(COSIM_STAMP)
-	COSIM_SIM=$(abspath $(COSIM_SIM_BIN)) python3 verification/cosim/spike_lockstep.py --seeds $(COSIM_SEEDS)
+	COSIM_SIM=$(abspath $(COSIM_SIM_BIN)) python3 verification/cosim/spike_lockstep.py --seeds $(COSIM_SEEDS) --jobs $$(nproc)
 
 # ---------------------------------------------------------------------------
 # RISCOF architectural compliance (optional; requires external tools)

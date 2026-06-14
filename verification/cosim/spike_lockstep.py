@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import os
+from multiprocessing import Pool, cpu_count
 import random
 import re
 import subprocess
@@ -123,6 +124,12 @@ def _as_str(data) -> str:
     return str(data)
 
 
+def spike_program_commits(text: str) -> list[tuple[int, int]]:
+    commits = parse_spike_commits(text)
+    # Spike's built-in boot trampoline runs below the co-sim RAM image.
+    return [(pc, insn) for pc, insn in commits if pc >= 0x80000000]
+
+
 def run_spike(elf: Path, log_path: Path) -> list[tuple[int, int]]:
     cmd = [
         "spike",
@@ -136,16 +143,16 @@ def run_spike(elf: Path, log_path: Path) -> list[tuple[int, int]]:
             cmd,
             capture_output=True,
             text=True,
-            timeout=3,
+            timeout=1,
         )
     except subprocess.TimeoutExpired as exc:
         log = _as_str(exc.stdout) + _as_str(exc.stderr)
         log_path.write_text(log)
-        return parse_spike_commits(log)
+        return spike_program_commits(log)
 
     log = _as_str(proc.stdout) + _as_str(proc.stderr)
     log_path.write_text(log)
-    commits = parse_spike_commits(log)
+    commits = spike_program_commits(log)
     if not commits and proc.returncode != 0:
         print(log, file=sys.stderr)
         raise RuntimeError(f"Spike failed on {elf} (exit {proc.returncode})")
@@ -164,7 +171,7 @@ def run_verilator(rom_hex: Path, ram_hex: Path, commit_log: Path) -> list[tuple[
             [
                 str(SIM),
                 "--timeout-cycles",
-                "3000",
+                "1500",
                 "--commit-log",
                 str(commit_log),
             ],
@@ -211,10 +218,34 @@ def compare_commits(
             )
 
 
+def run_one_seed(cfg: tuple[int, str, int, str]) -> str | None:
+    seed, prefix, insns, sim_path = cfg
+    with tempfile.TemporaryDirectory() as tmp:
+        work = Path(tmp)
+        words = gen_program_words(seed, insns)
+        elf = write_elf(prefix, words, work)
+        rom_hex = work / "rom.hex"
+        ram_hex = work / "ram.hex"
+        spike_log = work / "spike.log"
+        rtl_log = work / "rtl.log"
+        elf_to_hex(elf, rom_hex, ram_hex)
+
+        spike_commits = run_spike(elf, spike_log)
+        global SIM
+        SIM = Path(sim_path)
+        rtl_commits = run_verilator(rom_hex, ram_hex, rtl_log)
+        try:
+            compare_commits(seed, spike_commits, rtl_commits, insns)
+        except RuntimeError as err:
+            return str(err)
+    return None
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--seeds", type=int, default=10000)
     parser.add_argument("--insns", type=int, default=12)
+    parser.add_argument("--jobs", type=int, default=min(8, cpu_count() or 4))
     parser.add_argument("--require-spike", action=argparse.BooleanOptionalAction, default=True)
     args = parser.parse_args()
 
@@ -231,27 +262,18 @@ def main() -> int:
         print("Spike required for lock-step co-sim but not installed", file=sys.stderr)
         return 1
 
-    with tempfile.TemporaryDirectory() as tmp:
-        work = Path(tmp)
-        for seed in range(args.seeds):
-            words = gen_program_words(seed, args.insns)
-            elf = write_elf(prefix, words, work)
-            rom_hex = work / f"rom_{seed}.hex"
-            ram_hex = work / f"ram_{seed}.hex"
-            spike_log = work / f"spike_{seed}.log"
-            rtl_log = work / f"rtl_{seed}.log"
-            elf_to_hex(elf, rom_hex, ram_hex)
-
-            spike_commits = run_spike(elf, spike_log)
-            rtl_commits = run_verilator(rom_hex, ram_hex, rtl_log)
-            try:
-                compare_commits(seed, spike_commits, rtl_commits, args.insns)
-            except RuntimeError as err:
+    sim_path = str(SIM)
+    tasks = [(seed, prefix, args.insns, sim_path) for seed in range(args.seeds)]
+    completed = 0
+    with Pool(processes=args.jobs) as pool:
+        for err in pool.imap_unordered(run_one_seed, tasks, chunksize=16):
+            completed += 1
+            if err is not None:
                 print(err, file=sys.stderr)
+                pool.terminate()
                 return 1
-
-            if (seed + 1) % 500 == 0:
-                print(f"Lock-step progress: {seed + 1}/{args.seeds} seeds")
+            if completed % 500 == 0:
+                print(f"Lock-step progress: {completed}/{args.seeds} seeds")
 
     print(
         f"Lock-step co-sim: {args.seeds} seeds PASS "
