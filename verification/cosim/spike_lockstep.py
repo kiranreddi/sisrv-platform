@@ -13,7 +13,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 SIM = REPO / "build" / "sim_sisPlatformTop"
 ELF2SISRV = REPO / "verification" / "riscof" / "scripts" / "elf2sisrv.py"
-LINK_LD = REPO / "sw" / "bsp" / "link.ld"
+LINK_LD = REPO / "verification" / "cosim" / "link.ld"
 
 TOOLCHAIN_PREFIXES = (
     "riscv64-unknown-elf-",
@@ -65,7 +65,6 @@ def write_elf(prefix: str, words: list[int], out_dir: Path) -> Path:
         "-march=rv32im_zicsr",
         "-mabi=ilp32",
         "-Wl,-melf32lriscv",
-        "-Wl,--section-start,.text=0x10000",
         "-nostdlib",
         "-nostartfiles",
         "-static",
@@ -76,7 +75,11 @@ def write_elf(prefix: str, words: list[int], out_dir: Path) -> Path:
         str(elf),
         str(asm),
     ]
-    subprocess.run(cmd, check=True, capture_output=True, text=True)
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    if proc.returncode != 0:
+        print(proc.stdout, file=sys.stderr)
+        print(proc.stderr, file=sys.stderr)
+        proc.check_returncode()
     return elf
 
 
