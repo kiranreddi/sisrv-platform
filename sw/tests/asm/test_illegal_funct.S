@@ -25,11 +25,8 @@ setup:
     csrw  mtvec, x1
     csrw  mscratch, x0
 
-    # RV32M-looking MUL encoding (funct7=1 under OP-ALU-REG)
-    .word 0x020080b3
-
-    # Invalid ALU reg: XOR with funct7=1
-    .word 0x02004033
+    # Invalid ALU reg: XOR with unsupported funct7=2
+    .word 0x04004033
 
     # Invalid branch funct3=010
     .word 0x00002063
@@ -44,7 +41,7 @@ setup:
     .word 0x0000100f
 
     csrr  x3, mscratch
-    li    x4, 6
+    li    x4, 5
     bne   x3, x4, fail
 
     li    x10, 1

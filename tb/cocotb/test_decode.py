@@ -67,8 +67,8 @@ LEGAL_OPCODES = [OP_LUI, OP_AUIPC, OP_JAL, OP_JALR, OP_BRANCH,
                  OP_LOAD, OP_STORE, OP_ALU_IMM, OP_ALU_REG, OP_FENCE, OP_SYSTEM]
 
 
-def is_rv32i_legal(instr):
-    """Return True when instr matches RV32I encoding rules."""
+def is_rv32im_legal(instr):
+    """Return True when instr matches RV32I/RV32M encoding rules."""
     opcode = instr & 0x7F
     funct3 = (instr >> 12) & 0x7
     funct7 = (instr >> 25) & 0x7F
@@ -94,7 +94,7 @@ def is_rv32i_legal(instr):
         return False
     if opcode == OP_ALU_REG:
         if funct7 == 0x01:
-            return False
+            return True
         if funct3 == 0:
             return funct7 in (0, 0x20)
         if funct3 in (1, 2, 3, 4, 6, 7):
@@ -175,8 +175,7 @@ async def test_decode_illegal_opcodes(dut):
 async def test_decode_illegal_funct_combos(dut):
     """Verify illegal funct3/funct7/system encodings are flagged illegal."""
     illegal_cases = [
-        ("RV32M MUL", encode_r(0x01, 3, 2, 0, 1, OP_ALU_REG)),
-        ("invalid ALU reg funct7", encode_r(0x01, 0, 0, 4, 0, OP_ALU_REG)),
+        ("invalid ALU reg funct7", encode_r(0x02, 0, 0, 4, 0, OP_ALU_REG)),
         ("invalid load funct3", encode_i(0, 0, 6, 0, OP_LOAD)),
         ("invalid store funct3", encode_s(0, 0, 0, 3, OP_STORE)),
         ("invalid branch funct3", encode_b(0, 0, 0, 2, OP_BRANCH)),
@@ -195,6 +194,8 @@ async def test_decode_illegal_funct_combos(dut):
     legal_cases = [
         ("ADD", encode_r(0, 0, 0, 0, 1, OP_ALU_REG)),
         ("SUB", encode_r(0x20, 0, 0, 0, 1, OP_ALU_REG)),
+        ("MUL", encode_r(0x01, 3, 2, 0, 1, OP_ALU_REG)),
+        ("DIVU", encode_r(0x01, 3, 2, 5, 1, OP_ALU_REG)),
         ("SLLI", encode_i(4, 0, 1, 1, OP_ALU_IMM)),
         ("LW", encode_i(0, 0, 2, 1, OP_LOAD)),
         ("SW", encode_s(0, 2, 1, 2, OP_STORE)),
@@ -368,7 +369,7 @@ async def test_decode_random_instructions(dut):
         dut.instr.value = instr
         await Timer(1, units="ns")
 
-        expected_legal = 1 if is_rv32i_legal(instr) else 0
+        expected_legal = 1 if is_rv32im_legal(instr) else 0
         got_legal = int(dut.is_legal.value)
         assert got_legal == expected_legal, \
             f"instr=0x{instr:08x}: is_legal expected={expected_legal} got={got_legal}"

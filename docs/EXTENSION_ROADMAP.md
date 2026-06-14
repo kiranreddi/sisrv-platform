@@ -10,10 +10,10 @@ cocotb unit tests, formal checks, and CI coverage.
 |---:|---|---|---|---|
 | 1 | GPIO | Smallest end-to-end peripheral slice | Board bring-up, LED/switch control, firmware-visible MMIO smoke tests | Done: corebus + AXI regression pass `test_gpio` |
 | 2 | UART | Reuses MMIO pattern, adds byte-stream I/O | Firmware console, boot logs, printf-style debugging | Done: TX/RX/status registers, loopback test, Verilator console capture |
-| 3 | RV32M | Isolated ISA extension before microarchitecture churn | Embedded math, DSP kernels, compiler support for `rv32im` | MUL/DIV/REM assembly tests, illegal when disabled |
+| 3 | RV32M | Isolated ISA extension before microarchitecture churn | Embedded math, DSP kernels, compiler support for `rv32im` | Done: MUL/DIV/REM assembly tests, disabled-mode decode proof |
 | 4 | PMP | Adds protection checks on existing memory requests | Firmware sandboxing, MMIO/ROM/RAM access policy validation | CSR tests plus access-fault assembly tests |
 | 5 | Debug | Needs stable bus, CSRs, and halt behavior | External halt/resume, register inspection, bring-up workflows | Halt/resume smoke test and debug CSR/register access model |
-| 6 | 3-stage pipeline | Largest behavior change, best after ISA/peripheral baseline | Better IPC while preserving the same software contract | Existing 29-test suite unchanged, plus hazard/flush tests |
+| 6 | 3-stage pipeline | Largest behavior change, best after ISA/peripheral baseline | Better IPC while preserving the same software contract | Existing 30-test suite unchanged, plus hazard/flush tests |
 
 ## Implemented slice 1: GPIO
 
@@ -59,15 +59,19 @@ Implemented surfaces:
 - Verilator harness console output for `uart_tx_valid` bytes.
 - `sw/tests/asm/test_uart.S` directed assembly regression.
 
-## RV32M slice
+## Implemented slice 3: RV32M
 
-Recommended implementation:
+RV32M is the third implemented extension.
 
-- Add `ENABLE_M` parameter, default off until tests are complete.
-- Decode opcode `0110011` with funct7 `0000001`.
-- Start with single-cycle MUL/MULH/MULHU/MULHSU if timing is acceptable for this educational target.
-- Implement DIV/DIVU/REM/REMU with RISC-V edge cases: divide by zero, signed overflow, remainder sign.
-- Update `RV_ARCH` to `rv32im_zicsr` when enabled, or keep handwritten encodings for disabled-mode tests.
+Implemented surfaces:
+
+- `ENABLE_M` parameter on `sisRvCore` and `sisDecode`, default enabled for the platform.
+- Decode of opcode `0110011` with funct7 `0000001`.
+- Single-cycle combinational MUL/MULH/MULHU/MULHSU execution in the existing FSM execute stage.
+- DIV/DIVU/REM/REMU execution with RISC-V divide-by-zero, signed overflow, and remainder edge cases.
+- `sw/tests/asm/test_rv32m.S` directed assembly regression.
+- Decoder formal wrapper proves RV32M legality when enabled and illegal behavior when disabled.
+- `RV_ARCH=rv32im_zicsr` for software builds.
 
 ## PMP slice
 

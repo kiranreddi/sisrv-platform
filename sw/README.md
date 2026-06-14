@@ -4,7 +4,7 @@ This folder holds the bare-metal BSP and assembly tests for the sisrv-platform.
 
 ## Toolchain
 
-- `riscv64-linux-gnu-gcc` (compile RV32I via `-march=rv32i_zicsr -mabi=ilp32`)
+- `riscv64-linux-gnu-gcc` (compile RV32IM via `-march=rv32im_zicsr -mabi=ilp32`)
 - Install: `sudo apt-get install gcc-riscv64-linux-gnu binutils-riscv64-linux-gnu`
 
 ## Directory structure
@@ -43,6 +43,7 @@ make run-test_addi  # Run a specific test
 | test_lui_auipc | LUI, AUIPC |
 | test_jal_jalr | JAL, JALR |
 | test_load_store | LW, LH, LHU, LB, LBU, SW, SH, SB |
+| test_rv32m | MUL/MULH/MULHSU/MULHU/DIV/DIVU/REM/REMU |
 | test_x0 | x0 hardwired zero invariant |
 | test_csr | CSR read/write (CSRRW, CSRRS, CSRRC, CSRRWI) |
 | test_ecall | ECALL trap + MRET return |

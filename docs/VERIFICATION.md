@@ -7,10 +7,10 @@ tests, randomized cocotb unit tests, and formal proofs. All tests run on Verilat
 
 ## Verification Tiers
 
-### Tier 1: Directed Assembly Tests (29 tests)
+### Tier 1: Directed Assembly Tests (30 tests)
 
 Self-checking assembly tests that write 1 to `0x10000000` (PASS) or 0 (FAIL).
-Compiled with `rv32i_zicsr` ISA and run on the full platform simulation.
+Compiled with `rv32im_zicsr` ISA and run on the full platform simulation.
 
 | Category | Tests | What's Verified |
 |----------|-------|-----------------|
@@ -19,6 +19,7 @@ Compiled with `rv32i_zicsr` ISA and run on the full platform simulation.
 | Logic | test_logic | AND/OR/XOR/ANDI/ORI/XORI |
 | Shift | test_shift | SLL/SRL/SRA/SLLI/SRLI/SRAI |
 | Compare | test_slt | SLT/SLTU/SLTI/SLTIU |
+| RV32M | test_rv32m | MUL/MULH/MULHSU/MULHU/DIV/DIVU/REM/REMU, divide-by-zero, signed overflow |
 | Branch | test_branch, test_branch_edge | All 6 branches + INT_MIN/MAX boundary values |
 | Jump | test_jal_jalr, test_jalr_align | JAL/JALR, bit[0] masking, rd=x0 |
 | Memory | test_load_store, test_mem_edge, test_ram_walk | All load/store variants, byte lanes, walking patterns |
@@ -57,7 +58,7 @@ Unit-level tests using cocotb with constrained random stimulus on Verilator 5.03
 - B-type immediate (13-bit signed, bit 0 always 0)
 - J-type immediate (21-bit signed, bit 0 always 0)
 - funct3/funct7 extraction
-- 1000 random instructions with RV32I field/legality verification
+- 1000 random instructions with RV32I/RV32M field/legality verification
 
 **CSR (12 tests)**:
 - Reset values (all 8 CSRs read as 0)
@@ -99,7 +100,8 @@ Unit-level tests using cocotb with constrained random stimulus on Verilator 5.03
 **Decoder** (`formal/decode_legal.sv`):
 - Field extraction correct for all 2^32 instructions
 - U/B/J immediate alignment invariants proven
-- is_legal matches RV32I encoding rules (opcode + funct3/funct7/system/fence)
+- is_legal matches RV32I/RV32M encoding rules (opcode + funct3/funct7/system/fence)
+- RV32M encodings are illegal when `ENABLE_M=0`
 - Proven using Yosys SAT solver
 
 **AXI-Lite Bridge** (`formal/axil_master.sv`):
@@ -113,7 +115,7 @@ Unit-level tests using cocotb with constrained random stimulus on Verilator 5.03
 ## Running Tests
 
 ```bash
-# Run all assembly tests (29 tests)
+# Run all assembly tests (30 tests)
 make regress
 
 # Run cocotb tests (41 tests)
@@ -136,7 +138,7 @@ make lint && make regress && make cocotb && make formal
 
 GitHub Actions workflow (`.github/workflows/ci.yml`) runs on every push/PR:
 1. **Lint** — Verilator lint check
-2. **Regression** — 29 assembly tests (corebus + AXI4-Lite paths)
+2. **Regression** — 30 assembly tests (corebus + AXI4-Lite paths)
 3. **cocotb** — 41 randomized unit tests
 4. **Formal** — ALU + RegFile + Decoder proofs
 5. **Synth** — Yosys synthesis (`make synth`)
@@ -150,6 +152,7 @@ GitHub Actions workflow (`.github/workflows/ci.yml`) runs on every push/PR:
 ## Coverage Goals
 
 - ✅ All RV32I opcodes covered
+- ✅ All RV32M opcodes covered
 - ✅ Branch taken/not-taken for all 6 conditions
 - ✅ All load/store sizes and sign extension
 - ✅ All CSR operations + immediate forms

@@ -1,7 +1,9 @@
 // sisDecode.sv — RV32I instruction decoder
 // Extracts immediates, register addresses, and control signals.
 
-module sisDecode (
+module sisDecode #(
+    parameter bit ENABLE_M = 1'b1
+)(
     input  logic [31:0] instr,
 
     // Register addresses
@@ -79,7 +81,7 @@ module sisDecode (
   assign is_system  = (opcode == OP_SYSTEM);
   assign is_fence   = (opcode == OP_FENCE);
 
-  // RV32I encoding legality (opcode + funct3/funct7/system/fence fields)
+  // RV32I/RV32M encoding legality (opcode + funct3/funct7/system/fence fields)
   logic legal_lui, legal_auipc, legal_jal, legal_jalr;
   logic legal_branch, legal_load, legal_store;
   logic legal_alu_imm, legal_alu_reg;
@@ -112,7 +114,7 @@ module sisDecode (
       ((funct3 == 3'b101) && ((funct7 == 7'b0000000) || (funct7 == 7'b0100000)))
   );
 
-  assign legal_alu_reg = is_alu_reg && (funct7 != 7'b0000001) && (
+  assign legal_alu_reg = is_alu_reg && (
       ((funct3 == 3'b000) && ((funct7 == 7'b0000000) || (funct7 == 7'b0100000))) ||
       ((funct3 == 3'b001) && (funct7 == 7'b0000000)) ||
       ((funct3 == 3'b010) && (funct7 == 7'b0000000)) ||
@@ -120,7 +122,8 @@ module sisDecode (
       ((funct3 == 3'b100) && (funct7 == 7'b0000000)) ||
       ((funct3 == 3'b101) && ((funct7 == 7'b0000000) || (funct7 == 7'b0100000))) ||
       ((funct3 == 3'b110) && (funct7 == 7'b0000000)) ||
-      ((funct3 == 3'b111) && (funct7 == 7'b0000000))
+      ((funct3 == 3'b111) && (funct7 == 7'b0000000)) ||
+      (ENABLE_M && (funct7 == 7'b0000001))
   );
 
   // ECALL/EBREAK/MRET or CSR ops with valid funct3

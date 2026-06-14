@@ -1,12 +1,12 @@
 # Implementation Status
 
-**Last updated**: 2026-06-13
+**Last updated**: 2026-06-14
 
 ## Summary
 
-The sisrv-platform project implements a fully functional RV32I RISC-V processor core
+The sisrv-platform project implements a fully functional RV32IM RISC-V processor core
 with M-mode CSRs, trap handling, timer interrupts, GPIO, UART, and an AXI4-Lite master bridge.
-The core is verified through 29 directed assembly tests, 41 cocotb randomized unit tests,
+The core is verified through 30 directed assembly tests, 41 cocotb randomized unit tests,
 and 4 formal proofs — all running on Verilator 5.038.
 
 ## Milestone Status
@@ -38,10 +38,10 @@ and 4 formal proofs — all running on Verilator 5.038.
 | `sisRvCore.sv` | ✅ Done | 7-state FSM: FETCH_REQ→FETCH_WAIT→DECODE→EXECUTE→MEM_REQ→MEM_WAIT→WB |
 | `sisAlu.sv` | ✅ Done | ADD/SUB/SLL/SLT/SLTU/XOR/SRL/SRA/OR/AND |
 | `sisRegFile.sv` | ✅ Done | 32x32 reg file, x0 hardwired, 2R/1W |
-| `sisDecode.sv` | ✅ Done | All RV32I instruction types decoded |
+| `sisDecode.sv` | ✅ Done | All RV32I/RV32M instruction types decoded |
 | `sisMemFabric.sv` | ✅ Done | Address decoder: ROM/RAM/MMIO routing |
 
-**Test coverage** (29 directed tests, all passing):
+**Test coverage** (30 directed tests, all passing):
 
 | Test | Instructions Covered |
 |------|---------------------|
@@ -72,6 +72,7 @@ and 4 formal proofs — all running on Verilator 5.038.
 | test_mret_boundary | MRET exact resume point: no skipped/repeated instructions |
 | test_gpio | GPIO MMIO: DATA, DIR, IN, SET, CLR registers |
 | test_uart | UART MMIO: TXDATA, RXDATA, STATUS, CTRL, BAUDDIV, loopback |
+| test_rv32m | MUL/MULH/MULHSU/MULHU/DIV/DIVU/REM/REMU, divide-by-zero, signed overflow |
 
 **Exit criteria**: 25 directed tests covering all instruction groups ✅,
 x0 always 0 ✅, PC word-aligned ✅, correct sign/zero extension ✅
@@ -132,7 +133,7 @@ x0 always 0 ✅, PC word-aligned ✅, correct sign/zero extension ✅
 | AXI-Lite timer support | ✅ Done | `tb/models/sisAxiLiteSlave.sv` models MTIME/MTIMECMP and MTIP |
 | AXI-Lite GPIO support | ✅ Done | `tb/models/sisAxiLiteSlave.sv` models DATA/DIR/IN/SET/CLR |
 | AXI-Lite UART support | ✅ Done | `tb/models/sisAxiLiteSlave.sv` models TXDATA/RXDATA/STATUS/CTRL/BAUDDIV |
-| AXI-Lite system regression | ✅ Done | `make regress-axil` runs all 29 assembly tests through the AXI path |
+| AXI-Lite system regression | ✅ Done | `make regress-axil` runs all 30 assembly tests through the AXI path |
 | cocotb bridge tests | ✅ Done | 11 tests: reset, R/W, errors, stalls, 100-txn random stress |
 | Formal AXI-Lite bridge | Optional | Bounded VALID stability, mutual exclusion, data stability (`make formal-axil`) |
 
@@ -166,13 +167,17 @@ timer interrupt tests run with the AXI slave timer model ✅, CI covers `make re
 
 ---
 
-### 🔲 Milestone 5 — RV32M (mul/div)
-**Status: NOT STARTED**
+### ✅ Milestone 5 — RV32M (mul/div)
+**Status: COMPLETE**
 
-Planned:
-- MUL/MULH/MULHU/MULHSU
-- DIV/DIVU/REM/REMU
-- `ENABLE_M` configuration knob
+| Deliverable | Status | Notes |
+|-------------|--------|-------|
+| `ENABLE_M` configuration knob | ✅ Done | `sisRvCore` and `sisDecode`, default enabled |
+| RV32M decode | ✅ Done | OP-ALU-REG with funct7=1 |
+| Multiply ops | ✅ Done | MUL/MULH/MULHSU/MULHU |
+| Divide/remainder ops | ✅ Done | DIV/DIVU/REM/REMU with RISC-V edge cases |
+| Directed regression | ✅ Done | test_rv32m covers multiply, divide, divide-by-zero, signed overflow |
+| Disabled-mode legality | ✅ Done | Formal decoder wrapper proves RV32M illegal when `ENABLE_M=0` |
 
 ---
 
@@ -231,8 +236,8 @@ Planned:
 | Verilator version | 5.038 |
 | Lint status | ✅ Clean (Wall, no warnings) |
 | Compiler | riscv64-linux-gnu-gcc 13.3 |
-| Assembly test suite | 29 tests |
-| Assembly regression | 29/29 passing through corebus and AXI4-Lite paths |
+| Assembly test suite | 30 tests |
+| Assembly regression | 30/30 passing through corebus and AXI4-Lite paths |
 | cocotb unit tests | 41 tests (3 ALU + 4 RegFile + 11 Decode + 12 CSR + 11 AXI-Lite) |
 | cocotb status | 41/41 passing |
 | Formal proofs/checks | Required: ALU (all 10 ops), RegFile (x0=0), Decode (fields + legality). Optional: AXI-Lite bounded safety (`make formal-axil`) |
@@ -246,7 +251,7 @@ Planned:
 
 ### RTL (synthesizable)
 - `rtl/sisPlatformTop.sv` — Top-level platform integration (USE_AXIL param switch)
-- `rtl/core/sisRvCore.sv` — RV32I multi-cycle FSM CPU core (with interrupt support)
+- `rtl/core/sisRvCore.sv` — RV32IM multi-cycle FSM CPU core (with interrupt support)
 - `rtl/core/sisAlu.sv` — Arithmetic/Logic Unit
 - `rtl/core/sisDecode.sv` — Instruction decoder
 - `rtl/core/sisRegFile.sv` — 32-entry register file
@@ -283,7 +288,7 @@ Planned:
 ### Software
 - `sw/bsp/crt0.S` — C runtime startup
 - `sw/bsp/link.ld` — Linker script
-- `sw/tests/asm/test_*.S` — 29 assembly test programs
+- `sw/tests/asm/test_*.S` — 30 assembly test programs
 
 ### Build & CI
 - `Makefile` — Build, lint, sim, regression, cocotb, formal, synth targets

@@ -2,9 +2,9 @@
 
 [![CI](https://github.com/kiranreddi/sisrv-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/kiranreddi/sisrv-platform/actions/workflows/ci.yml)
 
-ASIC-first, open-source end-to-end RISC-V (RV32I) platform using **Verilator** as the primary simulator.
+ASIC-first, open-source end-to-end RISC-V (RV32IM) platform using **Verilator** as the primary simulator.
 
-This repo implements a complete RV32I multi-cycle FSM core with M-mode CSRs, trap handling,
+This repo implements a complete RV32IM multi-cycle FSM core with M-mode CSRs, trap handling,
 timer interrupts, and AXI4-Lite bridge integration — connected to ROM, RAM, timer, GPIO, UART, and MMIO
 peripherals via a configurable bus path (corebus or AXI4-Lite).
 
@@ -13,12 +13,12 @@ peripherals via a configurable bus path (corebus or AXI4-Lite).
 | Milestone | Status |
 |-----------|--------|
 | M0 — Sim harness & golden flow | ✅ Complete |
-| M1 — RV32I multi-cycle core | ✅ Complete (29/29 tests pass) |
+| M1 — RV32I multi-cycle core | ✅ Complete |
 | M2 — CSRs + traps (M-mode) | ✅ Complete |
 | M2.5 — Verification infrastructure | ✅ Complete (41 cocotb + 4 formal) |
 | M3 — AXI4-Lite master bridge | ✅ Complete |
 | M4 — Timer interrupt | ✅ Complete |
-| M5 — RV32M (mul/div) | 🔲 Planned |
+| M5 — RV32M (mul/div) | ✅ Complete (30/30 tests pass) |
 | M6 — 3-stage pipeline | 🔲 Planned |
 | M7 — Yosys synthesis | ✅ Complete |
 | M8 — OpenROAD hardening | 🔲 Planned |
@@ -67,7 +67,7 @@ make sw
 # Run a single test (the basic PASS test)
 make sim
 
-# Run full regression suite (29 tests)
+# Run full regression suite (30 tests)
 make regress
 
 # Run full regression suite through AXI4-Lite path
@@ -127,23 +127,25 @@ $ make regress
   PASS: test_mret_boundary
   PASS: test_pass
   PASS: test_ram_walk
+  PASS: test_rv32m
   PASS: test_shift
   PASS: test_slt
   PASS: test_timer
   PASS: test_uart
   PASS: test_x0
-=== Results: 29/29 passed, 0 failed ===
+=== Results: 30/30 passed, 0 failed ===
 ```
 
 ## Verification
 
-### Assembly Tests (29 tests)
-Directed self-checking tests covering all RV32I instructions:
+### Assembly Tests (30 tests)
+Directed self-checking tests covering all RV32I instructions plus RV32M multiply/divide:
 
 | Category | Tests | Coverage |
 |----------|-------|----------|
 | ALU | test_add_sub, test_addi, test_alu_edge | ADD/SUB/ADDI with overflow, INT_MIN/MAX, zero edge cases |
 | Logic | test_logic, test_shift, test_slt | AND/OR/XOR/SLL/SRL/SRA/SLT/SLTU |
+| RV32M | test_rv32m | MUL/MULH/MULHSU/MULHU/DIV/DIVU/REM/REMU, divide-by-zero, signed overflow |
 | Memory | test_load_store, test_mem_edge, test_ram_walk | LB/LBU/LH/LHU/LW/SB/SH/SW, all byte lanes, walking ones/zeros |
 | Branch | test_branch, test_branch_edge | BEQ/BNE/BLT/BGE/BLTU/BGEU, INT_MIN/MAX boundaries |
 | Jump | test_jal_jalr, test_jalr_align | JAL/JALR, bit[0] masking, rd=x0 |
@@ -170,13 +172,13 @@ Proofs via Yosys/SymbiYosys:
 
 - **ALU**: All 10 operations (ADD, SUB, SLL, SLT, SLTU, XOR, SRL, SRA, OR, AND) formally proven correct for all 2^64 input combinations. Zero flag proven correct.
 - **RegFile**: x0-always-zero property proven by k-induction for any sequence of writes.
-- **Decoder**: Field extraction, U/B/J immediate alignment invariants, RV32I encoding legality — all proven for all 2^32 possible instructions.
+- **Decoder**: Field extraction, U/B/J immediate alignment invariants, RV32I/RV32M encoding legality, and disabled-RV32M illegal behavior — all proven for all 2^32 possible instructions.
 - **AXI-Lite Bridge**: VALID stability (AR/AW/W channels), mutual exclusion of read/write activity, corebus response stability, address/data stability — covered by cocotb/regression and available as an optional bounded formal safety check.
 
 ## Architecture
 
 ### CPU Core (`rtl/core/sisRvCore.sv`)
-- **ISA**: RV32I (complete base integer instruction set)
+- **ISA**: RV32IM (complete base integer instruction set plus multiply/divide)
 - **Microarchitecture**: Multi-cycle FSM (FETCH → DECODE → EXECUTE → MEM → WB)
 - **Privilege**: M-mode only with CSRs (mstatus, mtvec, mepc, mcause, mtval, mscratch)
 - **Traps**: ECALL, EBREAK, illegal instruction → handler via mtvec, return via MRET
@@ -203,7 +205,7 @@ The CI pipeline runs on every push/PR to `main`:
 | Job | Description | Tool |
 |-----|-------------|------|
 | **Lint** | Verilator lint check (all RTL) | Verilator 5.038 |
-| **Regression** | 29 assembly self-checking tests through corebus and AXI4-Lite paths | Verilator 5.038 + riscv64-gcc |
+| **Regression** | 30 assembly self-checking tests through corebus and AXI4-Lite paths | Verilator 5.038 + riscv64-gcc |
 | **cocotb** | 41 randomized/directed unit tests | Verilator 5.038 + cocotb |
 | **Formal** | Required ALU + RegFile + Decoder proofs; optional AXI-Lite bounded safety check | Yosys + SymbiYosys + z3 |
 | **Synth** | Yosys synthesis of core + AXI bridge | Yosys |
@@ -221,7 +223,7 @@ tb/            Testbench
   models/      Behavioral models (AXI-Lite slave)
 sw/            Bare-metal BSP + assembly tests
   bsp/         crt0.S, link.ld
-  tests/asm/   Assembly test programs (29 tests)
+  tests/asm/   Assembly test programs (30 tests)
 formal/        Formal verification
   alu_add.sv       ALU formal proof wrapper (all 10 ops)
   alu_prove.ys     Yosys SAT proof script (ALU)

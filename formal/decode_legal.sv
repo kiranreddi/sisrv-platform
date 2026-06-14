@@ -1,6 +1,6 @@
 // decode_legal_wrapper.sv — Formal proof for decoder legality and immediate invariants
 // Proves:
-//   1. is_legal matches RV32I encoding rules (opcode + funct3/funct7/system/fence)
+//   1. is_legal matches RV32I/RV32M encoding rules (opcode + funct3/funct7/system/fence)
 //   2. Exactly one type flag is set when instruction is legal
 //   3. U-type immediate has lower 12 bits always zero
 
@@ -20,8 +20,20 @@ module decode_legal_wrapper (
     logic        is_alu_imm, is_alu_reg;
     logic        is_system, is_fence;
     logic        is_legal;
+    logic        disabled_is_legal;
+    logic [4:0]  disabled_rs1, disabled_rs2, disabled_rd;
+    logic [31:0] disabled_imm_i, disabled_imm_s, disabled_imm_b, disabled_imm_u, disabled_imm_j;
+    logic [6:0]  disabled_opcode;
+    logic [2:0]  disabled_funct3;
+    logic [6:0]  disabled_funct7;
+    logic        disabled_is_lui, disabled_is_auipc, disabled_is_jal, disabled_is_jalr;
+    logic        disabled_is_branch, disabled_is_load, disabled_is_store;
+    logic        disabled_is_alu_imm, disabled_is_alu_reg;
+    logic        disabled_is_system, disabled_is_fence;
 
-    sisDecode dut (
+    sisDecode #(
+        .ENABLE_M (1'b1)
+    ) dut (
         .instr     (instr),
         .rs1       (rs1),
         .rs2       (rs2),
@@ -46,6 +58,35 @@ module decode_legal_wrapper (
         .is_system (is_system),
         .is_fence  (is_fence),
         .is_legal  (is_legal)
+    );
+
+    sisDecode #(
+        .ENABLE_M (1'b0)
+    ) disabled_m_dut (
+        .instr     (instr),
+        .rs1       (disabled_rs1),
+        .rs2       (disabled_rs2),
+        .rd        (disabled_rd),
+        .imm_i     (disabled_imm_i),
+        .imm_s     (disabled_imm_s),
+        .imm_b     (disabled_imm_b),
+        .imm_u     (disabled_imm_u),
+        .imm_j     (disabled_imm_j),
+        .opcode    (disabled_opcode),
+        .funct3    (disabled_funct3),
+        .funct7    (disabled_funct7),
+        .is_lui    (disabled_is_lui),
+        .is_auipc  (disabled_is_auipc),
+        .is_jal    (disabled_is_jal),
+        .is_jalr   (disabled_is_jalr),
+        .is_branch (disabled_is_branch),
+        .is_load   (disabled_is_load),
+        .is_store  (disabled_is_store),
+        .is_alu_imm(disabled_is_alu_imm),
+        .is_alu_reg(disabled_is_alu_reg),
+        .is_system (disabled_is_system),
+        .is_fence  (disabled_is_fence),
+        .is_legal  (disabled_is_legal)
     );
 
     logic exp_legal_lui, exp_legal_auipc, exp_legal_jal, exp_legal_jalr;
@@ -81,7 +122,7 @@ module decode_legal_wrapper (
         ((funct3 == 3'b101) && ((funct7 == 7'b0000000) || (funct7 == 7'b0100000)))
     );
 
-    assign exp_legal_alu_reg = is_alu_reg && (funct7 != 7'b0000001) && (
+    assign exp_legal_alu_reg = is_alu_reg && (
         ((funct3 == 3'b000) && ((funct7 == 7'b0000000) || (funct7 == 7'b0100000))) ||
         ((funct3 == 3'b001) && (funct7 == 7'b0000000)) ||
         ((funct3 == 3'b010) && (funct7 == 7'b0000000)) ||
@@ -89,7 +130,8 @@ module decode_legal_wrapper (
         ((funct3 == 3'b100) && (funct7 == 7'b0000000)) ||
         ((funct3 == 3'b101) && ((funct7 == 7'b0000000) || (funct7 == 7'b0100000))) ||
         ((funct3 == 3'b110) && (funct7 == 7'b0000000)) ||
-        ((funct3 == 3'b111) && (funct7 == 7'b0000000))
+        ((funct3 == 3'b111) && (funct7 == 7'b0000000)) ||
+        (funct7 == 7'b0000001)
     );
 
     assign exp_legal_system = is_system && (
@@ -134,9 +176,16 @@ module decode_legal_wrapper (
         assert (imm_j[0] == 1'b0);
     end
 
-    // Property 5: is_legal matches RV32I encoding rules
+    // Property 5: is_legal matches RV32I/RV32M encoding rules
     always @(*) begin
         assert (is_legal == exp_legal);
+    end
+
+    // Property 6: RV32M encodings trap as illegal when the extension is disabled.
+    always @(*) begin
+        if (opcode == 7'b0110011 && funct7 == 7'b0000001) begin
+            assert (disabled_is_legal == 1'b0);
+        end
     end
 
 endmodule

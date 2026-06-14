@@ -1,4 +1,4 @@
-/* Linker script for sisrv-platform bare-metal tests (RV32I) */
+/* Linker script for sisrv-platform bare-metal tests (RV32IM) */
 ENTRY(_start)
 
 MEMORY

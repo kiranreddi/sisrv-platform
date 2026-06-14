@@ -3,7 +3,8 @@
 // States: FETCH_REQ -> FETCH_WAIT -> DECODE -> EXECUTE -> MEM_REQ -> MEM_WAIT -> WB
 
 module sisRvCore #(
-    parameter logic [31:0] RESET_VECTOR = 32'h0000_0000
+    parameter logic [31:0] RESET_VECTOR = 32'h0000_0000,
+    parameter bit          ENABLE_M     = 1'b1
 )(
     input  logic        clk,
     input  logic        rst_n,
@@ -67,7 +68,9 @@ module sisRvCore #(
   logic        dec_is_system, dec_is_fence;
   logic        dec_is_legal;
 
-  sisDecode u_decode (
+  sisDecode #(
+    .ENABLE_M (ENABLE_M)
+  ) u_decode (
     .instr     (instr_reg),
     .rs1       (dec_rs1),
     .rs2       (dec_rs2),
@@ -125,6 +128,8 @@ module sisRvCore #(
   logic [3:0]  alu_op;
   logic [31:0] alu_result;
   logic        alu_zero;
+  logic        dec_is_m_op;
+  logic [31:0] m_result;
 
   sisAlu u_alu (
     .a      (alu_a),
@@ -133,6 +138,67 @@ module sisRvCore #(
     .result (alu_result),
     .zero   (alu_zero)
   );
+
+  assign dec_is_m_op = ENABLE_M && dec_is_alu_reg && (dec_funct7 == 7'b0000001);
+
+  function automatic logic [31:0] rv32m_result(
+      input logic [31:0] lhs,
+      input logic [31:0] rhs,
+      input logic [2:0]  op
+  );
+    logic signed [31:0] lhs_s;
+    logic signed [31:0] rhs_s;
+    logic signed [63:0] lhs_s64;
+    logic signed [63:0] rhs_s64;
+    logic signed [63:0] rhs_u64_s;
+    logic [63:0]        lhs_u64;
+    logic [63:0]        rhs_u64;
+    logic signed [63:0] ss_product;
+    logic signed [63:0] su_product;
+    logic [63:0]        uu_product;
+    begin
+      lhs_s      = lhs;
+      rhs_s      = rhs;
+      lhs_s64    = {{32{lhs[31]}}, lhs};
+      rhs_s64    = {{32{rhs[31]}}, rhs};
+      rhs_u64_s  = {32'h0, rhs};
+      lhs_u64    = {32'h0, lhs};
+      rhs_u64    = {32'h0, rhs};
+      ss_product = lhs_s64 * rhs_s64;
+      su_product = lhs_s64 * rhs_u64_s;
+      uu_product = lhs_u64 * rhs_u64;
+
+      case (op)
+        3'b000: rv32m_result = ss_product[31:0]; // MUL
+        3'b001: rv32m_result = ss_product[63:32]; // MULH
+        3'b010: rv32m_result = su_product[63:32]; // MULHSU
+        3'b011: rv32m_result = uu_product[63:32]; // MULHU
+        3'b100: begin // DIV
+          if (rhs == 32'h0)
+            rv32m_result = 32'hFFFF_FFFF;
+          else if ((lhs == 32'h8000_0000) && (rhs == 32'hFFFF_FFFF))
+            rv32m_result = 32'h8000_0000;
+          else
+            rv32m_result = lhs_s / rhs_s;
+        end
+        3'b101: rv32m_result = (rhs == 32'h0) ? 32'hFFFF_FFFF : (lhs / rhs); // DIVU
+        3'b110: begin // REM
+          if (rhs == 32'h0)
+            rv32m_result = lhs;
+          else if ((lhs == 32'h8000_0000) && (rhs == 32'hFFFF_FFFF))
+            rv32m_result = 32'h0;
+          else
+            rv32m_result = lhs_s % rhs_s;
+        end
+        3'b111: rv32m_result = (rhs == 32'h0) ? lhs : (lhs % rhs); // REMU
+        default: rv32m_result = 32'h0;
+      endcase
+    end
+  endfunction
+
+  always_comb begin
+    m_result = rv32m_result(rs1_val, rs2_val, dec_funct3);
+  end
 
   // ---------------------------------------------------------------
   // CSR unit
@@ -397,7 +463,7 @@ module sisRvCore #(
 
         // ----- EXECUTE -----
         S_EXECUTE: begin
-          alu_result_reg <= alu_result;
+          alu_result_reg <= dec_is_m_op ? m_result : alu_result;
           mem_addr_reg   <= alu_result; // used for load/store address
 
           if (dec_is_load || dec_is_store) begin
