@@ -112,7 +112,6 @@ def run_spike(elf: Path) -> int:
                 "spike",
                 "--isa=rv32im_zicsr",
                 "-m0x80000000:0x100000",
-                "-m0x00000000:0x100000",
                 str(elf),
             ],
             capture_output=True,
