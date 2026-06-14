@@ -2,6 +2,7 @@
 """Retired-instruction Spike vs RTL lock-step co-simulation."""
 from __future__ import annotations
 
+import argparse
 import os
 import random
 import re
