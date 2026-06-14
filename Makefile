@@ -32,8 +32,8 @@ CPP_SRCS := $(wildcard tb/verilator/*.cpp)
 ASM_TESTS := $(wildcard sw/tests/asm/*.S)
 ASM_HEXES := $(patsubst sw/tests/asm/%.S,$(BUILD)/tests/%.hex,$(ASM_TESTS))
 
-.PHONY: sim lint clean wave regress regress-axil regress-axil-stall sw all tests cocotb formal formal-axil synth sta cosim-lockstep \
-        riscof-check-tools riscof-smoke riscof-rv32i riscof-rv32im
+.PHONY: sim lint clean wave regress regress-axil regress-axil-stall sw all tests cocotb formal formal-axil synth sta sta-sky130 cosim-lockstep \
+        riscof-check-tools riscof-smoke riscof-act riscof-rv32i riscof-rv32im
 
 
 all: sim
@@ -41,7 +41,7 @@ all: sim
 # Build Verilator simulation binary
 $(SIM): $(RTL_SRCS) $(TB_SRCS) $(CPP_SRCS)
 	@mkdir -p $(BUILD)
-	$(VERILATOR) -Wall -Wno-UNUSEDSIGNAL -Wno-WIDTHTRUNC -Wno-WIDTHEXPAND -Wno-SELRANGE -Wno-UNUSEDPARAM --cc --exe --build \
+	$(VERILATOR) -Wall -Wno-UNUSEDSIGNAL -Wno-WIDTHTRUNC -Wno-WIDTHEXPAND -Wno-SELRANGE -Wno-UNUSEDPARAM -Wno-SYNCASYNCNET --cc --exe --build \
 	  -O3 --trace-fst \
 	  -Irtl -Irtl/core -Irtl/bus -Irtl/periph -Irtl/debug -Itb/models \
 	  --top-module $(TOP) \
@@ -62,7 +62,7 @@ sim: $(SIM) $(BUILD)/tests/test_pass.hex
 
 # Lint all RTL
 lint:
-	$(VERILATOR) -Wall -Wno-UNUSEDSIGNAL -Wno-WIDTHTRUNC -Wno-WIDTHEXPAND -Wno-SELRANGE -Wno-UNUSEDPARAM --lint-only \
+	$(VERILATOR) -Wall -Wno-UNUSEDSIGNAL -Wno-WIDTHTRUNC -Wno-WIDTHEXPAND -Wno-SELRANGE -Wno-UNUSEDPARAM -Wno-SYNCASYNCNET --lint-only \
 	  --top-module $(TOP) \
 	  -Irtl -Irtl/core -Irtl/bus -Irtl/periph -Irtl/debug -Itb/models \
 	  $(RTL_SRCS)
@@ -177,8 +177,24 @@ sta: synth
 	  echo "See docs/PPA_DATASHEET.md"; \
 	fi
 
+SKY130_LIB ?= third_party/sky130/sky130_fd_sc_hd__tt_025C_1v80.lib
+
+sta-sky130:
+	@echo "=== Sky130 HD STA (OpenSTA) ==="
+	@bash scripts/fetch_sky130_lib.sh
+	@mkdir -p $(BUILD)
+	@LIBERTY_FILE=$(SKY130_LIB) yosys -s scripts/yosys_synth_sky130.tcl
+	@command -v sta >/dev/null || (echo "OpenSTA not installed"; exit 1)
+	@LIBERTY_FILE=$(SKY130_LIB) NETLIST_FILE=$(BUILD)/sisRvCore_sky130.v \
+	  REPORT_FILE=$(BUILD)/sta_sky130_report.txt \
+	  sta -no_splash scripts/sta_sky130.tcl
+	@test -s $(BUILD)/sta_sky130_report.txt
+	@cat $(BUILD)/sta_sky130_report.txt
+
+COSIM_SEEDS ?= 10000
+
 cosim-lockstep: build/sim_sisPlatformTop
-	python3 verification/cosim/spike_lockstep.py --seeds 100
+	python3 verification/cosim/spike_lockstep.py --seeds $(COSIM_SEEDS)
 
 # ---------------------------------------------------------------------------
 # RISCOF architectural compliance (optional; requires external tools)
@@ -225,6 +241,21 @@ riscof-smoke: $(RISCOF_WORK)/smoke.testlist build/sim_sisPlatformTop
 	  riscof run --config $(RISCOF_CONFIG) --no-browser \
 	    --suite $(ARCH_TEST_SUITE) --env $(ARCH_TEST_ENV) \
 	    --work-dir $(RISCOF_WORK) --testfile $(RISCOF_WORK)/smoke.testlist
+
+$(RISCOF_WORK)/act.testlist: $(ARCH_TEST_ROOT) $(RISCOF_VENV)/bin/activate
+	@mkdir -p $(RISCOF_WORK)
+	@. $(RISCOF_VENV)/bin/activate && \
+	  riscof testlist --config $(RISCOF_CONFIG) \
+	    --suite $(ARCH_TEST_SUITE) --env $(ARCH_TEST_ENV) \
+	    --work-dir $(RISCOF_WORK)
+	@cp $(RISCOF_WORK)/test_list.yaml $(RISCOF_WORK)/act.testlist
+
+riscof-act: $(RISCOF_WORK)/act.testlist build/sim_sisPlatformTop
+	@. $(RISCOF_VENV)/bin/activate && \
+	  RISCOF_TOOLCHAIN_PREFIX=$(RV_PREFIX) \
+	  riscof run --config $(RISCOF_CONFIG) --no-browser \
+	    --suite $(ARCH_TEST_SUITE) --env $(ARCH_TEST_ENV) \
+	    --work-dir $(RISCOF_WORK) --testfile $(RISCOF_WORK)/act.testlist
 
 riscof-rv32i: $(ARCH_TEST_ROOT) build/sim_sisPlatformTop $(RISCOF_VENV)/bin/activate
 	@. $(RISCOF_VENV)/bin/activate && \

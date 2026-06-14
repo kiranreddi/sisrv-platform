@@ -1,8 +1,9 @@
-/* Co-sim linker script: execute from RAM for Spike default memory map. */
+/* Co-sim linker script: code in ROM at reset vector 0x0. */
 ENTRY(_start)
 
 MEMORY
 {
+  ROM (rx)  : ORIGIN = 0x00000000, LENGTH = 64K
   RAM (rwx) : ORIGIN = 0x80000000, LENGTH = 256K
 }
 
@@ -11,9 +12,9 @@ SECTIONS
   .text : {
     *(.text.init)
     *(.text*)
-  } > RAM
+  } > ROM
 
-  .rodata : { *(.rodata*) } > RAM
+  .rodata : { *(.rodata*) } > ROM
 
   .data : {
     _data_start = .;

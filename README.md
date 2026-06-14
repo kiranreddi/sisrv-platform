@@ -34,9 +34,7 @@ keeping the implementation readable and open.
 **Not yet claimed**
 
 - Not a certified or licensable commercial RISC-V IP product.
-- Full RISCOF/riscv-arch-test suite signoff is in progress (smoke in required CI).
-- Debug abstract GPR access and OpenOCD integration are documented but not fully wired.
-- No PMP, cache, or physical GDS signoff yet.
+- No PMP, cache, pipelined performance, or physical GDS signoff yet.
 
 ## Product Snapshot
 
@@ -46,11 +44,11 @@ keeping the implementation readable and open.
 | Privilege | Machine mode, core CSRs, trap entry/return, counters, WFI legal no-op |
 | Platform | ROM, RAM, tohost, CLINT, PLIC, GPIO, UART |
 | Interrupts | CLINT (MSIP/MTIP/MTIME), PLIC (8 prioritized sources), GPIO→PLIC mux |
-| Debug | RISC-V DM 0.13 subset + JTAG DTM (halt/resume/step) |
+| Debug | RISC-V DM 0.13 subset + JTAG DTM; abstract GPR wired to regfile while halted |
 | Bus | Internal corebus plus optional AXI4-Lite bridge path |
-| Verification | 36 assembly tests, 44 cocotb tests, formal proof sets, RISCOF smoke + co-sim |
-| Implementation | Synthesizable SystemVerilog, Verilator simulation, Yosys + SDC/STA scripts |
-| Product gap | Full compliance suite, pipelined performance, PMP, physical GDS signoff |
+| Verification | 36 assembly tests, 44 cocotb tests, formal proofs, RISCOF ACT + 10k lock-step co-sim |
+| Implementation | Synthesizable SystemVerilog, Verilator simulation, Yosys + Sky130 STA |
+| Product gap | Pipelined performance, PMP, physical GDS signoff |
 
 ## Architecture At A Glance
 
@@ -91,7 +89,7 @@ flowchart TB
   RTL --> Cocotb["44 cocotb unit tests\nALU, regfile, decode, CSR, AXI"]
   RTL --> Formal["Formal proofs\nALU, regfile, decode, AXI safety"]
   RTL --> Synth["Yosys synthesis"]
-  Sim --> RISCOF["RISCOF smoke harness\nSpike signature compare"]
+  Sim --> RISCOF["RISCOF ACT harness\n177 rv32imac_zicsr tests"]
 ```
 
 ## Commercial Positioning
@@ -226,17 +224,18 @@ branches, system instructions, and stress loops.
 
 ### RISCOF / Architectural Tests
 
-Reusable Spike co-simulation harness lives under `verification/riscof/`. The smoke
-target runs a single RV32I test and compares DUT/reference signatures.
+Reusable Spike co-simulation harness lives under `verification/riscof/` and
+`verification/cosim/`. The ACT target runs the full **rv32imac_zicsr** suite (~177 tests).
 
 ```bash
-make riscof-smoke
+make riscof-act
+make cosim-lockstep COSIM_SEEDS=10000
 make riscof-rv32i
 make riscof-rv32im
 ```
 
-This is required in CI (smoke + dual-model co-sim). Full **rv32imac_zicsr** ACT suite
-expansion remains a P0 exit gate. Unsupported classes remain PMP, S/U modes, and A/F/D.
+Both `riscof-act` and 10k-seed retired-instruction lock-step co-sim are required in CI.
+Unsupported classes remain PMP, S/U modes, and A/F/D.
 
 ## Architecture Reference
 
@@ -248,7 +247,7 @@ expansion remains a P0 exit gate. Unsupported classes remain PMP, S/U modes, and
   `mtval`, `mscratch`, `mie`, `mip`, `mcycle`, and `minstret`.
 - Traps: ECALL, EBREAK, illegal instruction, misaligned access, access fault, MRET.
 - Interrupts: CLINT at `0x0200_0000`, PLIC (8 sources) at `0x0C00_0000`.
-- Debug: RISC-V Debug 0.13 subset + JTAG DTM (halt/resume/step).
+- Debug: RISC-V Debug 0.13 subset + JTAG DTM (halt/resume/step); abstract GPR access.
 
 ### Memory Map
 
@@ -273,8 +272,6 @@ expansion remains a P0 exit gate. Unsupported classes remain PMP, S/U modes, and
 
 | Priority | Work item | Why it matters |
 |---|---|---|
-| P0 | Full RISCOF/riscv-arch-test and Spike co-sim signoff | Required for credible ISA compliance claims |
-| P0 | Named-PDK STA / OpenROAD timing closure | Required for ASIC product claims |
 | P1 | Benchmarking: CoreMark/MHz, CPI, area/timing reports | Needed for competitor comparison |
 | P1 | PMP and U-mode (if Linux-class target) | Required by some embedded/Linux integrations |
 
@@ -289,7 +286,7 @@ The workflow runs on every push/PR to `main`.
 | cocotb | 44 directed/randomized unit tests |
 | Formal | Required ALU, RegFile, Decode proofs; optional AXI safety |
 | Synth | Yosys synthesis of core + AXI bridge (PPA stat artifact) |
-| RISCOF + co-sim | RISCOF smoke + 100-seed Spike/Verilator dual-model smoke |
+| RISCOF + co-sim | RISCOF ACT (177 tests) + 10k-seed retired-instruction lock-step |
 
 All jobs above are required and gate merges.
 

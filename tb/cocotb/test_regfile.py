@@ -7,9 +7,17 @@ import random
 MASK32 = 0xFFFFFFFF
 
 
+async def init_regfile(dut):
+    dut.dbg_en.value = 0
+    dut.dbg_we.value = 0
+    dut.dbg_addr.value = 0
+    dut.dbg_wdata.value = 0
+
+
 @cocotb.test()
 async def test_x0_always_zero(dut):
     """x0 must always read as zero regardless of write attempts."""
+    await init_regfile(dut)
     clock = Clock(dut.clk, 10, unit="ns")
     cocotb.start_soon(clock.start())
 
@@ -33,6 +41,7 @@ async def test_x0_always_zero(dut):
 @cocotb.test()
 async def test_write_read_all_regs(dut):
     """Write unique values to x1..x31 and read them back."""
+    await init_regfile(dut)
     clock = Clock(dut.clk, 10, unit="ns")
     cocotb.start_soon(clock.start())
 
@@ -62,6 +71,7 @@ async def test_write_read_all_regs(dut):
 @cocotb.test()
 async def test_write_does_not_corrupt_others(dut):
     """Writing one register should not change others."""
+    await init_regfile(dut)
     clock = Clock(dut.clk, 10, unit="ns")
     cocotb.start_soon(clock.start())
 
@@ -99,6 +109,7 @@ async def test_write_does_not_corrupt_others(dut):
 @cocotb.test()
 async def test_random_read_write(dut):
     """Randomized read/write traffic."""
+    await init_regfile(dut)
     clock = Clock(dut.clk, 10, unit="ns")
     cocotb.start_soon(clock.start())
     random.seed(123)

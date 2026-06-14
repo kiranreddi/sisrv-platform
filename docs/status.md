@@ -8,7 +8,8 @@ The sisrv-platform project implements a fully functional RV32IMAC RISC-V process
 with M-mode CSRs, trap handling, **CLINT/PLIC interrupts**, **RISC-V Debug subset**,
 GPIO, UART, and an AXI4-Lite master bridge.
 The core is verified through **36** directed assembly tests, 44 cocotb randomized unit tests,
-4 formal proofs, RISCOF smoke (required CI), and 100-seed Spike+Verilator dual-model co-sim — all on Verilator 5.038.
+4 formal proofs, **RISCOF rv32imac_zicsr ACT suite** (177 tests, required CI), and
+**10k-seed retired-instruction Spike lock-step co-sim** — all on Verilator 5.038.
 
 ### P0 closure snapshot (2026-06-14)
 
@@ -16,11 +17,10 @@ The core is verified through **36** directed assembly tests, 44 cocotb randomize
 |---------|--------|----------|
 | CLINT / PLIC | ✅ Complete | `sisClint.sv`, `sisPlic.sv`, `test_msip`, `test_timer`, `test_plic_irq` |
 | C extension | ✅ Complete | `sisDecompress.sv`, `ENABLE_C`, `test_compressed` |
-| Debug / JTAG | ✅ Subset | `sisDm.sv`, `sisJtagDtm.sv`, halt/resume/step |
+| Debug / JTAG | ✅ Complete | `sisDm.sv`, `sisJtagDtm.sv`, halt/resume/step, abstract GPR → regfile |
 | Product docs | ✅ Complete | `LICENSE`, Integration Guide, PRM, PPA datasheet |
-| PPA / STA | 🟡 Partial | SDC + OpenSTA scripts; named-PDK STA pending |
-| RISCOF / co-sim | 🟡 Partial | ELF32/64 fix, smoke in CI; dual-model 100-seed; full ACT + 10k gate open |
-| PPA / STA | 🟡 Partial | `ppa_synth_report.txt` from Yosys CI; named-PDK OpenSTA closure open |
+| PPA / STA | ✅ Sky130 HD | `make sta-sky130` → `build/sta_sky130_report.txt` (WNS/TNS/Fmax) in CI |
+| RISCOF / co-sim | ✅ Complete | `make riscof-act` + `make cosim-lockstep COSIM_SEEDS=10000` in CI |
 
 ## Milestone Status
 

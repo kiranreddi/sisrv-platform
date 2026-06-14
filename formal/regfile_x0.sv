@@ -22,7 +22,12 @@ module regfile_x0_wrapper (
         .rs2_data (rs2_data),
         .wr_en    (wr_en),
         .rd_addr  (rd_addr),
-        .rd_data  (rd_data)
+        .rd_data  (rd_data),
+        .dbg_en   (1'b0),
+        .dbg_we   (1'b0),
+        .dbg_addr (5'd0),
+        .dbg_wdata(32'h0),
+        .dbg_rdata()
     );
 
     // Property: when reading x0, output is always 0

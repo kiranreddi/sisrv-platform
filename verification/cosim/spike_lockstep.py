@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Dual-model Spike + Verilator co-simulation for random RV32I instruction streams."""
+"""Retired-instruction Spike vs RTL lock-step co-simulation."""
 from __future__ import annotations
 
 import argparse
 import random
-import struct
+import re
 import subprocess
 import sys
 import tempfile
@@ -19,6 +19,13 @@ TOOLCHAIN_PREFIXES = (
     "riscv64-unknown-elf-",
     "riscv64-elf-",
     "riscv64-linux-gnu-",
+)
+
+SPIKE_LINE = re.compile(
+    r"core\s+\d+:\s+0x([0-9a-fA-F]+)\s+\(0x([0-9a-fA-F]+)\)"
+)
+RTL_LINE = re.compile(
+    r"^([0-9a-fA-F]+)\s+([0-9a-fA-F]+)\s+([0-9a-fA-F]+)\s+([0-9a-fA-F]+)\s+([0-9a-fA-F]+)$"
 )
 
 
@@ -42,9 +49,7 @@ def gen_program_words(seed: int, n_insn: int) -> list[int]:
         if op == 0x00302023:
             op = 0x00000013
         words.append(op)
-    words.extend([
-        0x0000006f,  # j .  (clean tail; Spike + RTL agree on ALU stream)
-    ])
+    words.append(0x0000006f)  # j .  (tail loop)
     return words
 
 
@@ -89,47 +94,113 @@ def elf_to_hex(elf: Path, rom_hex: Path, ram_hex: Path) -> None:
     )
 
 
-def run_verilator(rom_hex: Path, ram_hex: Path) -> int:
+def parse_spike_commits(text: str) -> list[tuple[int, int]]:
+    commits: list[tuple[int, int]] = []
+    for line in text.splitlines():
+        match = SPIKE_LINE.search(line)
+        if match:
+            commits.append((int(match.group(1), 16), int(match.group(2), 16)))
+    return commits
+
+
+def parse_rtl_commits(path: Path) -> list[tuple[int, int]]:
+    commits: list[tuple[int, int]] = []
+    if not path.is_file():
+        return commits
+    for line in path.read_text().splitlines():
+        match = RTL_LINE.match(line.strip())
+        if match:
+            commits.append((int(match.group(1), 16), int(match.group(2), 16)))
+    return commits
+
+
+def run_spike(elf: Path, log_path: Path) -> list[tuple[int, int]]:
+    try:
+        proc = subprocess.run(
+            [
+                "spike",
+                "--isa=rv32im_zicsr",
+                "-m0x0:0x100000",
+                "--log-commits",
+                str(elf),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=1,
+        )
+    except subprocess.TimeoutExpired as exc:
+        return parse_spike_commits((exc.stdout or "") + (exc.stderr or ""))
+
+    if proc.returncode != 0 and not proc.stderr:
+        print(proc.stdout)
+        print(proc.stderr, file=sys.stderr)
+        raise RuntimeError(f"Spike failed on {elf}")
+
+    log = (proc.stdout or "") + (proc.stderr or "")
+    log_path.write_text(log)
+    return parse_spike_commits(log)
+
+
+def run_verilator(rom_hex: Path, ram_hex: Path, commit_log: Path) -> list[tuple[int, int]]:
     with tempfile.TemporaryDirectory() as tmp:
         cwd = Path(tmp)
         (cwd / "rom.hex").write_text(rom_hex.read_text())
         (cwd / "ram.hex").write_text(ram_hex.read_text())
         proc = subprocess.run(
-            [str(SIM), "--timeout-cycles", "5000"],
+            [
+                str(SIM),
+                "--timeout-cycles",
+                "3000",
+                "--commit-log",
+                str(commit_log),
+            ],
             cwd=cwd,
             capture_output=True,
             text=True,
         )
         out = proc.stdout + proc.stderr
-        if "TIMEOUT" in out and "FAIL" not in out and "illegal" not in out.lower():
-            return 0
-        if proc.returncode != 0:
-            print(proc.stdout)
-            print(proc.stderr, file=sys.stderr)
-        return proc.returncode
+        if "FAIL" in out or "illegal" in out.lower():
+            print(out, file=sys.stderr)
+            raise RuntimeError("Verilator reported failure")
+        if "TIMEOUT" not in out and proc.returncode != 0:
+            print(out, file=sys.stderr)
+            raise RuntimeError(f"Verilator exit {proc.returncode}")
+        return parse_rtl_commits(commit_log)
 
 
-def run_spike(elf: Path) -> int:
-    try:
-        proc = subprocess.run(
-            ["spike", "--isa=rv32im_zicsr", str(elf)],
-            capture_output=True,
-            text=True,
-            timeout=2,
+def compare_commits(
+    seed: int,
+    spike_commits: list[tuple[int, int]],
+    rtl_commits: list[tuple[int, int]],
+    min_required: int,
+) -> None:
+    if not spike_commits:
+        raise RuntimeError(f"seed {seed}: Spike produced no retired instructions")
+    if not rtl_commits:
+        raise RuntimeError(f"seed {seed}: RTL produced no retired instructions")
+
+    limit = min(len(spike_commits), len(rtl_commits))
+    if limit < min_required:
+        raise RuntimeError(
+            f"seed {seed}: insufficient retired instructions "
+            f"(spike={len(spike_commits)} rtl={len(rtl_commits)} need>={min_required})"
         )
-        if proc.returncode != 0:
-            print(proc.stdout)
-            print(proc.stderr, file=sys.stderr)
-        return proc.returncode
-    except subprocess.TimeoutExpired:
-        # Programs end in an intentional infinite loop after PASS tohost.
-        return 0
+
+    for idx in range(limit):
+        spc, sin = spike_commits[idx]
+        rpc, rin = rtl_commits[idx]
+        if spc != rpc or sin != rin:
+            raise RuntimeError(
+                f"seed {seed} mismatch at retire {idx}: "
+                f"spike pc=0x{spc:08x} insn=0x{sin:08x} "
+                f"rtl pc=0x{rpc:08x} insn=0x{rin:08x}"
+            )
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--seeds", type=int, default=100)
-    parser.add_argument("--insns", type=int, default=16)
+    parser.add_argument("--seeds", type=int, default=10000)
+    parser.add_argument("--insns", type=int, default=12)
     parser.add_argument("--require-spike", action=argparse.BooleanOptionalAction, default=True)
     args = parser.parse_args()
 
@@ -142,9 +213,8 @@ def main() -> int:
         print("No RISC-V toolchain found for co-sim ELF build", file=sys.stderr)
         return 1
 
-    spike_ok = subprocess.call(["which", "spike"], stdout=subprocess.DEVNULL) == 0
-    if args.require_spike and not spike_ok:
-        print("Spike required for dual-model co-sim but not installed", file=sys.stderr)
+    if args.require_spike and subprocess.call(["which", "spike"], stdout=subprocess.DEVNULL) != 0:
+        print("Spike required for lock-step co-sim but not installed", file=sys.stderr)
         return 1
 
     with tempfile.TemporaryDirectory() as tmp:
@@ -154,21 +224,25 @@ def main() -> int:
             elf = write_elf(prefix, words, work)
             rom_hex = work / f"rom_{seed}.hex"
             ram_hex = work / f"ram_{seed}.hex"
+            spike_log = work / f"spike_{seed}.log"
+            rtl_log = work / f"rtl_{seed}.log"
             elf_to_hex(elf, rom_hex, ram_hex)
 
-            if spike_ok:
-                spike_rc = run_spike(elf)
-                if spike_rc != 0:
-                    print(f"Spike failed seed {seed}", file=sys.stderr)
-                    return 1
-
-            rtl_rc = run_verilator(rom_hex, ram_hex)
-            if rtl_rc != 0:
-                print(f"Verilator failed seed {seed}", file=sys.stderr)
+            spike_commits = run_spike(elf, spike_log)
+            rtl_commits = run_verilator(rom_hex, ram_hex, rtl_log)
+            try:
+                compare_commits(seed, spike_commits, rtl_commits, args.insns)
+            except RuntimeError as err:
+                print(err, file=sys.stderr)
                 return 1
 
-    model = "Spike+Verilator dual-model" if spike_ok else "Verilator-only"
-    print(f"Lock-step co-sim: {args.seeds} seeds PASS ({model})")
+            if (seed + 1) % 500 == 0:
+                print(f"Lock-step progress: {seed + 1}/{args.seeds} seeds")
+
+    print(
+        f"Lock-step co-sim: {args.seeds} seeds PASS "
+        f"(retired-instruction Spike vs RTL)"
+    )
     return 0
 
 

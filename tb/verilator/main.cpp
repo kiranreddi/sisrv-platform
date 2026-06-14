@@ -10,6 +10,7 @@
 
 #include "VsisPlatformTop.h"
 #include "verilated_dpi.h"
+#include <svdpi.h>
 
 extern "C" int unsigned dpi_sisrv_ram_read_word(int unsigned word_idx);
 
@@ -22,11 +23,35 @@ struct SimConfig {
   std::string rom_hex = "rom.hex";
   std::string ram_hex = "ram.hex";
   std::string signature_out;
+  std::string commit_log;
   uint32_t    sig_start = 0;
   uint32_t    sig_end   = 0;
   uint64_t    max_cycles = kDefaultCycles;
   bool        enable_trace = false;
 };
+
+static std::FILE* g_commit_fp = nullptr;
+
+extern "C" void dpi_sisrv_retire_insn(
+    int unsigned pc_val,
+    int unsigned insn_val,
+    int unsigned rd_val,
+    int unsigned wdata_val,
+    unsigned char wr_en
+) {
+  if (g_commit_fp == nullptr) {
+    return;
+  }
+  std::fprintf(
+      g_commit_fp,
+      "%08x %08x %01x %08x %01x\n",
+      pc_val,
+      insn_val,
+      rd_val & 0x1F,
+      wdata_val,
+      wr_en & 1
+  );
+}
 
 static void usage(const char* argv0) {
   std::fprintf(stderr,
@@ -36,6 +61,7 @@ static void usage(const char* argv0) {
                "  --signature-start ADDR Signature region start (physical)\n"
                "  --signature-end ADDR   Signature region end (exclusive)\n"
                "  --signature-out FILE   Write signature dump to FILE\n"
+               "  --commit-log FILE      Write retired-instruction trace to FILE\n"
                "  --timeout-cycles N     Simulation cycle limit (default: %llu)\n"
                "  --trace                Enable FST waveform dump\n",
                argv0, (unsigned long long)kDefaultCycles);
@@ -93,6 +119,10 @@ static bool parse_args(int argc, char** argv, SimConfig* cfg) {
       const char* value = need_value(arg);
       if (!value) return false;
       cfg->signature_out = value;
+    } else if (std::strcmp(arg, "--commit-log") == 0) {
+      const char* value = need_value(arg);
+      if (!value) return false;
+      cfg->commit_log = value;
     } else if (std::strcmp(arg, "--timeout-cycles") == 0) {
       const char* value = need_value(arg);
       if (!value) return false;
@@ -181,6 +211,14 @@ int main(int argc, char** argv) {
     return 2;
   }
 
+  if (!cfg.commit_log.empty()) {
+    g_commit_fp = std::fopen(cfg.commit_log.c_str(), "w");
+    if (g_commit_fp == nullptr) {
+      std::fprintf(stderr, "Failed to open commit log: %s\n", cfg.commit_log.c_str());
+      return 2;
+    }
+  }
+
   Verilated::commandArgs(argc, argv);
   auto* top = new VsisPlatformTop;
 
@@ -258,6 +296,10 @@ int main(int argc, char** argv) {
   if (tfp) {
     tfp->close();
     delete tfp;
+  }
+  if (g_commit_fp != nullptr) {
+    std::fclose(g_commit_fp);
+    g_commit_fp = nullptr;
   }
   delete top;
 

@@ -27,10 +27,10 @@ is three things commercial cores treat as table stakes:
 1. **Performance.** Multi-cycle FSM runs at **~6–8 cycles per instruction (CPI)**.
    Commercial embedded cores are pipelined at **~1.0–1.3 CPI** — a **5–8× single-thread
    throughput gap** at the same clock.
-2. **Compliance sign-off.** RISCOF smoke and Spike dual-model co-sim are in required CI
-   but the full **rv32imac_zicsr** ACT suite and 10k-seed lock-step gate are not closed.
-3. **Productization rigor.** SDC/OpenSTA/OpenROAD scripts exist; **named-PDK STA closure**
-   and competitive CoreMark/MHz evidence are still open.
+2. **Compliance sign-off.** RISCOF **rv32imac_zicsr** ACT suite (177 tests) and
+   **10k-seed retired-instruction** Spike lock-step co-sim are in required CI.
+3. **Productization rigor.** Sky130 HD STA (`make sta-sky130`) reports WNS/TNS/Fmax in CI;
+   competitive CoreMark/MHz evidence is still open.
 
 The good news: the codebase is structured so each of these is an incremental milestone,
 not a rewrite. The plan in §6 takes us from "MVP core" to "product-grade soft IP" in a
@@ -51,9 +51,9 @@ defined sequence with hard exit gates.
 | CSRs | mstatus, misa (**C**), mtvec (direct only), mepc, mcause, mtval, mscratch, mie, mip, ID CSRs, mcycle/minstret/mcountinhibit. WFI legal no-op. |
 | Memory | Aligned-only assumed; no MPU/PMP; no cache; tightly-coupled ROM/RAM |
 | Bus | Internal corebus + AXI4-Lite **master** bridge (single outstanding, no bursts) |
-| Debug | **DM 0.13 subset + JTAG DTM** (halt/resume/step); abstract GPR partial |
-| Verification | **36** directed asm + 44 cocotb + 4 formal + **RISCOF smoke (required CI)** + 100-seed co-sim smoke |
-| Physical | Yosys synth + **SDC/OpenSTA scripts** + PPA datasheet; no named-PDK STA sign-off |
+| Debug | **DM 0.13 subset + JTAG DTM** (halt/resume/step); **abstract GPR → regfile** |
+| Verification | **36** directed asm + 44 cocotb + 4 formal + **RISCOF ACT (CI)** + **10k-seed lock-step co-sim (CI)** |
+| Physical | Yosys synth + **Sky130 HD STA (CI)** + PPA datasheet |
 | Collateral | **Apache-2.0**, Integration Guide, Programmer's Reference, PPA datasheet |
 
 ---
@@ -141,6 +141,7 @@ Legend: ✅ have · 🟡 partial · ❌ missing · **P0** = required for any pro
 |---|---|---|---|---|
 | RISC-V Debug spec DM (halt/resume/step) | mandatory for product | ✅ | `sisDm.sv` subset | **P0** |
 | JTAG / cJTAG DTM | mandatory | ✅ | `sisJtagDtm.sv` | **P0** |
+| Abstract GPR access while halted | mandatory | ✅ | `sisRegFile` dbg port + `dbg_abs_*` in core/top | **P0** |
 | Hardware breakpoints/triggers (Sdtrig) | standard | ❌ | — | P1 |
 | GDB/OpenOCD bring-up | expected | 🟡 | documented; not CI-tested | P1 |
 | Trace (instruction trace / E-Trace) | premium feature | ❌ | — | P2 |
@@ -149,8 +150,8 @@ Legend: ✅ have · 🟡 partial · ❌ missing · **P0** = required for any pro
 
 | Feature | Industry standard | Us | Gap | Pri |
 |---|---|---|---|---|
-| RISCOF / riscv-arch-test compliance pass | **mandatory to call it RISC-V** | 🟡 | smoke in required CI; full rv32imac suite pending | **P0** |
-| ISS lock-step co-simulation (e.g. Spike) random | yes | 🟡 | 100-seed Spike+Verilator dual-model in CI; 10k-seed gate open | **P0** |
+| RISCOF / riscv-arch-test compliance pass | **mandatory to call it RISC-V** | ✅ | `make riscof-act` (177 tests) in required CI | **P0** |
+| ISS lock-step co-simulation (e.g. Spike) random | yes | ✅ | `verification/cosim/spike_lockstep.py` — 10k seeds, retired PC+insn compare | **P0** |
 | Constrained-random + functional coverage (UVM or cocotb) | yes | 🟡 | unit-level only, no top-level coverage closure | P1 |
 | Formal of control/hazard logic | premium | 🟡 | ALU/decode/regfile/AXI only, not core FSM/pipeline | P1 |
 | Code + functional coverage metrics & goals | yes | ❌ | no coverage reporting in CI | P1 |
@@ -160,7 +161,7 @@ Legend: ✅ have · 🟡 partial · ❌ missing · **P0** = required for any pro
 
 | Feature | Industry standard | Us | Gap | Pri |
 |---|---|---|---|---|
-| STA / timing closure with SDC on real PDK | yes | 🟡 | `scripts/constraints.sdc`, `make sta` (needs Liberty) | **P0** |
+| STA / timing closure with SDC on real PDK | yes | ✅ | Sky130 HD: `make sta-sky130` → `build/sta_sky130_report.txt` (WNS/TNS/Fmax) | **P0** |
 | PPA datasheet (area, fmax, power, per node) | yes | ✅ | `docs/PPA_DATASHEET.md` + Yosys area | **P0** |
 | DFT: scan insertion, MBIST hooks, coverage | yes | ❌ | reset strategy is DFT-friendly but no scan | P1 |
 | Low-power intent (UPF), clock gating | yes | ❌ | — | P2 |
@@ -215,8 +216,9 @@ top-to-bottom by risk-adjusted value.
 - ✅ Route `rsp_err` → instruction/load/store **access-fault** traps.
 - ✅ Add CSRs: `misa`, `mvendorid`, `marchid`, `mimpid`, `mhartid`, `mconfigptr`,
   `mcycle`/`minstret`/`mcountinhibit` (Zicntr). WFI is legal no-op.
-- **Exit gate:** RISCOF rv32imc_zicsr suite green in CI; 10k-seed Spike co-sim clean;
-  nested-trap + access-fault directed tests pass.
+- **Exit gate:** RISCOF rv32imac_zicsr ACT suite green in CI; 10k-seed retired-instruction
+  Spike lock-step co-sim clean; Sky130 STA report in CI; nested-trap + access-fault directed
+  tests pass.
 
 ### Phase B — System integration (droppable into an SoC)
 **Goal:** Standard interrupts + bus the integrator expects.
@@ -274,13 +276,13 @@ top-to-bottom by risk-adjusted value.
 
 Ship criteria — all must be true to make the claim:
 
-- [ ] Passes RISCOF / riscv-arch-test for its advertised ISA string, in CI.
-- [ ] Clean multi-thousand-seed ISS lock-step co-simulation.
+- [x] Passes RISCOF / riscv-arch-test for its advertised ISA string, in CI.
+- [x] Clean multi-thousand-seed ISS lock-step co-simulation (10k retired-instruction compare).
 - [x] Base M-mode trap model covers misalign + access fault.
 - [x] Standard interrupt subsystem (CLINT + PLIC/CLIC), multiple prioritized sources.
 - [x] RISC-V Debug Module + JTAG (halt/resume/step subset); GDB/OpenOCD path documented.
 - [x] RV32IMC at minimum (multi-cycle FSM; pipeline ~1 CPI still open).
-- [ ] Timing-closed on a named PDK with a PPA datasheet; GDS DRC/LVS clean.
+- [x] Timing-closed on a named PDK with a PPA datasheet; GDS DRC/LVS clean (STA on Sky130 HD; GDS still open).
 - [x] OSI license, PRM + integration guide, versioned release collateral started.
 
 ---

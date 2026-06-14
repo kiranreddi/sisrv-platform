@@ -129,9 +129,10 @@ jobs:
           test -s build/ppa_synth_report.txt
           head -40 build/ppa_synth_report.txt
 
-  riscof-smoke:
-    name: RISCOF Compliance
+  riscof-act:
+    name: RISCOF ACT + Lock-step Co-sim
     runs-on: ubuntu-latest
+    timeout-minutes: 120
     needs: lint
     steps:
       - uses: actions/checkout@v4
@@ -169,10 +170,10 @@ jobs:
           . .venv-riscof/bin/activate
           pip install -r verification/riscof/requirements.txt
 
-      - name: Run lock-step co-sim smoke
-        run: make cosim-lockstep
+      - name: Run 10k-seed lock-step co-sim
+        run: make cosim-lockstep COSIM_SEEDS=10000
 
-      - name: Run RISCOF smoke
+      - name: Run RISCOF rv32imac_zicsr ACT suite
         run: |
           . .venv-riscof/bin/activate
           if command -v riscv64-unknown-elf-gcc >/dev/null; then
@@ -182,4 +183,19 @@ jobs:
           fi
           export RISCOF_TOOLCHAIN_PREFIX="$RV_PREFIX"
           make riscof-check-tools
-          make riscof-smoke
+          make riscof-act
+
+  sta-sky130:
+    name: Sky130 STA (WNS/TNS/Fmax)
+    runs-on: ubuntu-latest
+    needs: synth
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Yosys and OpenSTA
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y yosys opensta curl
+
+      - name: Run Sky130 STA
+        run: make sta-sky130

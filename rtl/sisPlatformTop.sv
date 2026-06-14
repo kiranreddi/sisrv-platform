@@ -147,6 +147,12 @@ module sisPlatformTop #(
     .dbg_resume_req (dm_resume_req),
     .dbg_single_step(dm_single_step),
     .dbg_halted     (core_halted),
+    .dbg_abs_valid  (abs_valid),
+    .dbg_abs_ready  (abs_ready),
+    .dbg_abs_write  (abs_write),
+    .dbg_abs_regaddr(abs_regaddr),
+    .dbg_abs_wdata  (abs_wdata),
+    .dbg_abs_rdata  (abs_rdata),
     .ext_msip       (msip_wire),
     .ext_mtip       (mtip_wire),
     .ext_meip       (meip_wire),
@@ -241,9 +247,6 @@ module sisPlatformTop #(
     .abs_wdata     (abs_wdata),
     .abs_rdata     (abs_rdata)
   );
-
-  assign abs_ready = 1'b1;
-  assign abs_rdata = 32'h0;
 
   // ---------------------------------------------------------------
   // Memory Fabric — generate-selected path

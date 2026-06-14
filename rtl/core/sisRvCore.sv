@@ -16,6 +16,14 @@ module sisRvCore #(
     input  logic        dbg_single_step,
     output logic        dbg_halted,
 
+    // Abstract GPR access while halted (from Debug Module)
+    input  logic        dbg_abs_valid,
+    output logic        dbg_abs_ready,
+    input  logic        dbg_abs_write,
+    input  logic [4:0]  dbg_abs_regaddr,
+    input  logic [31:0] dbg_abs_wdata,
+    output logic [31:0] dbg_abs_rdata,
+
     // External interrupts (CLINT + PLIC)
     input  logic        ext_msip,
     input  logic        ext_mtip,
@@ -142,8 +150,15 @@ module sisRvCore #(
     .rs2_data (rf_rs2_data),
     .wr_en    (rf_wr_en),
     .rd_addr  (rf_rd_addr),
-    .rd_data  (rf_rd_data)
+    .rd_data  (rf_rd_data),
+    .dbg_en   (dbg_abs_valid && halted),
+    .dbg_we   (dbg_abs_write),
+    .dbg_addr (dbg_abs_regaddr),
+    .dbg_wdata(dbg_abs_wdata),
+    .dbg_rdata(dbg_abs_rdata)
   );
+
+  assign dbg_abs_ready = dbg_abs_valid && halted;
 
   // ---------------------------------------------------------------
   // Latched register values (captured in DECODE)
@@ -779,5 +794,27 @@ module sisRvCore #(
       end
     end
   end
+
+`ifndef SYNTHESIS
+  import "DPI-C" function void dpi_sisrv_retire_insn(
+    input int unsigned pc_val,
+    input int unsigned insn_val,
+    input int unsigned rd_val,
+    input int unsigned wdata_val,
+    input byte         wr_en
+  );
+
+  always_ff @(posedge clk) begin
+    if (rst_n && state == S_WB && instr_retire) begin
+      dpi_sisrv_retire_insn(
+        pc,
+        instr_reg,
+        rf_rd_addr,
+        rf_rd_data,
+        {7'b0, rf_wr_en}
+      );
+    end
+  end
+`endif
 
 endmodule
