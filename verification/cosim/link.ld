@@ -1,9 +1,8 @@
-/* Co-sim linker script: load above Spike's low device window at 0x0. */
+/* Co-sim linker script: execute from RAM for Spike default memory map. */
 ENTRY(_start)
 
 MEMORY
 {
-  ROM (rx)  : ORIGIN = 0x00010000, LENGTH = 48K
   RAM (rwx) : ORIGIN = 0x80000000, LENGTH = 256K
 }
 
@@ -12,11 +11,11 @@ SECTIONS
   .text : {
     *(.text.init)
     *(.text*)
-  } > ROM
+  } > RAM
 
-  .rodata : { *(.rodata*) } > ROM
+  .rodata : { *(.rodata*) } > RAM
 
-  .data : AT(ADDR(.rodata) + SIZEOF(.rodata)) {
+  .data : {
     _data_start = .;
     *(.data*)
     _data_end = .;
