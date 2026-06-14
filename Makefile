@@ -183,7 +183,8 @@ sta-sky130:
 	@echo "=== Sky130 HD STA (OpenSTA) ==="
 	@bash scripts/fetch_sky130_lib.sh
 	@mkdir -p $(BUILD)
-	@LIBERTY_FILE=$(SKY130_LIB) yosys -s scripts/yosys_synth_sky130.tcl
+	@sed "s|@LIBERTY_FILE@|$(SKY130_LIB)|g" scripts/yosys_synth_sky130.tcl > $(BUILD)/yosys_synth_sky130.ys
+	@yosys -s $(BUILD)/yosys_synth_sky130.ys
 	@command -v sta >/dev/null || (echo "OpenSTA not installed"; exit 1)
 	@LIBERTY_FILE=$(SKY130_LIB) NETLIST_FILE=$(BUILD)/sisRvCore_sky130.v \
 	  REPORT_FILE=$(BUILD)/sta_sky130_report.txt \
