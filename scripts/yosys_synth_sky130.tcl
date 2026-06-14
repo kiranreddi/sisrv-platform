@@ -1,12 +1,14 @@
 # Yosys synthesis mapped to Sky130 HD standard cells.
 # Produces build/sisRvCore_sky130.v for OpenSTA
+# Liberty path substituted by Makefile via @LIBERTY_FILE@
 
-read_verilog -sv -DSYNTHESIS rtl/core/sisAlu.sv
-read_verilog -sv -DSYNTHESIS rtl/core/sisDecode.sv
-read_verilog -sv -DSYNTHESIS rtl/core/sisRegFile.sv
-read_verilog -sv -DSYNTHESIS rtl/core/sisCsr.sv
-read_verilog -sv -DSYNTHESIS rtl/core/sisDecompress.sv
-read_verilog -sv -DSYNTHESIS rtl/core/sisRvCore.sv
+read -define SYNTHESIS
+read -sv rtl/core/sisAlu.sv
+read -sv rtl/core/sisDecode.sv
+read -sv rtl/core/sisRegFile.sv
+read -sv rtl/core/sisCsr.sv
+read -sv rtl/core/sisDecompress.sv
+read -sv rtl/core/sisRvCore.sv
 
 hierarchy -top sisRvCore
 proc; opt; flatten; opt -full
@@ -17,5 +19,5 @@ abc -liberty @LIBERTY_FILE@
 clean
 stat -liberty @LIBERTY_FILE@
 
-check
-write_verilog -noattr -noexpr -nohex build/sisRvCore_sky130.v
+check -assert
+write_verilog -noattr -nohex build/sisRvCore_sky130.v

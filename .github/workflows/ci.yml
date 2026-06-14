@@ -129,10 +129,48 @@ jobs:
           test -s build/ppa_synth_report.txt
           head -40 build/ppa_synth_report.txt
 
-  riscof-act:
-    name: RISCOF ACT + Lock-step Co-sim
+  cosim-lockstep:
+    name: 10k-seed Lock-step Co-sim
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 90
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Verilator 5.038
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git autoconf g++ flex bison libfl2 libfl-dev help2man make ccache zlib1g-dev
+          cd /tmp
+          git clone --depth 1 --branch v5.038 https://github.com/verilator/verilator.git
+          cd verilator
+          autoconf
+          ./configure --prefix=/usr/local
+          make -j$(nproc)
+          sudo make install
+
+      - name: Install RISC-V toolchain
+        run: |
+          sudo apt-get install -y gcc-riscv64-linux-gnu || true
+          sudo apt-get install -y gcc-riscv64-unknown-elf binutils-riscv64-unknown-elf || true
+
+      - name: Install Spike (reference model)
+        run: |
+          sudo apt-get install -y device-tree-compiler
+          git clone --depth 1 https://github.com/riscv-software-src/riscv-isa-sim.git /tmp/riscv-isa-sim
+          cd /tmp/riscv-isa-sim
+          mkdir build && cd build
+          ../configure --prefix=/usr/local --enable-commitlog
+          make -j$(nproc)
+          sudo make install
+
+      - name: Run 10k-seed lock-step co-sim
+        run: make cosim-lockstep COSIM_SEEDS=10000
+
+  riscof-act:
+    name: RISCOF rv32imac_zicsr ACT
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
     needs: lint
     steps:
       - uses: actions/checkout@v4
@@ -170,9 +208,6 @@ jobs:
           . .venv-riscof/bin/activate
           pip install -r verification/riscof/requirements.txt
 
-      - name: Run 10k-seed lock-step co-sim
-        run: make cosim-lockstep COSIM_SEEDS=10000
-
       - name: Run RISCOF rv32imac_zicsr ACT suite
         run: |
           . .venv-riscof/bin/activate
@@ -183,6 +218,7 @@ jobs:
           fi
           export RISCOF_TOOLCHAIN_PREFIX="$RV_PREFIX"
           make riscof-check-tools
+          make build/sim_sisPlatformTop USE_AXIL=0
           make riscof-act
 
   sta-sky130:
