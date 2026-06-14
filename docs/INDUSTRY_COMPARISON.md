@@ -17,7 +17,7 @@ licensable / product-grade RISC-V core.
 
 `sisRvCore` today is a **correct, well-verified RV32IM teaching/MVP core**: a 7-state
 multi-cycle FSM, M-mode only, with clean RTL, real formal proofs, cocotb unit tests, a
-32-test directed suite, an AXI4-Lite bridge, and a Yosys synthesis path. That is a
+33-test directed suite, an AXI4-Lite bridge, and a Yosys synthesis path. That is a
 genuinely strong *foundation* — better verified than many hobby cores.
 
 It is **not yet an industry-standard product**. The gap is not the ISA — it is three
@@ -53,7 +53,7 @@ defined sequence with hard exit gates.
 | Memory | Aligned-only assumed; no MPU/PMP; no cache; tightly-coupled ROM/RAM |
 | Bus | Internal corebus + AXI4-Lite **master** bridge (single outstanding, no bursts) |
 | Debug | None (no halt/resume, no JTAG, no RISC-V Debug spec DM) |
-| Verification | 32 directed asm + 43 cocotb + 4 formal proofs; **no RISCOF/riscv-arch-test compliance, no ISA random co-sim, no UVM/constrained-random at top** |
+| Verification | 33 directed asm + 44 cocotb + 4 formal proofs; **no RISCOF/riscv-arch-test compliance, no ISA random co-sim, no UVM/constrained-random at top** |
 | Physical | Yosys synth path exists; **no STA/timing closure, no real-PDK GDS, no power**|
 | Collateral | Good internal docs; **no integration guide, programmer's model, or release/IP packaging** |
 
@@ -134,7 +134,7 @@ Legend: ✅ have · 🟡 partial · ❌ missing · **P0** = required for any pro
 | AXI4 / AHB-Lite **full** master (bursts, ID, outstanding) | yes | 🟡 | AXI4-**Lite** only, 1 outstanding, no bursts | P1 |
 | I/D split or unified cache | E3/M7-class | ❌ | perf for non-TCM memory | P2 |
 | Tightly-coupled memory (TCM/ITIM/DTIM) | E2/M-class | 🟡 | have ROM/RAM but no formal TCM interface/wait-state model | P1 |
-| Bus error → precise trap | yes | ❌ | see §4.2 | **P0** |
+| Bus error → precise trap | yes | ✅ | `rsp_err` routes to instruction/load/store access-fault traps | **P0** |
 
 ### 4.5 Debug & development
 

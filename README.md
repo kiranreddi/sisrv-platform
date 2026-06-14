@@ -15,10 +15,10 @@ peripherals via a configurable bus path (corebus or AXI4-Lite).
 | M0 — Sim harness & golden flow | ✅ Complete |
 | M1 — RV32I multi-cycle core | ✅ Complete |
 | M2 — CSRs + traps (M-mode) | ✅ Complete |
-| M2.5 — Verification infrastructure | ✅ Complete (43 cocotb + 4 formal) |
+| M2.5 — Verification infrastructure | ✅ Complete (44 cocotb + 4 formal) |
 | M3 — AXI4-Lite master bridge | ✅ Complete |
 | M4 — Timer interrupt | ✅ Complete |
-| M5 — RV32M (mul/div) | ✅ Complete (32/32 tests pass) |
+| M5 — RV32M (mul/div) | ✅ Complete (33/33 tests pass) |
 | M6 — 3-stage pipeline | 🔲 Planned |
 | M7 — Yosys synthesis | ✅ Complete |
 | M8 — OpenROAD hardening | 🔲 Planned |
@@ -67,13 +67,13 @@ make sw
 # Run a single test (the basic PASS test)
 make sim
 
-# Run full regression suite (32 tests)
+# Run full regression suite (33 tests)
 make regress
 
 # Run full regression suite through AXI4-Lite path
 make regress-axil
 
-# Run cocotb tests (43 tests: ALU + RegFile + Decode + CSR + AXI-Lite)
+# Run cocotb tests (44 tests: ALU + RegFile + Decode + CSR + AXI-Lite)
 make cocotb
 
 # Run required formal verification proofs
@@ -135,12 +135,12 @@ $ make regress
   PASS: test_trap_faults
   PASS: test_uart
   PASS: test_x0
-=== Results: 32/32 passed, 0 failed ===
+=== Results: 33/33 passed, 0 failed ===
 ```
 
 ## Verification
 
-### Assembly Tests (32 tests)
+### Assembly Tests (33 tests)
 Directed self-checking tests covering all RV32I instructions plus RV32M multiply/divide:
 
 | Category | Tests | Coverage |
@@ -157,10 +157,10 @@ Directed self-checking tests covering all RV32I instructions plus RV32M multiply
 | Timer | test_mret_boundary | MRET exact resume point, no skipped/repeated instructions |
 | GPIO | test_gpio | DATA/DIR/IN/SET/CLR MMIO registers |
 | UART | test_uart | TXDATA/RXDATA/STATUS/CTRL/BAUDDIV MMIO registers and loopback |
-| System | test_fence, test_lui_auipc, test_x0 | FENCE, LUI/AUIPC, x0 hardwired zero |
+| System | test_fence, test_lui_auipc, test_x0, test_wfi | FENCE, LUI/AUIPC, x0 hardwired zero, WFI legal no-op |
 | Stress | test_back_to_back | Fibonacci, register file stress, data dependencies, loops |
 
-### cocotb Tests (43 tests)
+### cocotb Tests (44 tests)
 Randomized and directed unit tests using Verilator 5.038:
 
 - **ALU** (3 tests): 1000 directed edge-case checks, 1000 random stimulus, full shift amount sweep
@@ -207,8 +207,8 @@ The CI pipeline runs on every push/PR to `main`:
 | Job | Description | Tool |
 |-----|-------------|------|
 | **Lint** | Verilator lint check (all RTL) | Verilator 5.038 |
-| **Regression** | 32 assembly self-checking tests through corebus and AXI4-Lite paths | Verilator 5.038 + riscv64-gcc |
-| **cocotb** | 43 randomized/directed unit tests | Verilator 5.038 + cocotb |
+| **Regression** | 33 assembly self-checking tests through corebus and AXI4-Lite paths | Verilator 5.038 + riscv64-gcc |
+| **cocotb** | 44 randomized/directed unit tests | Verilator 5.038 + cocotb |
 | **Formal** | Required ALU + RegFile + Decoder proofs; optional AXI-Lite bounded safety check | Yosys + SymbiYosys + z3 |
 | **Synth** | Yosys synthesis of core + AXI bridge | Yosys |
 
@@ -225,7 +225,7 @@ tb/            Testbench
   models/      Behavioral models (AXI-Lite slave)
 sw/            Bare-metal BSP + assembly tests
   bsp/         crt0.S, link.ld
-  tests/asm/   Assembly test programs (32 tests)
+  tests/asm/   Assembly test programs (33 tests)
 formal/        Formal verification
   alu_add.sv       ALU formal proof wrapper (all 10 ops)
   alu_prove.ys     Yosys SAT proof script (ALU)

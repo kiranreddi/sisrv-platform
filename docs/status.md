@@ -6,7 +6,7 @@
 
 The sisrv-platform project implements a fully functional RV32IM RISC-V processor core
 with M-mode CSRs, trap handling, timer interrupts, GPIO, UART, and an AXI4-Lite master bridge.
-The core is verified through 32 directed assembly tests, 43 cocotb randomized unit tests,
+The core is verified through 33 directed assembly tests, 44 cocotb randomized unit tests,
 and 4 formal proofs — all running on Verilator 5.038.
 
 ## Milestone Status
@@ -41,7 +41,7 @@ and 4 formal proofs — all running on Verilator 5.038.
 | `sisDecode.sv` | ✅ Done | All RV32I/RV32M instruction types decoded |
 | `sisMemFabric.sv` | ✅ Done | Address decoder: ROM/RAM/MMIO routing |
 
-**Test coverage** (32 directed tests, all passing):
+**Test coverage** (33 directed tests, all passing):
 
 | Test | Instructions Covered |
 |------|---------------------|
@@ -69,6 +69,7 @@ and 4 formal proofs — all running on Verilator 5.038.
 | test_illegal | Illegal instruction trap (mcause=2) |
 | test_fence | FENCE as NOP |
 | test_trap_faults | Misaligned load/store/control-flow traps and instruction/load/store access faults |
+| test_wfi | WFI legal no-op |
 | test_back_to_back | Fibonacci, register file stress, data dependencies, loops |
 | test_timer | Timer interrupt: MTIP, ISR counter, MRET return |
 | test_mret_boundary | MRET exact resume point: no skipped/repeated instructions |
@@ -135,7 +136,7 @@ x0 always 0 ✅, PC word-aligned ✅, correct sign/zero extension ✅
 | AXI-Lite timer support | ✅ Done | `tb/models/sisAxiLiteSlave.sv` models MTIME/MTIMECMP and MTIP |
 | AXI-Lite GPIO support | ✅ Done | `tb/models/sisAxiLiteSlave.sv` models DATA/DIR/IN/SET/CLR |
 | AXI-Lite UART support | ✅ Done | `tb/models/sisAxiLiteSlave.sv` models TXDATA/RXDATA/STATUS/CTRL/BAUDDIV |
-| AXI-Lite system regression | ✅ Done | `make regress-axil` runs all 32 assembly tests through the AXI path |
+| AXI-Lite system regression | ✅ Done | `make regress-axil` runs all 33 assembly tests through the AXI path |
 | cocotb bridge tests | ✅ Done | 11 tests: reset, R/W, errors, stalls, 100-txn random stress |
 | Formal AXI-Lite bridge | Optional | Bounded VALID stability, mutual exclusion, data stability (`make formal-axil`) |
 
@@ -238,10 +239,10 @@ Planned:
 | Verilator version | 5.038 |
 | Lint status | ✅ Clean (Wall, no warnings) |
 | Compiler | riscv64-linux-gnu-gcc 13.3 |
-| Assembly test suite | 32 tests |
-| Assembly regression | 32/32 passing through corebus and AXI4-Lite paths |
-| cocotb unit tests | 43 tests (3 ALU + 4 RegFile + 11 Decode + 14 CSR + 11 AXI-Lite) |
-| cocotb status | 43/43 passing |
+| Assembly test suite | 33 tests |
+| Assembly regression | 33/33 passing through corebus and AXI4-Lite paths |
+| cocotb unit tests | 44 tests (3 ALU + 4 RegFile + 11 Decode + 15 CSR + 11 AXI-Lite) |
+| cocotb status | 44/44 passing |
 | Formal proofs/checks | Required: ALU (all 10 ops), RegFile (x0=0), Decode (fields + legality). Optional: AXI-Lite bounded safety (`make formal-axil`) |
 | Formal status | All proofs PASS |
 | Simulation time | < 2s per test |
@@ -273,7 +274,7 @@ Planned:
 - `tb/cocotb/test_alu.py` — ALU cocotb tests (3 tests)
 - `tb/cocotb/test_regfile.py` — RegFile cocotb tests (4 tests)
 - `tb/cocotb/test_decode.py` — Decoder cocotb tests (11 tests)
-- `tb/cocotb/test_csr.py` — CSR unit cocotb tests (14 tests)
+- `tb/cocotb/test_csr.py` — CSR unit cocotb tests (15 tests)
 - `tb/cocotb/test_axil_bridge.py` — AXI-Lite bridge cocotb tests (11 tests)
 
 ### Formal Verification
@@ -290,7 +291,7 @@ Planned:
 ### Software
 - `sw/bsp/crt0.S` — C runtime startup
 - `sw/bsp/link.ld` — Linker script
-- `sw/tests/asm/test_*.S` — 32 assembly test programs
+- `sw/tests/asm/test_*.S` — 33 assembly test programs
 
 ### Build & CI
 - `Makefile` — Build, lint, sim, regression, cocotb, formal, synth targets

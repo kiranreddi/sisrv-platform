@@ -46,6 +46,7 @@ make run-test_addi  # Run a specific test
 | test_machine_counters | misa, ID CSRs, mcycle/minstret, mcountinhibit |
 | test_rv32m | MUL/MULH/MULHSU/MULHU/DIV/DIVU/REM/REMU |
 | test_trap_faults | Misaligned access and bus access-fault traps |
+| test_wfi | WFI legal no-op |
 | test_x0 | x0 hardwired zero invariant |
 | test_csr | CSR read/write (CSRRW, CSRRS, CSRRC, CSRRWI) |
 | test_ecall | ECALL trap + MRET return |

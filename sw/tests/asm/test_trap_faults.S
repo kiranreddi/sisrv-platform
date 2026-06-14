@@ -18,12 +18,16 @@ trap_handler:
     li    x8, 3
     beq   x5, x8, case_sw_misalign
     li    x8, 4
-    beq   x5, x8, case_instr_misalign
+    beq   x5, x8, case_jalr_misalign
     li    x8, 5
-    beq   x5, x8, case_load_access
+    beq   x5, x8, case_jal_misalign
     li    x8, 6
-    beq   x5, x8, case_store_access
+    beq   x5, x8, case_branch_misalign
     li    x8, 7
+    beq   x5, x8, case_load_access
+    li    x8, 8
+    beq   x5, x8, case_store_access
+    li    x8, 9
     beq   x5, x8, case_fetch_access
     j     fail
 
@@ -55,11 +59,27 @@ case_sw_misalign:
     bne   x7, x8, fail
     j     trap_resume
 
-case_instr_misalign:
+case_jalr_misalign:
     li    x8, 0
     bne   x6, x8, fail
     li    x8, 0x12
     bne   x7, x8, fail
+    j     trap_resume
+
+case_jal_misalign:
+    li    x8, 0
+    bne   x6, x8, fail
+    csrr  x9, mepc
+    addi  x10, x9, 2
+    bne   x7, x10, fail
+    j     trap_resume
+
+case_branch_misalign:
+    li    x8, 0
+    bne   x6, x8, fail
+    csrr  x9, mepc
+    addi  x10, x9, 2
+    bne   x7, x10, fail
     j     trap_resume
 
 case_load_access:
@@ -103,7 +123,10 @@ setup:
     sh    x2, 1(x20)          # store address misaligned
     sw    x2, 2(x20)          # store address misaligned
     li    x3, 0x12
-    jalr  x0, 0(x3)           # instruction address misaligned
+    jalr  x0, 0(x3)           # instruction address misaligned (JALR)
+    jal   x0, 2               # instruction address misaligned (JAL)
+    li    x10, 1
+    beq   x10, x10, 2         # taken branch to misaligned target
     li    x3, 0x20000000
     lw    x4, 0(x3)           # load access fault
     sw    x4, 0(x3)           # store access fault

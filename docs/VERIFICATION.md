@@ -7,7 +7,7 @@ tests, randomized cocotb unit tests, and formal proofs. All tests run on Verilat
 
 ## Verification Tiers
 
-### Tier 1: Directed Assembly Tests (32 tests)
+### Tier 1: Directed Assembly Tests (33 tests)
 
 Self-checking assembly tests that write 1 to `0x10000000` (PASS) or 0 (FAIL).
 Compiled with `rv32im_zicsr` ISA and run on the full platform simulation.
@@ -29,10 +29,10 @@ Compiled with `rv32im_zicsr` ISA and run on the full platform simulation.
 | Timer | test_mret_boundary | MRET exact resume point, no skipped/repeated instructions |
 | GPIO | test_gpio | DATA/DIR/IN/SET/CLR MMIO registers |
 | UART | test_uart | TXDATA/RXDATA/STATUS/CTRL/BAUDDIV MMIO registers and loopback |
-| System | test_fence, test_lui_auipc, test_x0, test_pass | FENCE NOP, LUI/AUIPC, x0=0 invariant |
+| System | test_fence, test_lui_auipc, test_x0, test_wfi, test_pass | FENCE NOP, LUI/AUIPC, x0=0 invariant, WFI legal no-op |
 | Stress | test_back_to_back | Fibonacci, register stress, tight loops |
 
-### Tier 2: cocotb Randomized Tests (43 tests)
+### Tier 2: cocotb Randomized Tests (44 tests)
 
 Unit-level tests using cocotb with constrained random stimulus on Verilator 5.038.
 
@@ -60,7 +60,7 @@ Unit-level tests using cocotb with constrained random stimulus on Verilator 5.03
 - funct3/funct7 extraction
 - 1000 random instructions with RV32I/RV32M field/legality verification
 
-**CSR (14 tests)**:
+**CSR (15 tests)**:
 - Reset values (implemented CSRs read expected reset values)
 - CSRRW write/read all CSRs
 - CSRRS set-bits operation
@@ -73,6 +73,7 @@ Unit-level tests using cocotb with constrained random stimulus on Verilator 5.03
 - MTIP/irq_pending (ext_mtip → mip.MTIP → irq_pending with MIE/MTIE)
 - Machine ID CSRs (`misa`, vendor/arch/impl/hart/config pointer)
 - Machine counters (`mcycle`, `minstret`) and `mcountinhibit`
+- Synchronous exception trap causes (misalign/access-fault mcause/mtval)
 
 **AXI-Lite Bridge (11 tests)**:
 - Reset state verification (req_ready=1, all VALID=0)
@@ -117,10 +118,10 @@ Unit-level tests using cocotb with constrained random stimulus on Verilator 5.03
 ## Running Tests
 
 ```bash
-# Run all assembly tests (32 tests)
+# Run all assembly tests (33 tests)
 make regress
 
-# Run cocotb tests (43 tests)
+# Run cocotb tests (44 tests)
 make cocotb
 
 # Run formal proofs
@@ -140,8 +141,8 @@ make lint && make regress && make cocotb && make formal
 
 GitHub Actions workflow (`.github/workflows/ci.yml`) runs on every push/PR:
 1. **Lint** — Verilator lint check
-2. **Regression** — 32 assembly tests (corebus + AXI4-Lite paths)
-3. **cocotb** — 43 randomized unit tests
+2. **Regression** — 33 assembly tests (corebus + AXI4-Lite paths)
+3. **cocotb** — 44 randomized unit tests
 4. **Formal** — ALU + RegFile + Decoder proofs
 5. **Synth** — Yosys synthesis (`make synth`)
 

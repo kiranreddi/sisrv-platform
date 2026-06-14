@@ -393,3 +393,41 @@ async def test_csr_counters_and_inhibit(dut):
     assert await csr_read(dut, CSR_MINSTRET) == i_hold, "minstret should stop when IR is inhibited"
 
     dut._log.info("Counters and mcountinhibit: PASS")
+
+
+@cocotb.test()
+async def test_csr_sync_exception_traps(dut):
+    """Verify CSR trap entry records synchronous exception causes and mtval."""
+    clock = Clock(dut.clk, 10, units="ns")
+    cocotb.start_soon(clock.start())
+    await reset_dut(dut)
+
+    cases = [
+        ("instr addr misaligned", 0, 0x00000082, 0x00000080),
+        ("instr access fault", 1, 0x20000000, 0x20000000),
+        ("load addr misaligned", 4, 0x80000002, 0x00000100),
+        ("load access fault", 5, 0x20000000, 0x00000104),
+        ("store addr misaligned", 6, 0x80000001, 0x00000108),
+        ("store access fault", 7, 0x20000000, 0x0000010C),
+    ]
+
+    for name, cause, mtval, epc in cases:
+        dut.trap_enter.value = 1
+        dut.trap_cause.value = cause
+        dut.trap_val.value = mtval
+        dut.trap_epc.value = epc
+        await RisingEdge(dut.clk)
+        dut.trap_enter.value = 0
+
+        got_cause = await csr_read(dut, CSR_MCAUSE)
+        got_mtval = await csr_read(dut, CSR_MTVAL)
+        got_mepc = await csr_read(dut, CSR_MEPC)
+
+        assert got_cause == cause, \
+            f"{name}: mcause expected {cause}, got {got_cause}"
+        assert got_mtval == mtval, \
+            f"{name}: mtval expected 0x{mtval:08x}, got 0x{got_mtval:08x}"
+        assert got_mepc == epc, \
+            f"{name}: mepc expected 0x{epc:08x}, got 0x{got_mepc:08x}"
+
+    dut._log.info("Synchronous exception trap causes: PASS")
