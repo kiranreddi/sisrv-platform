@@ -6,6 +6,9 @@ read_verilog $env(NETLIST_FILE)
 read_sdc scripts/constraints_sisRvCore.sdc
 
 link_design sisRvCore
+if {[catch {current_design}]} {
+  link_design {\sisRvCore}
+}
 check_setup
 
 set wns [sta::worst_slack max]
