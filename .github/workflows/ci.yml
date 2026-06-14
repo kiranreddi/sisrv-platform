@@ -195,14 +195,22 @@ jobs:
       - name: Install Yosys and build OpenSTA
         run: |
           sudo apt-get update
-          sudo apt-get install -y yosys curl cmake tcl-dev swig bison flex libfl-dev zlib1g-dev libeigen3-dev libgtest-dev libcudd-dev
+          sudo apt-get install -y yosys curl cmake autoconf automake tcl-dev swig bison flex libfl-dev zlib1g-dev libeigen3-dev libgtest-dev
           sudo cmake -S /usr/src/googletest -B /tmp/gtest-build -DCMAKE_INSTALL_PREFIX=/usr/local
           sudo cmake --build /tmp/gtest-build -j$(nproc)
           sudo cmake --install /tmp/gtest-build
+          git clone https://github.com/cuddorg/cudd.git /tmp/cudd
+          cd /tmp/cudd
+          git checkout 3.0.0
+          ./configure --prefix=/usr/local
+          make -j$(nproc)
+          sudo make install
+          cd -
           git clone --depth 1 https://github.com/The-OpenROAD-Project/OpenSTA.git /tmp/OpenSTA
           cmake -S /tmp/OpenSTA -B /tmp/OpenSTA/build \
             -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_INSTALL_PREFIX=/usr/local
+            -DCMAKE_INSTALL_PREFIX=/usr/local \
+            -DCUDD_DIR=/usr/local
           cmake --build /tmp/OpenSTA/build -j$(nproc) --target sta
           sudo cp /tmp/OpenSTA/build/sta /usr/local/bin/sta
           sta -version
