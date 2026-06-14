@@ -131,10 +131,12 @@ static bool copy_hex_file(const std::string& src_path, const char* dst_path) {
 }
 
 static bool stage_hex_files(const SimConfig& cfg) {
-  if (cfg.rom_hex != "rom.hex" && !copy_hex_file(cfg.rom_hex, "rom.hex")) {
+  if (cfg.rom_hex != "rom.hex" && cfg.rom_hex != "./rom.hex" &&
+      !copy_hex_file(cfg.rom_hex, "rom.hex")) {
     return false;
   }
-  if (cfg.ram_hex != "ram.hex" && !copy_hex_file(cfg.ram_hex, "ram.hex")) {
+  if (cfg.ram_hex != "ram.hex" && cfg.ram_hex != "./ram.hex" &&
+      !copy_hex_file(cfg.ram_hex, "ram.hex")) {
     return false;
   }
   return true;

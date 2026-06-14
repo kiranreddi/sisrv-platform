@@ -145,8 +145,8 @@ class sisrv(pluginTemplate):
 
             sim_cmd = (
                 f"{self.dut_exe} "
-                f"--rom {rom_hex} "
-                f"--ram {ram_hex} "
+                f"--rom rom.hex "
+                f"--ram ram.hex "
                 f"--signature-start {sig_begin} "
                 f"--signature-end {sig_end} "
                 f"--signature-out {sig_file} "
