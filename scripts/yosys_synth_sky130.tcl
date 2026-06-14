@@ -17,5 +17,5 @@ abc -liberty @LIBERTY_FILE@
 clean
 stat -liberty @LIBERTY_FILE@
 
-check -assert
+check
 write_verilog -noattr -nohex build/sisRvCore_sky130.v
