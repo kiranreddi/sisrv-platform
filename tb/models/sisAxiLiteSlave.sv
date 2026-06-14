@@ -72,6 +72,17 @@ module sisAxiLiteSlave #(
 
   logic [31:0] rom [0:ROM_DEPTH_WORDS-1];
   logic [31:0] ram [0:RAM_DEPTH_WORDS-1];
+
+`ifndef SYNTHESIS
+  export "DPI-C" function dpi_sisrv_ram_read_word;
+  function int unsigned dpi_sisrv_ram_read_word(input int unsigned word_idx);
+    if (word_idx < RAM_DEPTH_WORDS)
+      return ram[word_idx];
+    else
+      return 0;
+  endfunction
+`endif
+
   logic [63:0] mtime;
   logic [63:0] mtimecmp;
   logic [63:0] mtime_next;
