@@ -5,7 +5,10 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 LIB_DIR="${ROOT}/third_party/sky130"
 LIB_FILE="${LIB_DIR}/sky130_fd_sc_hd__tt_025C_1v80.lib"
-LIB_URL="https://raw.githubusercontent.com/efabless/sky130-libs/refs/heads/master/sky130_fd_sc_hd/techlef/sky130_fd_sc_hd__tt_025C_1v80.lib"
+LIB_URLS=(
+  "https://raw.githubusercontent.com/The-OpenROAD-Project/OpenROAD-flow-scripts/master/flow/platforms/sky130hd/lib/sky130_fd_sc_hd__tt_025C_1v80.lib"
+  "https://raw.githubusercontent.com/efabless/sky130-pdk-libs-sky130_fd_sc_hd/main/timing/sky130_fd_sc_hd__tt_025C_1v80.lib"
+)
 
 mkdir -p "${LIB_DIR}"
 
@@ -15,10 +18,16 @@ if [[ -s "${LIB_FILE}" ]]; then
 fi
 
 echo "Downloading Sky130 HD Liberty..."
-if ! curl -fsSL "${LIB_URL}" -o "${LIB_FILE}.tmp"; then
-  LIB_URL="https://raw.githubusercontent.com/ucb-art/OpenROAD-Platform-Files/master/sky130/sky130_fd_sc_hd__tt_025C_1v80.lib"
-  curl -fsSL "${LIB_URL}" -o "${LIB_FILE}.tmp" || \
-  curl -fsSL "https://raw.githubusercontent.com/AlignmentResearch/flightmare/master/flightlib/3rd_party/sky130/sky130_fd_sc_hd__tt_025C_1v80.lib" -o "${LIB_FILE}.tmp"
+rm -f "${LIB_FILE}.tmp"
+for lib_url in "${LIB_URLS[@]}"; do
+  if curl -fsSL "${lib_url}" -o "${LIB_FILE}.tmp"; then
+    break
+  fi
+done
+
+if [[ ! -s "${LIB_FILE}.tmp" ]]; then
+  echo "Failed to download Sky130 HD Liberty from known sources" >&2
+  exit 1
 fi
 
 mv "${LIB_FILE}.tmp" "${LIB_FILE}"
