@@ -160,7 +160,7 @@ jobs:
           git clone --depth 1 https://github.com/riscv-software-src/riscv-isa-sim.git /tmp/riscv-isa-sim
           cd /tmp/riscv-isa-sim
           mkdir build && cd build
-          ../configure --prefix=/usr/local
+          ../configure --prefix=/usr/local --enable-commitlog
           make -j$(nproc)
           sudo make install
 
@@ -192,10 +192,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Yosys and OpenSTA
+      - name: Install Yosys and build OpenSTA
         run: |
           sudo apt-get update
-          sudo apt-get install -y yosys opensta curl
+          sudo apt-get install -y yosys curl cmake tcl-dev swig bison flex zlib1g-dev
+          git clone --depth 1 https://github.com/The-OpenROAD-Project/OpenSTA.git /tmp/OpenSTA
+          cmake -S /tmp/OpenSTA -B /tmp/OpenSTA/build -DCMAKE_BUILD_TYPE=Release
+          cmake --build /tmp/OpenSTA/build -j$(nproc)
+          sudo cmake --install /tmp/OpenSTA/build
+          sta -version
 
       - name: Run Sky130 STA
         run: make sta-sky130

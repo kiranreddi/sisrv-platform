@@ -115,30 +115,35 @@ def parse_rtl_commits(path: Path) -> list[tuple[int, int]]:
 
 
 def run_spike(elf: Path, log_path: Path) -> list[tuple[int, int]]:
+    cmd = [
+        "spike",
+        "--isa=rv32im_zicsr",
+        "-m0x0:0x100000,0x80000000:0x100000",
+        "-l",
+        str(elf),
+    ]
     try:
         proc = subprocess.run(
-            [
-                "spike",
-                "--isa=rv32im_zicsr",
-                "-m0x0:0x100000",
-                "--log-commits",
-                str(elf),
-            ],
+            cmd,
             capture_output=True,
             text=True,
-            timeout=1,
+            timeout=3,
         )
     except subprocess.TimeoutExpired as exc:
-        return parse_spike_commits((exc.stdout or "") + (exc.stderr or ""))
-
-    if proc.returncode != 0 and not proc.stderr:
-        print(proc.stdout)
-        print(proc.stderr, file=sys.stderr)
-        raise RuntimeError(f"Spike failed on {elf}")
+        log = (exc.stdout or "") + (exc.stderr or "")
+        log_path.write_text(log)
+        return parse_spike_commits(log)
 
     log = (proc.stdout or "") + (proc.stderr or "")
     log_path.write_text(log)
-    return parse_spike_commits(log)
+    commits = parse_spike_commits(log)
+    if not commits and proc.returncode != 0:
+        print(log, file=sys.stderr)
+        raise RuntimeError(f"Spike failed on {elf} (exit {proc.returncode})")
+    if not commits:
+        print(log, file=sys.stderr)
+        raise RuntimeError(f"Spike produced no commit trace on {elf}")
+    return commits
 
 
 def run_verilator(rom_hex: Path, ram_hex: Path, commit_log: Path) -> list[tuple[int, int]]:
