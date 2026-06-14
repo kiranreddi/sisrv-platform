@@ -1,5 +1,5 @@
 # Pinned versions for a working RISCOF stack (see README.md).
 riscof==1.23.4
 riscv-config==2.17.0
-riscv-isac==0.7.0
+riscv-isac==0.7.2
 ruamel.yaml==0.17.40

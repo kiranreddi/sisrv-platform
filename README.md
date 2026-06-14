@@ -1,46 +1,147 @@
 # sisrv-platform
 
 [![CI](https://github.com/kiranreddi/sisrv-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/kiranreddi/sisrv-platform/actions/workflows/ci.yml)
+![ISA](https://img.shields.io/badge/ISA-RV32IM-blue)
+![ASM](https://img.shields.io/badge/asm-33%2F33%20passing-brightgreen)
+![cocotb](https://img.shields.io/badge/cocotb-44%20tests-brightgreen)
+![formal](https://img.shields.io/badge/formal-4%20proof%20sets-brightgreen)
+![synth](https://img.shields.io/badge/synthesis-Yosys-informational)
+![maturity](https://img.shields.io/badge/maturity-productizing-yellow)
+![license](https://img.shields.io/badge/license-TBD-lightgrey)
 
-ASIC-first, open-source end-to-end RISC-V (RV32IM) platform using **Verilator** as the primary simulator.
+**ASIC-first RV32IM SoC platform for compact embedded RISC-V systems.**
 
-This repo implements a complete RV32IM multi-cycle FSM core with M-mode CSRs, trap handling,
-timer interrupts, and AXI4-Lite bridge integration — connected to ROM, RAM, timer, GPIO, UART, and MMIO
-peripherals via a configurable bus path (corebus or AXI4-Lite).
+`sisrv-platform` is an open RTL platform built around a complete RV32IM multi-cycle
+core with machine-mode CSRs, precise traps, timer interrupt support, GPIO, UART,
+ROM/RAM, a simple internal corebus, and an optional AXI4-Lite bridge. It is designed
+to be easy to simulate, verify, synthesize, and extend toward product-grade embedded
+CPU IP.
 
-## Current status
+## Why This Exists
+
+Most small RISC-V examples stop at "runs a few instructions." Commercial embedded
+cores sell a complete story: integration, debug, interrupts, verification, synthesis,
+documentation, and a defensible roadmap. This repo is moving in that direction while
+keeping the implementation readable and open.
+
+**Best fit today**
+
+- Learning and prototyping a real RV32IM core/platform stack.
+- Embedded SoC bring-up with ROM, RAM, timer, GPIO, UART, and MMIO.
+- Verilator-first firmware and RTL regression.
+- AXI4-Lite integration experiments.
+- Formal, cocotb, and architectural-test harness development.
+
+**Not yet claimed**
+
+- Not a certified or licensable commercial RISC-V IP product.
+- Full RISCOF/riscv-arch-test signoff is not complete.
+- No RISC-V Debug Module/JTAG, PMP, CLINT/PLIC, cache, or physical PPA signoff yet.
+- License is still TBD.
+
+## Product Snapshot
+
+| Area | Current capability |
+|---|---|
+| Core | RV32IM, 32 registers, multi-cycle FSM, single issue, in order |
+| Privilege | Machine mode, core CSRs, trap entry/return, counters, WFI legal no-op |
+| Platform | ROM, RAM, tohost, timer, GPIO, UART |
+| Bus | Internal corebus plus optional AXI4-Lite bridge path |
+| Verification | 33 assembly tests, 44 cocotb tests, formal proof sets, RISCOF smoke harness |
+| Implementation | Synthesizable SystemVerilog, Verilator simulation, Yosys synthesis path |
+| Product gap | Full compliance, debug, PMP, interrupt controller, PPA/signoff collateral |
+
+## Architecture At A Glance
+
+```mermaid
+flowchart LR
+  FW["Bare-metal firmware"] --> ROM["ROM\n0x0000_0000"]
+  Core["sisRvCore\nRV32IM M-mode"] --> Bus["corebus\nsingle outstanding request"]
+  Bus --> ROM
+  Bus --> RAM["RAM\n0x8000_0000"]
+  Bus --> Tohost["tohost\npass/fail MMIO"]
+  Bus --> Timer["Timer\nmtime/mtimecmp"]
+  Bus --> GPIO["GPIO\nDATA/DIR/IN/SET/CLR"]
+  Bus --> UART["UART\nTX/RX/status/control"]
+  Bus -. "USE_AXIL=1" .-> AXIL["AXI4-Lite bridge\nmaster profile"]
+```
+
+```mermaid
+stateDiagram-v2
+  [*] --> FETCH
+  FETCH --> DECODE
+  DECODE --> EXECUTE
+  EXECUTE --> MEM: load/store
+  EXECUTE --> WB: ALU/CSR/jump
+  MEM --> WB
+  WB --> FETCH
+  FETCH --> TRAP: fetch fault
+  DECODE --> TRAP: illegal/ecall/ebreak
+  EXECUTE --> TRAP: target misalign
+  MEM --> TRAP: access/misalign fault
+  TRAP --> FETCH: pc = mtvec
+```
+
+```mermaid
+flowchart TB
+  RTL["RTL"] --> Lint["Verilator lint"]
+  RTL --> Sim["Verilator platform sim"]
+  Sim --> ASM["33 directed asm tests\ncorebus + AXI4-Lite"]
+  RTL --> Cocotb["44 cocotb unit tests\nALU, regfile, decode, CSR, AXI"]
+  RTL --> Formal["Formal proofs\nALU, regfile, decode, AXI safety"]
+  RTL --> Synth["Yosys synthesis"]
+  Sim --> RISCOF["RISCOF smoke harness\nSpike signature compare"]
+```
+
+## Commercial Positioning
+
+`sisrv-platform` is closest in intent to compact embedded RISC-V MCU-class IP, but it
+is still productizing. The table below is intentionally conservative.
+
+| Product/core | Public positioning | Typical class | Where sisrv-platform stands |
+|---|---|---|---|
+| [SiFive Essential E Series](https://www.sifive.com/cores/essential-e-series) | Configurable 32-bit embedded RISC-V cores with commercial collateral and performance claims | MCU/embedded IP | Similar embedded target, but sisrv lacks commercial debug/security/PPA collateral |
+| [AndesCore N22](https://www.andestech.com/en/products-solutions/andescore-processors/) | Compact low-power 32-bit RISC-V CPU IP with published CoreMark/DMIPS class metrics | Low-power MCU IP | sisrv has an open platform/verification stack, but no benchmark/PPA signoff yet |
+| [Codasip L31](https://codasip.com/press-release/2022/08/31/codasip-joins-intel-pathfinder-for-risc-v-program/) | 32-bit embedded RISC-V core with pipeline/configuration options and product tooling | Configurable embedded IP | sisrv is simpler and open, with AXI4-Lite/platform focus; configurability is early |
+| sisrv-platform | Open ASIC-first RV32IM platform with verification and synthesis path | Productizing open MCU-class platform | Strong learning/prototyping base; not yet a commercial IP replacement |
+
+See [`docs/INDUSTRY_COMPARISON.md`](docs/INDUSTRY_COMPARISON.md) for the full gap
+analysis and product-grade roadmap.
+
+## Current Status
 
 | Milestone | Status |
-|-----------|--------|
-| M0 — Sim harness & golden flow | ✅ Complete |
-| M1 — RV32I multi-cycle core | ✅ Complete |
-| M2 — CSRs + traps (M-mode) | ✅ Complete |
-| M2.5 — Verification infrastructure | ✅ Complete (44 cocotb + 4 formal) |
-| M3 — AXI4-Lite master bridge | ✅ Complete |
-| M4 — Timer interrupt | ✅ Complete |
-| M5 — RV32M (mul/div) | ✅ Complete (33/33 tests pass) |
-| M6 — 3-stage pipeline | 🔲 Planned |
-| M7 — Yosys synthesis | ✅ Complete |
-| M8 — OpenROAD hardening | 🔲 Planned |
+|---|---|
+| M0 - Sim harness and golden flow | Complete |
+| M1 - RV32I multi-cycle core | Complete |
+| M2 - CSRs and traps (M-mode) | Complete |
+| M2.5 - Verification infrastructure | Complete: 44 cocotb tests + 4 formal proof sets |
+| M3 - AXI4-Lite master bridge | Complete |
+| M4 - Timer interrupt | Complete |
+| M5 - RV32M multiply/divide | Complete: 33/33 asm tests pass |
+| M6 - 3-stage pipeline | Planned |
+| M7 - Yosys synthesis | Complete |
+| M8 - OpenROAD hardening | Planned |
 
-See `docs/status.md` for detailed status.
+Detailed status lives in [`docs/status.md`](docs/status.md).
 
 ## Quickstart
 
 ### Prerequisites
 
-- **Verilator 5.038+** (required for cocotb support)
-- **RISC-V cross-compiler**: `riscv64-linux-gnu-gcc` (from `gcc-riscv64-linux-gnu` package)
-- **GNU Make**
-- **Python 3 + cocotb** (for cocotb tests)
-- **Yosys + SymbiYosys + z3** (for formal verification and synthesis)
+- Verilator 5.038+
+- RISC-V cross-compiler: `riscv64-linux-gnu-gcc`
+- GNU Make
+- Python 3 + cocotb
+- Yosys + SymbiYosys + z3 for formal/synthesis flows
 
 On Ubuntu/Debian:
+
 ```bash
 # Core tools
 sudo apt-get install gcc-riscv64-linux-gnu binutils-riscv64-linux-gnu make
 
-# Verilator 5.038 (build from source)
+# Verilator 5.038
 sudo apt-get install git autoconf g++ flex bison libfl2 libfl-dev help2man ccache zlib1g-dev
 cd /tmp && git clone --depth 1 --branch v5.038 https://github.com/verilator/verilator.git
 cd verilator && autoconf && ./configure --prefix=/usr/local && make -j$(nproc) && sudo make install
@@ -49,90 +150,43 @@ cd verilator && autoconf && ./configure --prefix=/usr/local && make -j$(nproc) &
 pip install cocotb
 
 # Formal verification + synthesis
-sudo apt-get install yosys symbiyosys z3
+sudo apt-get install yosys z3
+git clone --depth 1 https://github.com/YosysHQ/sby.git /tmp/sby && sudo make -C /tmp/sby install
 ```
 
-### Build and run
+### Build And Run
 
 ```bash
-# Lint all RTL (Verilator lint)
-make lint
+make lint                     # Verilator lint
+make build/sim_sisPlatformTop # Build simulation binary
+make sw                       # Build assembly test hex files
+make sim                      # Run basic PASS test
+make regress                  # Run 33-test corebus regression
+make regress-axil             # Run 33-test AXI4-Lite regression
+make cocotb                   # Run 44 cocotb tests
+make formal                   # Run required formal proofs
+make formal-axil              # Optional AXI4-Lite bounded formal safety check
+make synth                    # Run Yosys synthesis
+make wave                     # Open build/wave.fst in GTKWave
+make clean                    # Remove build artifacts
+```
 
-# Build simulation binary
-make build/sim_sisPlatformTop
+Run a specific assembly test:
 
-# Build all assembly test hex files
-make sw
-
-# Run a single test (the basic PASS test)
-make sim
-
-# Run full regression suite (33 tests)
-make regress
-
-# Run full regression suite through AXI4-Lite path
-make regress-axil
-
-# Run cocotb tests (44 tests: ALU + RegFile + Decode + CSR + AXI-Lite)
-make cocotb
-
-# Run required formal verification proofs
-make formal
-
-# Run optional AXI-Lite bridge formal safety check
-make formal-axil
-
-# Run Yosys synthesis
-make synth
-
-# Run a specific test
+```bash
 make run-test_addi
 make run-test_branch
 make run-test_load_store
-
-# View waveforms (after running sim)
-make wave
-# Then: gtkwave build/wave.fst
-
-# Clean all build artifacts
-make clean
 ```
 
-### Expected output
+Expected regression summary:
 
-```
+```text
 $ make regress
 === Running regression tests ===
   PASS: test_add_sub
   PASS: test_addi
-  PASS: test_alu_edge
-  PASS: test_back_to_back
-  PASS: test_branch
-  PASS: test_branch_edge
-  PASS: test_csr
-  PASS: test_csr_edge
-  PASS: test_ebreak
-  PASS: test_ecall
-  PASS: test_fence
-  PASS: test_gpio
-  PASS: test_illegal
-  PASS: test_illegal_funct
-  PASS: test_jal_jalr
-  PASS: test_jalr_align
-  PASS: test_load_store
-  PASS: test_logic
-  PASS: test_lui_auipc
-  PASS: test_machine_counters
-  PASS: test_mem_edge
-  PASS: test_mtime_write
-  PASS: test_mret_boundary
-  PASS: test_pass
-  PASS: test_ram_walk
-  PASS: test_rv32m
-  PASS: test_shift
-  PASS: test_slt
-  PASS: test_timer
-  PASS: test_trap_faults
+  ...
   PASS: test_uart
   PASS: test_x0
 === Results: 33/33 passed, 0 failed ===
@@ -140,132 +194,131 @@ $ make regress
 
 ## Verification
 
-### Assembly Tests (33 tests)
-Directed self-checking tests covering all RV32I instructions plus RV32M multiply/divide:
+### Directed Assembly Regression
 
-| Category | Tests | Coverage |
-|----------|-------|----------|
-| ALU | test_add_sub, test_addi, test_alu_edge | ADD/SUB/ADDI with overflow, INT_MIN/MAX, zero edge cases |
-| Logic | test_logic, test_shift, test_slt | AND/OR/XOR/SLL/SRL/SRA/SLT/SLTU |
-| RV32M | test_rv32m | MUL/MULH/MULHSU/MULHU/DIV/DIVU/REM/REMU, divide-by-zero, signed overflow |
-| Memory | test_load_store, test_mem_edge, test_ram_walk | LB/LBU/LH/LHU/LW/SB/SH/SW, all byte lanes, walking ones/zeros |
-| Branch | test_branch, test_branch_edge | BEQ/BNE/BLT/BGE/BLTU/BGEU, INT_MIN/MAX boundaries |
-| Jump | test_jal_jalr, test_jalr_align | JAL/JALR, bit[0] masking, rd=x0 |
-| CSR | test_csr, test_csr_edge, test_machine_counters | CSRRW/CSRRS/CSRRC/CSRRWI/CSRRSI/CSRRCI, ID CSRs, machine counters, mcountinhibit |
-| Trap | test_ecall, test_ebreak, test_illegal, test_illegal_funct, test_trap_faults | ECALL/EBREAK/illegal opcode + funct-level traps, misalignment/access faults, mcause/mtval, MRET |
-| Timer | test_timer, test_mtime_write | MTIP interrupt, ISR handler, MTIME/MTIMECMP, deterministic MTIME writes |
-| Timer | test_mret_boundary | MRET exact resume point, no skipped/repeated instructions |
-| GPIO | test_gpio | DATA/DIR/IN/SET/CLR MMIO registers |
-| UART | test_uart | TXDATA/RXDATA/STATUS/CTRL/BAUDDIV MMIO registers and loopback |
-| System | test_fence, test_lui_auipc, test_x0, test_wfi | FENCE, LUI/AUIPC, x0 hardwired zero, WFI legal no-op |
-| Stress | test_back_to_back | Fibonacci, register file stress, data dependencies, loops |
+Self-checking tests cover RV32I, RV32M, CSRs, traps, timer, GPIO, UART, memory, jumps,
+branches, system instructions, and stress loops.
 
-### cocotb Tests (44 tests)
-Randomized and directed unit tests using Verilator 5.038:
+| Category | Coverage |
+|---|---|
+| ALU/logic/shift/compare | ADD/SUB/ADDI, AND/OR/XOR, shifts, signed/unsigned comparisons |
+| RV32M | MUL/MULH/MULHSU/MULHU/DIV/DIVU/REM/REMU and edge cases |
+| Memory | Byte/halfword/word load-store, write strobes, walking RAM tests |
+| Control flow | Branches, JAL/JALR, alignment behavior |
+| CSR/traps | CSR ops, ECALL, EBREAK, illegal instruction, access/misalignment faults, MRET |
+| Platform | Timer interrupt, MTIME writes, GPIO MMIO, UART loopback |
 
-- **ALU** (3 tests): 1000 directed edge-case checks, 1000 random stimulus, full shift amount sweep
-- **RegFile** (4 tests): x0-always-zero, write/read all registers, write isolation, 500 random read/write cycles
-- **Decoder** (11 tests): Type flag decode for all 11 opcodes, illegal opcode/funct detection, register extraction, I/S/U/B/J immediate sign-extension, funct3/funct7 extraction, 1000 random instructions
-- **CSR** (15 tests): Reset values, CSRRW/CSRRS/CSRRC operations, unknown CSR reads zero, trap entry (mepc/mcause/mtval/mstatus), MRET restore, MEPC word alignment, mtvec/mepc output ports, MTIP/irq_pending, ID CSRs, counters/mcountinhibit, sync trap causes
-- **AXI-Lite Bridge** (11 tests): Reset state, basic read/write, error responses (DECERR/SLVERR), stalled channels, back-to-back transactions, 100-transaction random stress, write strobe variations, VALID stability
+### cocotb Unit Tests
 
-### RISCOF / Architectural Tests (optional)
+- ALU: directed edge cases, random stimulus, full shift sweep.
+- RegFile: x0 invariant, read/write coverage, random access.
+- Decode: opcode/type flags, immediates, legality, RV32M gating.
+- CSR: reset, CSR ops, trap entry/return, timer pending, counters, sync trap causes.
+- AXI4-Lite: reads/writes, errors, stalls, back-to-back traffic, random stress, VALID stability.
 
-Reusable Spike co-simulation harness under `verification/riscof/`. Smoke target runs one RV32I
-test (`add-01` by default) and compares memory signatures.
+### Formal Proofs
+
+- ALU functional correctness across all operations.
+- RegFile x0 hardwired-zero invariant.
+- Decoder field extraction, immediate alignment, and legal/illegal instruction behavior.
+- AXI4-Lite bridge safety checks for stability and mutual exclusion.
+
+### RISCOF / Architectural Tests
+
+Reusable Spike co-simulation harness lives under `verification/riscof/`. The smoke
+target runs a single RV32I test and compares DUT/reference signatures.
 
 ```bash
-make riscof-smoke          # requires Spike + riscv64-unknown-elf-gcc + Python venv
-make riscof-rv32i          # broader local RV32I directory
-make riscof-rv32im         # rv32i_m tree (ISA-filtered)
+make riscof-smoke
+make riscof-rv32i
+make riscof-rv32im
 ```
 
-Excluded until implemented: PMP, debug, interrupts, S/U modes, C/A/F/D. See
-`verification/riscof/README.md`.
+This is optional and still a productization gap until the full advertised ISA profile
+is green in CI. Unsupported classes remain PMP, debug, CLINT/PLIC interrupts, S/U
+modes, and C/A/F/D extensions.
 
-### Formal Verification
-Proofs via Yosys/SymbiYosys:
+## Architecture Reference
 
-- **ALU**: All 10 operations (ADD, SUB, SLL, SLT, SLTU, XOR, SRL, SRA, OR, AND) formally proven correct for all 2^64 input combinations. Zero flag proven correct.
-- **RegFile**: x0-always-zero property proven by k-induction for any sequence of writes.
-- **Decoder**: Field extraction, U/B/J immediate alignment invariants, RV32I/RV32M encoding legality, and disabled-RV32M illegal behavior — all proven for all 2^32 possible instructions.
-- **AXI-Lite Bridge**: VALID stability (AR/AW/W channels), mutual exclusion of read/write activity, corebus response stability, address/data stability — covered by cocotb/regression and available as an optional bounded formal safety check.
+### CPU Core
 
-## Architecture
-
-### CPU Core (`rtl/core/sisRvCore.sv`)
-- **ISA**: RV32IM (complete base integer instruction set plus multiply/divide; WFI legal no-op)
-- **Microarchitecture**: Multi-cycle FSM (FETCH → DECODE → EXECUTE → MEM → WB)
-- **Privilege**: M-mode only with CSRs (mstatus, misa, mtvec, mepc, mcause, mtval, mscratch, mie, mip, counters)
-- **Traps**: ECALL, EBREAK, illegal instruction, misaligned access, access fault → handler via mtvec, return via MRET
+- ISA: RV32IM.
+- Microarchitecture: multi-cycle FSM, `FETCH -> DECODE -> EXECUTE -> MEM -> WB`.
+- Privilege: M-mode CSRs including `mstatus`, `misa`, `mtvec`, `mepc`, `mcause`,
+  `mtval`, `mscratch`, `mie`, `mip`, `mcycle`, and `minstret`.
+- Traps: ECALL, EBREAK, illegal instruction, misaligned access, access fault, MRET.
 
 ### Memory Map
-| Region | Base | Size | Notes |
-|--------|------|------|-------|
-| ROM | `0x0000_0000` | 64 KB | Reset vector, program code |
-| MMIO | `0x1000_0000` | 64 KB | tohost (pass/fail signaling) |
-| Timer | `0x1000_2000` | 16 B | MTIME/MTIMECMP registers |
-| GPIO | `0x1000_3000` | 20 B | DATA/DIR/IN/SET/CLR registers |
-| UART | `0x1000_4000` | 20 B | TXDATA/RXDATA/STATUS/CTRL/BAUDDIV registers |
-| RAM | `0x8000_0000` | 256 KB | Data/stack memory |
 
-### Bus Architecture
-- **Internal Bus (corebus)**: Simple request/response protocol, single outstanding transaction
-- **AXI4-Lite**: Optional bridge path (`USE_AXIL=1` parameter), corebus → AXI-Lite → slave model
-- See `docs/INTERFACES.md` for signal details
+| Region | Base | Size | Notes |
+|---|---:|---:|---|
+| ROM | `0x0000_0000` | 64 KB | Reset vector, program code |
+| MMIO | `0x1000_0000` | 64 KB | tohost pass/fail signaling |
+| Timer | `0x1000_2000` | 16 B | MTIME/MTIMECMP |
+| GPIO | `0x1000_3000` | 20 B | DATA/DIR/IN/SET/CLR |
+| UART | `0x1000_4000` | 20 B | TXDATA/RXDATA/STATUS/CTRL/BAUDDIV |
+| RAM | `0x8000_0000` | 256 KB | Data and stack |
+
+### Integration Profile
+
+- Core uses a small request/response `corebus`.
+- Platform can route through direct corebus fabric or AXI4-Lite (`USE_AXIL=1`).
+- AXI4-Lite profile is single-outstanding, no bursts, intended for compact MCU-style integration.
+- Signal-level details are in [`docs/INTERFACES.md`](docs/INTERFACES.md).
+
+## Roadmap To Product Grade
+
+| Priority | Work item | Why it matters |
+|---|---|---|
+| P0 | Full RISCOF/riscv-arch-test and Spike co-sim signoff | Required for credible ISA compliance claims |
+| P0 | Debug/JTAG support | Required for normal firmware bring-up |
+| P0 | PMP and standard interrupt controller path | Required by most embedded product integrations |
+| P1 | Benchmarking: CoreMark/MHz, CPI, area/timing reports | Needed for competitor comparison |
+| P1 | OpenROAD/PDK hardening flow | Needed for ASIC credibility |
+| P1 | Product collateral: license, integration guide, programmer's model | Needed for external adoption |
 
 ## CI Pipeline
 
-The CI pipeline runs on every push/PR to `main`:
+The workflow runs on every push/PR to `main`.
 
-| Job | Description | Tool |
-|-----|-------------|------|
-| **Lint** | Verilator lint check (all RTL) | Verilator 5.038 |
-| **Regression** | 33 assembly self-checking tests through corebus and AXI4-Lite paths | Verilator 5.038 + riscv64-gcc |
-| **cocotb** | 44 randomized/directed unit tests | Verilator 5.038 + cocotb |
-| **Formal** | Required ALU + RegFile + Decoder proofs; optional AXI-Lite bounded safety check | Yosys + SymbiYosys + z3 |
-| **Synth** | Yosys synthesis of core + AXI bridge | Yosys |
-| **RISCOF smoke** | Optional one-test Spike co-sim (skipped if tools missing) | RISCOF + Spike + Verilator |
+| Job | What it proves |
+|---|---|
+| Lint | RTL parses and passes Verilator lint |
+| Regression | 33 assembly tests through corebus and AXI4-Lite paths |
+| cocotb | 44 directed/randomized unit tests |
+| Formal | Required ALU, RegFile, Decode proofs; optional AXI safety |
+| Synth | Yosys synthesis of core/platform path |
+| RISCOF smoke | Optional Spike signature comparison smoke (`continue-on-error`) |
 
-## Directory layout
+Required jobs (Lint through Synth) gate merges. The optional RISCOF smoke job may show
+red in the Actions UI without failing the workflow badge.
 
-```
-rtl/           Synthesizable RTL (ASIC-first)
-  core/        CPU core: sisRvCore, sisAlu, sisDecode, sisRegFile, sisCsr
-  bus/         Bus infrastructure: sisMemFabric, sisAxiLiteM
-  periph/      Peripherals: sisRom, sisRam, sisTohost, sisTimer, sisGpio, sisUart
-tb/            Testbench
-  verilator/   Verilator C++ harness
-  cocotb/      cocotb Python tests (ALU, RegFile, Decode, CSR, AXI-Lite)
-  models/      Behavioral models (AXI-Lite slave)
-sw/            Bare-metal BSP + assembly tests
-  bsp/         crt0.S, link.ld
-  tests/asm/   Assembly test programs (33 tests)
-formal/        Formal verification
-verification/  RISCOF architectural-test harness (plugins, scripts, config)
-  alu_add.sv       ALU formal proof wrapper (all 10 ops)
-  alu_prove.ys     Yosys SAT proof script (ALU)
-  regfile_x0.sv    RegFile x0 proof wrapper
-  regfile_x0.sby   SymbiYosys configuration (RegFile)
-  decode_legal.sv  Decoder proof wrapper (fields + legality)
-  decode_prove.ys  Yosys SAT proof script (Decoder)
-  axil_master.sv   AXI-Lite bridge proof wrapper (VALID/data stability, mutual exclusion)
-  axil_master.sby  SymbiYosys configuration (AXI-Lite bridge)
-scripts/       Build scripts
-  yosys_synth.tcl  Yosys synthesis script
-docs/          Architecture docs + plan
+## Repository Map
+
+```text
+rtl/            Synthesizable SystemVerilog RTL
+  core/         CPU core, ALU, decode, register file, CSRs
+  bus/          Corebus fabric and AXI4-Lite bridge
+  periph/       ROM, RAM, tohost, timer, GPIO, UART
+tb/             Verilator harness, cocotb tests, bus models
+sw/             Bare-metal BSP and assembly tests
+formal/         Formal proof wrappers and scripts
+verification/   RISCOF architectural-test harness
+scripts/        Build and synthesis scripts
+docs/           Architecture, verification, roadmap, status
 ```
 
 ## Documentation
 
-- `docs/INDUSTRY_COMPARISON.md` — Benchmark vs. commercial cores + maturity plan to product
-- `docs/PLAN.md` — Complete milestone plan + exit criteria
-- `docs/EXTENSION_ROADMAP.md` — Extension order, use cases, and acceptance checks
-- `docs/MEMORY_MAP.md` — Address map
-- `docs/INTERFACES.md` — Internal bus + AXI-Lite profile
-- `docs/VERIFICATION.md` — Verification strategy
-- `docs/status.md` — Detailed implementation status
+- [`docs/INDUSTRY_COMPARISON.md`](docs/INDUSTRY_COMPARISON.md) - commercial benchmark and maturity plan.
+- [`docs/PLAN.md`](docs/PLAN.md) - milestone plan and exit criteria.
+- [`docs/EXTENSION_ROADMAP.md`](docs/EXTENSION_ROADMAP.md) - extension order, use cases, acceptance checks.
+- [`docs/MEMORY_MAP.md`](docs/MEMORY_MAP.md) - address map.
+- [`docs/INTERFACES.md`](docs/INTERFACES.md) - internal bus and AXI4-Lite profile.
+- [`docs/VERIFICATION.md`](docs/VERIFICATION.md) - verification strategy.
+- [`docs/status.md`](docs/status.md) - detailed implementation status.
 
 ## License
 
-Pick a license (Apache-2.0 / BSD-2-Clause / MIT). This package does not include third-party IP.
+License is not selected yet. Candidate options are Apache-2.0, BSD-2-Clause, or MIT.
+This package does not include third-party IP.
