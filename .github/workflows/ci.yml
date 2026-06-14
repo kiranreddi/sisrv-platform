@@ -33,7 +33,7 @@ jobs:
         run: make lint
 
   regress:
-    name: Assembly Regression (28 tests)
+    name: Assembly Regression (29 tests)
     runs-on: ubuntu-latest
     needs: lint
     steps:

@@ -13,6 +13,7 @@
 | tohost | 0x1000_0000 | +0x0 DATA | write PASS/FAIL signature |
 | Timer | 0x1000_2000 | +0x0 MTIME_LO, +0x4 MTIME_HI, +0x8 MTIMECMP_LO, +0xC MTIMECMP_HI | machine timer interrupt |
 | GPIO | 0x1000_3000 | +0x0 DATA, +0x4 DIR, +0x8 IN, +0xC SET, +0x10 CLR | 32-bit general-purpose I/O |
+| UART | 0x1000_4000 | +0x0 TXDATA, +0x4 RXDATA, +0x8 STATUS, +0xC CTRL, +0x10 BAUDDIV | byte-stream console with loopback test mode |
 
 ## PASS/FAIL protocol
 - Write 32-bit value to `tohost.DATA`:

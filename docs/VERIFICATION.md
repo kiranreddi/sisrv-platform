@@ -7,7 +7,7 @@ tests, randomized cocotb unit tests, and formal proofs. All tests run on Verilat
 
 ## Verification Tiers
 
-### Tier 1: Directed Assembly Tests (28 tests)
+### Tier 1: Directed Assembly Tests (29 tests)
 
 Self-checking assembly tests that write 1 to `0x10000000` (PASS) or 0 (FAIL).
 Compiled with `rv32i_zicsr` ISA and run on the full platform simulation.
@@ -27,6 +27,7 @@ Compiled with `rv32i_zicsr` ISA and run on the full platform simulation.
 | Timer | test_timer, test_mtime_write | MTIP interrupt, ISR handler, MTIME/MTIMECMP, deterministic MTIME writes |
 | Timer | test_mret_boundary | MRET exact resume point, no skipped/repeated instructions |
 | GPIO | test_gpio | DATA/DIR/IN/SET/CLR MMIO registers |
+| UART | test_uart | TXDATA/RXDATA/STATUS/CTRL/BAUDDIV MMIO registers and loopback |
 | System | test_fence, test_lui_auipc, test_x0, test_pass | FENCE NOP, LUI/AUIPC, x0=0 invariant |
 | Stress | test_back_to_back | Fibonacci, register stress, tight loops |
 
@@ -112,7 +113,7 @@ Unit-level tests using cocotb with constrained random stimulus on Verilator 5.03
 ## Running Tests
 
 ```bash
-# Run all assembly tests (28 tests)
+# Run all assembly tests (29 tests)
 make regress
 
 # Run cocotb tests (41 tests)
@@ -135,7 +136,7 @@ make lint && make regress && make cocotb && make formal
 
 GitHub Actions workflow (`.github/workflows/ci.yml`) runs on every push/PR:
 1. **Lint** — Verilator lint check
-2. **Regression** — 28 assembly tests (corebus + AXI4-Lite paths)
+2. **Regression** — 29 assembly tests (corebus + AXI4-Lite paths)
 3. **cocotb** — 41 randomized unit tests
 4. **Formal** — ALU + RegFile + Decoder proofs
 5. **Synth** — Yosys synthesis (`make synth`)
@@ -162,3 +163,4 @@ GitHub Actions workflow (`.github/workflows/ci.yml`) runs on every push/PR:
 - ✅ Timer interrupt end-to-end (ISR execution + return)
 - ✅ MRET exact resume point (no skipped/repeated instructions)
 - ✅ GPIO MMIO register behavior
+- ✅ UART MMIO loopback and console TX behavior

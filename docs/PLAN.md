@@ -119,7 +119,7 @@ Key principles:
 - ✅ AXI-Lite slave timer model for MTIME/MTIMECMP/MTIP
 - ✅ 11 cocotb bridge unit tests with random stall stress (100 txns)
 - ✅ Bounded formal safety check: VALID stability, mutual exclusion, data stability
-- ✅ Full regression (28 asm tests) through AXI path in CI
+- ✅ Full regression (29 asm tests) through AXI path in CI
 - 🔲 1000-seed randomized stall nightly (stretch/nightly coverage)
 
 ### Exit criteria

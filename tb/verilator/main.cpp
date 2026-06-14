@@ -35,6 +35,11 @@ int main(int argc, char** argv) {
     top->eval();
     tfp->dump((vluint64_t)(cycle * 2));
 
+    if (top->uart_tx_valid) {
+      std::fputc(top->uart_tx_data, stdout);
+      std::fflush(stdout);
+    }
+
     // Falling edge
     top->clk = 0;
     top->eval();

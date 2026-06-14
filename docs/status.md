@@ -5,8 +5,8 @@
 ## Summary
 
 The sisrv-platform project implements a fully functional RV32I RISC-V processor core
-with M-mode CSRs, trap handling, timer interrupts, GPIO, and an AXI4-Lite master bridge.
-The core is verified through 28 directed assembly tests, 41 cocotb randomized unit tests,
+with M-mode CSRs, trap handling, timer interrupts, GPIO, UART, and an AXI4-Lite master bridge.
+The core is verified through 29 directed assembly tests, 41 cocotb randomized unit tests,
 and 4 formal proofs — all running on Verilator 5.038.
 
 ## Milestone Status
@@ -41,7 +41,7 @@ and 4 formal proofs — all running on Verilator 5.038.
 | `sisDecode.sv` | ✅ Done | All RV32I instruction types decoded |
 | `sisMemFabric.sv` | ✅ Done | Address decoder: ROM/RAM/MMIO routing |
 
-**Test coverage** (28 directed tests, all passing):
+**Test coverage** (29 directed tests, all passing):
 
 | Test | Instructions Covered |
 |------|---------------------|
@@ -71,6 +71,7 @@ and 4 formal proofs — all running on Verilator 5.038.
 | test_timer | Timer interrupt: MTIP, ISR counter, MRET return |
 | test_mret_boundary | MRET exact resume point: no skipped/repeated instructions |
 | test_gpio | GPIO MMIO: DATA, DIR, IN, SET, CLR registers |
+| test_uart | UART MMIO: TXDATA, RXDATA, STATUS, CTRL, BAUDDIV, loopback |
 
 **Exit criteria**: 25 directed tests covering all instruction groups ✅,
 x0 always 0 ✅, PC word-aligned ✅, correct sign/zero extension ✅
@@ -130,7 +131,8 @@ x0 always 0 ✅, PC word-aligned ✅, correct sign/zero extension ✅
 | AXI-Lite slave TB model | ✅ Done | `tb/models/sisAxiLiteSlave.sv` with independent per-channel stalls |
 | AXI-Lite timer support | ✅ Done | `tb/models/sisAxiLiteSlave.sv` models MTIME/MTIMECMP and MTIP |
 | AXI-Lite GPIO support | ✅ Done | `tb/models/sisAxiLiteSlave.sv` models DATA/DIR/IN/SET/CLR |
-| AXI-Lite system regression | ✅ Done | `make regress-axil` runs all 28 assembly tests through the AXI path |
+| AXI-Lite UART support | ✅ Done | `tb/models/sisAxiLiteSlave.sv` models TXDATA/RXDATA/STATUS/CTRL/BAUDDIV |
+| AXI-Lite system regression | ✅ Done | `make regress-axil` runs all 29 assembly tests through the AXI path |
 | cocotb bridge tests | ✅ Done | 11 tests: reset, R/W, errors, stalls, 100-txn random stress |
 | Formal AXI-Lite bridge | Optional | Bounded VALID stability, mutual exclusion, data stability (`make formal-axil`) |
 
@@ -146,6 +148,7 @@ timer interrupt tests run with the AXI slave timer model ✅, CI covers `make re
 |-------------|--------|-------|
 | `sisTimer.sv` | ✅ Done | MTIME (64-bit counter), MTIMECMP, MTIP output |
 | `sisGpio.sv` | ✅ Done | 32-bit DATA/DIR/IN/SET/CLR MMIO peripheral |
+| `sisUart.sv` | ✅ Done | TXDATA/RXDATA/STATUS/CTRL/BAUDDIV MMIO peripheral |
 | CSR MTIP integration | ✅ Done | ext_mtip → mip.MTIP (bit 7), irq_pending output |
 | Core interrupt handling | ✅ Done | Checked between instructions (WB→FETCH transition) |
 | mstatus.MIE/MPIE | ✅ Done | Swap on trap entry, restore on MRET |
@@ -228,8 +231,8 @@ Planned:
 | Verilator version | 5.038 |
 | Lint status | ✅ Clean (Wall, no warnings) |
 | Compiler | riscv64-linux-gnu-gcc 13.3 |
-| Assembly test suite | 28 tests |
-| Assembly regression | 28/28 passing through corebus and AXI4-Lite paths |
+| Assembly test suite | 29 tests |
+| Assembly regression | 29/29 passing through corebus and AXI4-Lite paths |
 | cocotb unit tests | 41 tests (3 ALU + 4 RegFile + 11 Decode + 12 CSR + 11 AXI-Lite) |
 | cocotb status | 41/41 passing |
 | Formal proofs/checks | Required: ALU (all 10 ops), RegFile (x0=0), Decode (fields + legality). Optional: AXI-Lite bounded safety (`make formal-axil`) |
@@ -254,6 +257,7 @@ Planned:
 - `rtl/periph/sisRam.sv` — RAM memory with byte strobes (synth-safe)
 - `rtl/periph/sisTimer.sv` — Machine timer (MTIME/MTIMECMP/MTIP)
 - `rtl/periph/sisGpio.sv` — 32-bit GPIO MMIO peripheral
+- `rtl/periph/sisUart.sv` — UART MMIO peripheral with loopback test mode
 - `rtl/periph/sisTohost.sv` — Pass/fail MMIO device
 
 ### Testbench
@@ -279,7 +283,7 @@ Planned:
 ### Software
 - `sw/bsp/crt0.S` — C runtime startup
 - `sw/bsp/link.ld` — Linker script
-- `sw/tests/asm/test_*.S` — 28 assembly test programs
+- `sw/tests/asm/test_*.S` — 29 assembly test programs
 
 ### Build & CI
 - `Makefile` — Build, lint, sim, regression, cocotb, formal, synth targets

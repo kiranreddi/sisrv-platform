@@ -8,14 +8,14 @@ cocotb unit tests, formal checks, and CI coverage.
 
 | Order | Extension | Why here | Primary use case | Acceptance checks |
 |---:|---|---|---|---|
-| 1 | GPIO | Smallest end-to-end peripheral slice | Board bring-up, LED/switch control, firmware-visible MMIO smoke tests | Corebus + AXI regression pass `test_gpio` |
-| 2 | UART | Reuses MMIO pattern, adds byte-stream I/O | Firmware console, boot logs, printf-style debugging | TX/RX/status registers, loopback test, Verilator console capture |
+| 1 | GPIO | Smallest end-to-end peripheral slice | Board bring-up, LED/switch control, firmware-visible MMIO smoke tests | Done: corebus + AXI regression pass `test_gpio` |
+| 2 | UART | Reuses MMIO pattern, adds byte-stream I/O | Firmware console, boot logs, printf-style debugging | Done: TX/RX/status registers, loopback test, Verilator console capture |
 | 3 | RV32M | Isolated ISA extension before microarchitecture churn | Embedded math, DSP kernels, compiler support for `rv32im` | MUL/DIV/REM assembly tests, illegal when disabled |
 | 4 | PMP | Adds protection checks on existing memory requests | Firmware sandboxing, MMIO/ROM/RAM access policy validation | CSR tests plus access-fault assembly tests |
 | 5 | Debug | Needs stable bus, CSRs, and halt behavior | External halt/resume, register inspection, bring-up workflows | Halt/resume smoke test and debug CSR/register access model |
-| 6 | 3-stage pipeline | Largest behavior change, best after ISA/peripheral baseline | Better IPC while preserving the same software contract | Existing 28-test suite unchanged, plus hazard/flush tests |
+| 6 | 3-stage pipeline | Largest behavior change, best after ISA/peripheral baseline | Better IPC while preserving the same software contract | Existing 29-test suite unchanged, plus hazard/flush tests |
 
-## Current first slice: GPIO
+## Implemented slice 1: GPIO
 
 GPIO is the first implemented extension.
 
@@ -37,14 +37,27 @@ Implemented surfaces:
 - `sw/tests/asm/test_gpio.S` directed assembly regression.
 - Memory map and verification documentation.
 
-## UART slice
+## Implemented slice 2: UART
 
-Use GPIO as the template, then add:
+UART is the second implemented extension.
 
-- Registers: `TXDATA`, `RXDATA`, `STATUS`, `CTRL`, optional `BAUDDIV`.
-- Verilator model behavior: append TX bytes to a log/console stream; feed RX from an optional file or queue.
-- Tests: TX write readiness, RX valid/empty behavior, status bits, byte lane handling.
-- Firmware use case: console output for tests and boot ROM diagnostics.
+Address map:
+
+| Register | Address | Access | Description |
+|---|---:|---|---|
+| TXDATA | `0x1000_4000` | WO/R | Write low byte to transmit, read last TX byte |
+| RXDATA | `0x1000_4004` | RO | Read low byte from receive register, clears RX valid |
+| STATUS | `0x1000_4008` | RO | bit0 TX_READY, bit1 RX_VALID |
+| CTRL | `0x1000_400C` | RW | bit0 TX_ENABLE, bit1 LOOPBACK |
+| BAUDDIV | `0x1000_4010` | RW | Baud divider placeholder |
+
+Implemented surfaces:
+
+- `rtl/periph/sisUart.sv` corebus peripheral.
+- `sisPlatformTop` UART TX ports and MMIO decode at `0x1000_4000`.
+- `tb/models/sisAxiLiteSlave.sv` matching AXI simulation model.
+- Verilator harness console output for `uart_tx_valid` bytes.
+- `sw/tests/asm/test_uart.S` directed assembly regression.
 
 ## RV32M slice
 

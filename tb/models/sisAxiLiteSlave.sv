@@ -7,6 +7,7 @@
 //   MMIO: 0x1000_0000 - 0x1000_FFFF (64 KB)
 //   Timer: 0x1000_2000 - 0x1000_200F (MTIME/MTIMECMP)
 //   GPIO:  0x1000_3000 - 0x1000_3010 (DATA/DIR/IN/SET/CLR)
+//   UART:  0x1000_4000 - 0x1000_4010 (TXDATA/RXDATA/STATUS/CTRL/BAUDDIV)
 //   RAM:  0x8000_0000 - 0x8003_FFFF (256 KB)
 
 module sisAxiLiteSlave #(
@@ -55,7 +56,9 @@ module sisAxiLiteSlave #(
     output logic        mtip,
     input  logic [31:0] gpio_in,
     output logic [31:0] gpio_out,
-    output logic [31:0] gpio_oe
+    output logic [31:0] gpio_oe,
+    output logic        uart_tx_valid,
+    output logic [7:0]  uart_tx_data
 );
 
   // ---------------------------------------------------------------
@@ -72,6 +75,11 @@ module sisAxiLiteSlave #(
   logic [63:0] mtime;
   logic [63:0] mtimecmp;
   logic [63:0] mtime_next;
+  logic [31:0] uart_ctrl;
+  logic [31:0] uart_bauddiv;
+  logic [7:0]  uart_last_tx;
+  logic [7:0]  uart_rx_data;
+  logic        uart_rx_valid;
 
   // Initialize memories
   initial begin
@@ -137,6 +145,10 @@ module sisAxiLiteSlave #(
     return (addr[31:5] == 27'h0800180);
   endfunction
 
+  function automatic logic is_uart(input [31:0] addr);
+    return (addr[31:5] == 27'h0800200);
+  endfunction
+
   function automatic logic [31:0] apply_wstrb(
     input logic [31:0] old_data,
     input logic [31:0] new_data,
@@ -191,6 +203,16 @@ module sisAxiLiteSlave #(
         default: return 32'h0;
       endcase
     end
+    else if (is_uart(addr)) begin
+      case (addr[4:0])
+        5'h00: return {24'h0, uart_last_tx};
+        5'h04: return {24'h0, uart_rx_data};
+        5'h08: return {30'h0, uart_rx_valid, 1'b1};
+        5'h0C: return uart_ctrl;
+        5'h10: return uart_bauddiv;
+        default: return 32'h0;
+      endcase
+    end
     else if (is_mmio(addr))
       return last_code;
     else
@@ -214,7 +236,7 @@ module sisAxiLiteSlave #(
               rd_stall_cnt <= lfsr_r[3:0] & 4'hF;
             end else begin
               rd_data_reg <= mem_read(araddr);
-              rd_resp_reg <= (is_rom(araddr) || is_ram(araddr) || is_timer(araddr) || is_gpio(araddr) || is_mmio(araddr)) ? 2'b00 : 2'b11;
+              rd_resp_reg <= (is_rom(araddr) || is_ram(araddr) || is_timer(araddr) || is_gpio(araddr) || is_uart(araddr) || is_mmio(araddr)) ? 2'b00 : 2'b11;
               rd_state    <= RD_RESP;
             end
           end
@@ -223,7 +245,7 @@ module sisAxiLiteSlave #(
         RD_WAIT: begin
           if (rd_stall_cnt == 0) begin
             rd_data_reg <= mem_read(rd_addr_reg);
-            rd_resp_reg <= (is_rom(rd_addr_reg) || is_ram(rd_addr_reg) || is_timer(rd_addr_reg) || is_gpio(rd_addr_reg) || is_mmio(rd_addr_reg)) ? 2'b00 : 2'b11;
+            rd_resp_reg <= (is_rom(rd_addr_reg) || is_ram(rd_addr_reg) || is_timer(rd_addr_reg) || is_gpio(rd_addr_reg) || is_uart(rd_addr_reg) || is_mmio(rd_addr_reg)) ? 2'b00 : 2'b11;
             rd_state    <= RD_RESP;
           end else begin
             rd_stall_cnt <= rd_stall_cnt - 1;
@@ -291,8 +313,22 @@ module sisAxiLiteSlave #(
       mtimecmp     <= 64'hFFFF_FFFF_FFFF_FFFF;
       gpio_out     <= 32'h0;
       gpio_oe      <= 32'h0;
+      uart_ctrl     <= 32'h1;
+      uart_bauddiv  <= 32'h0;
+      uart_last_tx  <= 8'h00;
+      uart_rx_data  <= 8'h00;
+      uart_rx_valid <= 1'b0;
+      uart_tx_valid <= 1'b0;
+      uart_tx_data  <= 8'h00;
     end else begin
       mtime <= mtime_next;
+      uart_tx_valid <= 1'b0;
+
+      if ((rd_state == RD_IDLE && arvalid && arready && !should_stall(lfsr_r) && is_uart(araddr) && araddr[4:0] == 5'h04) ||
+          (rd_state == RD_WAIT && rd_stall_cnt == 0 && is_uart(rd_addr_reg) && rd_addr_reg[4:0] == 5'h04)) begin
+        uart_rx_valid <= 1'b0;
+      end
+
       case (wr_state)
         WR_IDLE: begin
           if (awvalid && awready && wvalid && wready) begin
@@ -354,7 +390,25 @@ module sisAxiLiteSlave #(
               default: ;
             endcase
           end
-          wr_resp_reg <= (is_rom(wr_addr_reg) || is_ram(wr_addr_reg) || is_timer(wr_addr_reg) || is_gpio(wr_addr_reg) || is_mmio(wr_addr_reg)) ? 2'b00 : 2'b11;
+          if (is_uart(wr_addr_reg)) begin
+            case (wr_addr_reg[4:0])
+              5'h00: begin
+                if (wr_strb_reg[0] && uart_ctrl[0]) begin
+                  uart_last_tx  <= wr_data_reg[7:0];
+                  uart_tx_data  <= wr_data_reg[7:0];
+                  uart_tx_valid <= 1'b1;
+                  if (uart_ctrl[1]) begin
+                    uart_rx_data  <= wr_data_reg[7:0];
+                    uart_rx_valid <= 1'b1;
+                  end
+                end
+              end
+              5'h0C: uart_ctrl    <= apply_wstrb(uart_ctrl,    wr_data_reg, wr_strb_reg);
+              5'h10: uart_bauddiv <= apply_wstrb(uart_bauddiv, wr_data_reg, wr_strb_reg);
+              default: ;
+            endcase
+          end
+          wr_resp_reg <= (is_rom(wr_addr_reg) || is_ram(wr_addr_reg) || is_timer(wr_addr_reg) || is_gpio(wr_addr_reg) || is_uart(wr_addr_reg) || is_mmio(wr_addr_reg)) ? 2'b00 : 2'b11;
           if (should_stall(lfsr_b)) begin
             wr_state     <= WR_WAIT;
             wr_stall_cnt <= lfsr_b[3:0] & 4'h7;
