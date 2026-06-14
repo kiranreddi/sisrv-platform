@@ -25,7 +25,7 @@ keeping the implementation readable and open.
 
 **Best fit today**
 
-- Learning and prototyping a real RV32IM core/platform stack.
+- Learning and prototyping a real RV32IMAC core/platform stack.
 - Embedded SoC bring-up with ROM, RAM, timer, GPIO, UART, and MMIO.
 - Verilator-first firmware and RTL regression.
 - AXI4-Lite integration experiments.
@@ -57,7 +57,7 @@ keeping the implementation readable and open.
 ```mermaid
 flowchart LR
   FW["Bare-metal firmware"] --> ROM["ROM\n0x0000_0000"]
-  Core["sisRvCore\nRV32IM M-mode"] --> Bus["corebus\nsingle outstanding request"]
+  Core["sisRvCore\nRV32IMAC M-mode"] --> Bus["corebus\nsingle outstanding request"]
   Bus --> ROM
   Bus --> RAM["RAM\n0x8000_0000"]
   Bus --> Tohost["tohost\npass/fail MMIO"]
@@ -104,7 +104,7 @@ is still productizing. The table below is intentionally conservative.
 | [SiFive Essential E Series](https://www.sifive.com/cores/essential-e-series) | Configurable 32-bit embedded RISC-V cores with commercial collateral and performance claims | MCU/embedded IP | Similar embedded target, but sisrv lacks commercial debug/security/PPA collateral |
 | [AndesCore N22](https://www.andestech.com/en/products-solutions/andescore-processors/) | Compact low-power 32-bit RISC-V CPU IP with published CoreMark/DMIPS class metrics | Low-power MCU IP | sisrv has an open platform/verification stack, but no benchmark/PPA signoff yet |
 | [Codasip L31](https://codasip.com/press-release/2022/08/31/codasip-joins-intel-pathfinder-for-risc-v-program/) | 32-bit embedded RISC-V core with pipeline/configuration options and product tooling | Configurable embedded IP | sisrv is simpler and open, with AXI4-Lite/platform focus; configurability is early |
-| sisrv-platform | Open ASIC-first RV32IM platform with verification and synthesis path | Productizing open MCU-class platform | Strong learning/prototyping base; not yet a commercial IP replacement |
+| sisrv-platform | Open ASIC-first RV32IMAC platform with verification and synthesis path | Productizing open MCU-class platform | Strong learning/prototyping base; not yet a commercial IP replacement |
 
 See [`docs/INDUSTRY_COMPARISON.md`](docs/INDUSTRY_COMPARISON.md) for the full gap
 analysis and product-grade roadmap.
@@ -235,27 +235,29 @@ make riscof-rv32i
 make riscof-rv32im
 ```
 
-This is optional and still a productization gap until the full advertised ISA profile
-is green in CI. Unsupported classes remain PMP, debug, CLINT/PLIC interrupts, S/U
-modes, and C/A/F/D extensions.
+This is required in CI (smoke + dual-model co-sim). Full **rv32imac_zicsr** ACT suite
+expansion remains a P0 exit gate. Unsupported classes remain PMP, S/U modes, and A/F/D.
 
 ## Architecture Reference
 
 ### CPU Core
 
-- ISA: RV32IM.
+- ISA: RV32IMAC (`rv32imac_zicsr`).
 - Microarchitecture: multi-cycle FSM, `FETCH -> DECODE -> EXECUTE -> MEM -> WB`.
 - Privilege: M-mode CSRs including `mstatus`, `misa`, `mtvec`, `mepc`, `mcause`,
   `mtval`, `mscratch`, `mie`, `mip`, `mcycle`, and `minstret`.
 - Traps: ECALL, EBREAK, illegal instruction, misaligned access, access fault, MRET.
+- Interrupts: CLINT at `0x0200_0000`, PLIC (8 sources) at `0x0C00_0000`.
+- Debug: RISC-V Debug 0.13 subset + JTAG DTM (halt/resume/step).
 
 ### Memory Map
 
 | Region | Base | Size | Notes |
 |---|---:|---:|---|
 | ROM | `0x0000_0000` | 64 KB | Reset vector, program code |
+| Timer / CLINT | `0x0200_0000` | 64 KB | MSIP, MTIMECMP, MTIME |
+| PLIC | `0x0C00_0000` | 64 KB | 8 external IRQ sources |
 | MMIO | `0x1000_0000` | 64 KB | tohost pass/fail signaling |
-| Timer | `0x1000_2000` | 16 B | MTIME/MTIMECMP |
 | GPIO | `0x1000_3000` | 20 B | DATA/DIR/IN/SET/CLR |
 | UART | `0x1000_4000` | 20 B | TXDATA/RXDATA/STATUS/CTRL/BAUDDIV |
 | RAM | `0x8000_0000` | 256 KB | Data and stack |
@@ -272,11 +274,9 @@ modes, and C/A/F/D extensions.
 | Priority | Work item | Why it matters |
 |---|---|---|
 | P0 | Full RISCOF/riscv-arch-test and Spike co-sim signoff | Required for credible ISA compliance claims |
-| P0 | Debug/JTAG support | Required for normal firmware bring-up |
-| P0 | PMP and standard interrupt controller path | Required by most embedded product integrations |
+| P0 | Named-PDK STA / OpenROAD timing closure | Required for ASIC product claims |
 | P1 | Benchmarking: CoreMark/MHz, CPI, area/timing reports | Needed for competitor comparison |
-| P1 | OpenROAD/PDK hardening flow | Needed for ASIC credibility |
-| P1 | Product collateral: license, integration guide, programmer's model | Needed for external adoption |
+| P1 | PMP and U-mode (if Linux-class target) | Required by some embedded/Linux integrations |
 
 ## CI Pipeline
 
@@ -285,14 +285,13 @@ The workflow runs on every push/PR to `main`.
 | Job | What it proves |
 |---|---|
 | Lint | RTL parses and passes Verilator lint |
-| Regression | 33 assembly tests through corebus and AXI4-Lite paths |
+| Regression | 36 assembly tests through corebus and AXI4-Lite paths |
 | cocotb | 44 directed/randomized unit tests |
 | Formal | Required ALU, RegFile, Decode proofs; optional AXI safety |
-| Synth | Yosys synthesis of core/platform path |
-| RISCOF smoke | Optional Spike signature comparison smoke (`continue-on-error`) |
+| Synth | Yosys synthesis of core + AXI bridge (PPA stat artifact) |
+| RISCOF + co-sim | RISCOF smoke + 100-seed Spike/Verilator dual-model smoke |
 
-Required jobs (Lint through Synth) gate merges. The optional RISCOF smoke job may show
-red in the Actions UI without failing the workflow badge.
+All jobs above are required and gate merges.
 
 ## Repository Map
 

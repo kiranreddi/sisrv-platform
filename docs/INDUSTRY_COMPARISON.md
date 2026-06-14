@@ -15,23 +15,22 @@ licensable / product-grade RISC-V core.
 
 ## 1. Executive summary
 
-`sisRvCore` today is a **correct, well-verified RV32IM teaching/MVP core**: a 7-state
+`sisRvCore` today is a **correct, well-verified RV32IMAC teaching/MVP platform**: a 7-state
 multi-cycle FSM, M-mode only, with clean RTL, real formal proofs, cocotb unit tests, a
-33-test directed suite, an AXI4-Lite bridge, and a Yosys synthesis path. That is a
-genuinely strong *foundation* — better verified than many hobby cores.
+36-test directed suite, an AXI4-Lite bridge, CLINT/PLIC, debug/JTAG, C extension, and a
+Yosys synthesis path. That is a genuinely strong *foundation* — better verified than many
+hobby cores.
 
-It is **not yet an industry-standard product**. The gap is not the ISA — it is three
-things commercial cores treat as table stakes:
+It is **not yet an industry-standard product**. The gap is not the ISA subset alone — it
+is three things commercial cores treat as table stakes:
 
 1. **Performance.** Multi-cycle FSM runs at **~6–8 cycles per instruction (CPI)**.
    Commercial embedded cores are pipelined at **~1.0–1.3 CPI** — a **5–8× single-thread
    throughput gap** at the same clock.
-2. **Completeness of the privileged/trap contract.** The base misalignment/access-fault
-   and ID/counter CSR holes are now closed; RISCOF/ISS sign-off and standard interrupt
-   integration remain open.
-3. **Productization rigor.** No architectural-compliance sign-off (RISCOF), no
-   interrupt controller (CLINT/PLIC), no debug (RISC-V Debug + JTAG), no C extension,
-   no documented timing closure on a real PDK, no integration/verification collateral.
+2. **Compliance sign-off.** RISCOF smoke and Spike dual-model co-sim are in required CI
+   but the full **rv32imac_zicsr** ACT suite and 10k-seed lock-step gate are not closed.
+3. **Productization rigor.** SDC/OpenSTA/OpenROAD scripts exist; **named-PDK STA closure**
+   and competitive CoreMark/MHz evidence are still open.
 
 The good news: the codebase is structured so each of these is an incremental milestone,
 not a rewrite. The plan in §6 takes us from "MVP core" to "product-grade soft IP" in a
@@ -151,7 +150,7 @@ Legend: ✅ have · 🟡 partial · ❌ missing · **P0** = required for any pro
 | Feature | Industry standard | Us | Gap | Pri |
 |---|---|---|---|---|
 | RISCOF / riscv-arch-test compliance pass | **mandatory to call it RISC-V** | 🟡 | smoke in required CI; full rv32imac suite pending | **P0** |
-| ISS lock-step co-simulation (e.g. Spike) random | yes | 🟡 | 100-seed Verilator random smoke; Spike step hook pending | **P0** |
+| ISS lock-step co-simulation (e.g. Spike) random | yes | 🟡 | 100-seed Spike+Verilator dual-model in CI; 10k-seed gate open | **P0** |
 | Constrained-random + functional coverage (UVM or cocotb) | yes | 🟡 | unit-level only, no top-level coverage closure | P1 |
 | Formal of control/hazard logic | premium | 🟡 | ALU/decode/regfile/AXI only, not core FSM/pipeline | P1 |
 | Code + functional coverage metrics & goals | yes | ❌ | no coverage reporting in CI | P1 |

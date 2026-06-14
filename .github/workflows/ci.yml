@@ -124,7 +124,10 @@ jobs:
           sudo apt-get install -y yosys
 
       - name: Run Synthesis
-        run: make synth
+        run: |
+          make synth
+          test -s build/ppa_synth_report.txt
+          head -40 build/ppa_synth_report.txt
 
   riscof-smoke:
     name: RISCOF Compliance

@@ -12,6 +12,7 @@ read -sv rtl/core/sisAlu.sv
 read -sv rtl/core/sisDecode.sv
 read -sv rtl/core/sisRegFile.sv
 read -sv rtl/core/sisCsr.sv
+read -sv rtl/core/sisDecompress.sv
 read -sv rtl/core/sisRvCore.sv
 read -sv rtl/bus/sisMemFabric.sv
 read -sv rtl/bus/sisAxiLiteM.sv
@@ -35,7 +36,7 @@ opt -full
 synth -top sisRvCore -flatten
 
 # Report area and cell counts
-stat
+tee -o build/ppa_synth_report.txt stat
 
 # Write netlist
 write_verilog -noattr build/sisRvCore_synth.v
@@ -47,5 +48,5 @@ read -sv rtl/bus/sisAxiLiteM.sv
 hierarchy -top sisAxiLiteM
 proc; opt; flatten; opt -full
 synth -top sisAxiLiteM -flatten
-stat
+tee -a build/ppa_synth_report.txt stat
 write_verilog -noattr build/sisAxiLiteM_synth.v

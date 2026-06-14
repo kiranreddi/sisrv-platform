@@ -569,11 +569,27 @@ module sisPlatformTop #(
       assign ram_req_valid    = 1'b0;
       assign rom_rsp_ready    = 1'b0;
       assign ram_rsp_ready    = 1'b0;
-      // MMIO sub-router: tie off all signals (not used in AXI path)
+      // CLINT/PLIC/MMIO not used on direct corebus in AXI path
       assign clint_req_valid  = 1'b0;
+      assign clint_req_addr   = 32'h0;
+      assign clint_req_we     = 1'b0;
+      assign clint_req_wdata  = 32'h0;
+      assign clint_req_wstrb  = 4'h0;
+      assign clint_req_ready  = 1'b0;
       assign clint_rsp_ready  = 1'b0;
+      assign clint_rsp_valid  = 1'b0;
+      assign clint_rsp_rdata  = 32'h0;
+      assign clint_rsp_err    = 1'b0;
       assign plic_req_valid   = 1'b0;
+      assign plic_req_addr    = 32'h0;
+      assign plic_req_we      = 1'b0;
+      assign plic_req_wdata   = 32'h0;
+      assign plic_req_wstrb   = 4'h0;
+      assign plic_req_ready   = 1'b0;
       assign plic_rsp_ready   = 1'b0;
+      assign plic_rsp_valid   = 1'b0;
+      assign plic_rsp_rdata   = 32'h0;
+      assign plic_rsp_err     = 1'b0;
       assign mmio_req_valid   = 1'b0;
       assign mmio_rsp_ready   = 1'b0;
       assign tohost_req_valid = 1'b0;

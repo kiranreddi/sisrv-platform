@@ -87,7 +87,6 @@ module sisAxiLiteSlave #(
 `endif
 
   logic        msip_reg;
-  logic        meip_reg;
   logic [63:0] mtime;
   logic [63:0] mtimecmp;
   logic [63:0] mtime_next;
@@ -96,6 +95,85 @@ module sisAxiLiteSlave #(
   logic [7:0]  uart_last_tx;
   logic [7:0]  uart_rx_data;
   logic        uart_rx_valid;
+
+  // PLIC subset (inline; matches rtl/periph/sisPlic.sv register layout)
+  localparam logic [31:0] PLIC_OFF_PRIORITY  = 32'h0000_0004;
+  localparam logic [31:0] PLIC_OFF_PENDING   = 32'h0000_1000;
+  localparam logic [31:0] PLIC_OFF_ENABLE    = 32'h0000_2000;
+  localparam logic [31:0] PLIC_OFF_THRESHOLD = 32'h0020_0000;
+  localparam logic [31:0] PLIC_OFF_CLAIM     = 32'h0020_0004;
+
+  logic [7:0]  plic_prio [1:8];
+  logic [8:1]  plic_pending;
+  logic [8:1]  plic_enabled;
+  logic [7:0]  plic_threshold;
+  logic [3:0]  plic_claim_id;
+  logic        plic_claim_active;
+  logic [3:0]  plic_winner_id;
+  logic [7:0]  plic_winner_pri;
+  logic        plic_irq_active;
+  logic        plic_meip;
+
+  function automatic int plic_source_idx(input logic [31:0] offset);
+    plic_source_idx = int'(offset[31:2]);
+  endfunction
+
+  always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+      plic_pending      <= '0;
+      plic_claim_active <= 1'b0;
+      plic_claim_id     <= 4'd0;
+    end else begin
+      for (int i = 1; i <= 8; i++) begin
+        if (plic_irq[i] | gpio_out[i])
+          plic_pending[i] <= 1'b1;
+        else if (plic_claim_active && (plic_claim_id == i[3:0]) && wr_state == WR_EXEC &&
+                 is_plic(wr_addr_reg) && (wr_addr_reg - 32'h0C00_0000 == PLIC_OFF_CLAIM) &&
+                 (wr_data_reg[3:0] == plic_claim_id))
+          plic_pending[i] <= 1'b0;
+      end
+    end
+  end
+
+  always_comb begin
+    plic_winner_id  = 4'd0;
+    plic_winner_pri = 8'd0;
+    for (int i = 8; i >= 1; i--) begin
+      if (plic_enabled[i] && plic_pending[i] && (plic_prio[i] > plic_winner_pri) &&
+          (plic_prio[i] > plic_threshold)) begin
+        plic_winner_pri = plic_prio[i];
+        plic_winner_id  = i[3:0];
+      end
+    end
+    plic_irq_active = (plic_winner_id != 4'd0);
+    plic_meip       = plic_irq_active && !plic_claim_active;
+  end
+
+  function automatic logic [31:0] plic_read(input [31:0] addr);
+    logic [31:0] rel;
+    int idx;
+    begin
+      rel = addr - 32'h0C00_0000;
+      unique case (rel)
+        PLIC_OFF_PENDING:  return {{24{1'b0}}, plic_pending[8:1]};
+        PLIC_OFF_ENABLE:   return {{24{1'b0}}, plic_enabled[8:1]};
+        PLIC_OFF_THRESHOLD: return {24'b0, plic_threshold};
+        PLIC_OFF_CLAIM: begin
+          if (!plic_claim_active && plic_irq_active)
+            return {28'b0, plic_winner_id};
+          return {28'b0, plic_claim_id};
+        end
+        default: begin
+          if (rel[1:0] == 2'b00 && rel >= PLIC_OFF_PRIORITY && rel < PLIC_OFF_PENDING) begin
+            idx = plic_source_idx(rel);
+            if (idx >= 1 && idx <= 8)
+              return {24'b0, plic_prio[idx]};
+          end
+          return 32'h0;
+        end
+      endcase
+    end
+  endfunction
 
   // Initialize memories
   initial begin
@@ -240,6 +318,8 @@ module sisAxiLiteSlave #(
     end
     else if (is_mmio(addr))
       return last_code;
+    else if (is_plic(addr))
+      return plic_read(addr);
     else
       return 32'hDEAD_BEEF;
   endfunction
@@ -261,7 +341,12 @@ module sisAxiLiteSlave #(
               rd_stall_cnt <= lfsr_r[3:0] & 4'hF;
             end else begin
               rd_data_reg <= mem_read(araddr);
-              rd_resp_reg <= (is_rom(araddr) || is_ram(araddr) || is_clint(araddr) || is_gpio(araddr) || is_uart(araddr) || is_mmio(araddr)) ? 2'b00 : 2'b11;
+              if (is_plic(araddr) && ((araddr - 32'h0C00_0000) == PLIC_OFF_CLAIM) &&
+                  !plic_claim_active && plic_irq_active) begin
+                plic_claim_id     <= plic_winner_id;
+                plic_claim_active <= 1'b1;
+              end
+              rd_resp_reg <= (is_rom(araddr) || is_ram(araddr) || is_clint(araddr) || is_plic(araddr) || is_gpio(araddr) || is_uart(araddr) || is_mmio(araddr)) ? 2'b00 : 2'b11;
               rd_state    <= RD_RESP;
             end
           end
@@ -270,7 +355,12 @@ module sisAxiLiteSlave #(
         RD_WAIT: begin
           if (rd_stall_cnt == 0) begin
             rd_data_reg <= mem_read(rd_addr_reg);
-            rd_resp_reg <= (is_rom(rd_addr_reg) || is_ram(rd_addr_reg) || is_clint(rd_addr_reg) || is_gpio(rd_addr_reg) || is_uart(rd_addr_reg) || is_mmio(rd_addr_reg)) ? 2'b00 : 2'b11;
+            if (is_plic(rd_addr_reg) && ((rd_addr_reg - 32'h0C00_0000) == PLIC_OFF_CLAIM) &&
+                !plic_claim_active && plic_irq_active) begin
+              plic_claim_id     <= plic_winner_id;
+              plic_claim_active <= 1'b1;
+            end
+            rd_resp_reg <= (is_rom(rd_addr_reg) || is_ram(rd_addr_reg) || is_clint(rd_addr_reg) || is_plic(rd_addr_reg) || is_gpio(rd_addr_reg) || is_uart(rd_addr_reg) || is_mmio(rd_addr_reg)) ? 2'b00 : 2'b11;
             rd_state    <= RD_RESP;
           end else begin
             rd_stall_cnt <= rd_stall_cnt - 1;
@@ -335,8 +425,13 @@ module sisAxiLiteSlave #(
       fail         <= 1'b0;
       last_code    <= 32'h0;
       msip_reg     <= 1'b0;
-      meip_reg     <= 1'b0;
       mtimecmp     <= 64'hFFFF_FFFF_FFFF_FFFF;
+      for (int i = 1; i <= 8; i++)
+        plic_prio[i] <= 8'd1;
+      plic_enabled      <= '0;
+      plic_threshold    <= 8'd0;
+      plic_claim_id     <= 4'd0;
+      plic_claim_active <= 1'b0;
       gpio_out     <= 32'h0;
       gpio_oe      <= 32'h0;
       uart_ctrl     <= 32'h1;
@@ -435,7 +530,33 @@ module sisAxiLiteSlave #(
               default: ;
             endcase
           end
-          wr_resp_reg <= (is_rom(wr_addr_reg) || is_ram(wr_addr_reg) || is_clint(wr_addr_reg) || is_gpio(wr_addr_reg) || is_uart(wr_addr_reg) || is_mmio(wr_addr_reg)) ? 2'b00 : 2'b11;
+          if (is_plic(wr_addr_reg)) begin
+            unique case (wr_addr_reg - 32'h0C00_0000)
+              PLIC_OFF_ENABLE: begin
+                for (int i = 1; i <= 8; i++)
+                  plic_enabled[i] <= wr_data_reg[i];
+              end
+              PLIC_OFF_THRESHOLD: begin
+                if (wr_strb_reg[0])
+                  plic_threshold <= wr_data_reg[7:0];
+              end
+              PLIC_OFF_CLAIM: begin
+                if (plic_claim_active && (wr_data_reg[3:0] == plic_claim_id))
+                  plic_claim_active <= 1'b0;
+              end
+              default: begin
+                logic [31:0] rel;
+                int idx;
+                rel = wr_addr_reg - 32'h0C00_0000;
+                if (rel[1:0] == 2'b00 && rel >= PLIC_OFF_PRIORITY && rel < PLIC_OFF_PENDING) begin
+                  idx = plic_source_idx(rel);
+                  if (idx >= 1 && idx <= 8 && wr_strb_reg[0])
+                    plic_prio[idx] <= wr_data_reg[7:0];
+                end
+              end
+            endcase
+          end
+          wr_resp_reg <= (is_rom(wr_addr_reg) || is_ram(wr_addr_reg) || is_clint(wr_addr_reg) || is_plic(wr_addr_reg) || is_gpio(wr_addr_reg) || is_uart(wr_addr_reg) || is_mmio(wr_addr_reg)) ? 2'b00 : 2'b11;
           if (should_stall(lfsr_b)) begin
             wr_state     <= WR_WAIT;
             wr_stall_cnt <= lfsr_b[3:0] & 4'h7;
@@ -468,6 +589,6 @@ module sisAxiLiteSlave #(
   assign bresp   = wr_resp_reg;
   assign mtip = (mtime >= mtimecmp);
   assign msip = msip_reg;
-  assign meip = |plic_irq;
+  assign meip = plic_meip;
 
 endmodule

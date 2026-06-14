@@ -99,7 +99,7 @@ async def test_csr_reset_values(dut):
     cocotb.start_soon(clock.start())
     await reset_dut(dut)
 
-    expected_reset = {CSR_MISA: 0x40001100}
+    expected_reset = {CSR_MISA: 0x40001104}
     for addr in ALL_CSRS:
         if addr in (CSR_MCYCLE, CSR_MCYCLEH, CSR_MINSTRET, CSR_MINSTRETH):
             continue
@@ -354,7 +354,7 @@ async def test_csr_id_registers(dut):
     await reset_dut(dut)
 
     misa = await csr_read(dut, CSR_MISA)
-    assert misa == 0x40001100, f"misa expected RV32IM 0x40001100, got 0x{misa:08x}"
+    assert misa == 0x40001104, f"misa expected RV32IMAC 0x40001104, got 0x{misa:08x}"
 
     for addr in [CSR_MVENDORID, CSR_MARCHID, CSR_MIMPID, CSR_MHARTID, CSR_MCONFIGPTR]:
         got = await csr_read(dut, addr)

@@ -56,7 +56,7 @@ class sisrv(pluginTemplate):
         self.suite_dir = suite
         self.compile_cmd = (
             self.toolchain_prefix
-            + "gcc -march={0} -mabi=ilp32 "
+            + "gcc -march={0} -mabi=ilp32 -Wl,-melf32lriscv "
             + "-static -mcmodel=medany -fvisibility=hidden -nostdlib -nostartfiles -g "
             + "-T "
             + self.pluginpath

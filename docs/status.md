@@ -8,7 +8,7 @@ The sisrv-platform project implements a fully functional RV32IMAC RISC-V process
 with M-mode CSRs, trap handling, **CLINT/PLIC interrupts**, **RISC-V Debug subset**,
 GPIO, UART, and an AXI4-Lite master bridge.
 The core is verified through **36** directed assembly tests, 44 cocotb randomized unit tests,
-4 formal proofs, RISCOF smoke (required CI), and 100-seed random co-sim smoke — all on Verilator 5.038.
+4 formal proofs, RISCOF smoke (required CI), and 100-seed Spike+Verilator dual-model co-sim — all on Verilator 5.038.
 
 ### P0 closure snapshot (2026-06-14)
 
@@ -19,7 +19,8 @@ The core is verified through **36** directed assembly tests, 44 cocotb randomize
 | Debug / JTAG | ✅ Subset | `sisDm.sv`, `sisJtagDtm.sv`, halt/resume/step |
 | Product docs | ✅ Complete | `LICENSE`, Integration Guide, PRM, PPA datasheet |
 | PPA / STA | 🟡 Partial | SDC + OpenSTA scripts; named-PDK STA pending |
-| RISCOF / co-sim | 🟡 Partial | Smoke in required CI; full suite + Spike lock-step pending |
+| RISCOF / co-sim | 🟡 Partial | ELF32/64 fix, smoke in CI; dual-model 100-seed; full ACT + 10k gate open |
+| PPA / STA | 🟡 Partial | `ppa_synth_report.txt` from Yosys CI; named-PDK OpenSTA closure open |
 
 ## Milestone Status
 
@@ -148,7 +149,8 @@ x0 always 0 ✅, PC word-aligned ✅, correct sign/zero extension ✅
 | AXI-Lite timer support | ✅ Done | `tb/models/sisAxiLiteSlave.sv` models MTIME/MTIMECMP and MTIP |
 | AXI-Lite GPIO support | ✅ Done | `tb/models/sisAxiLiteSlave.sv` models DATA/DIR/IN/SET/CLR |
 | AXI-Lite UART support | ✅ Done | `tb/models/sisAxiLiteSlave.sv` models TXDATA/RXDATA/STATUS/CTRL/BAUDDIV |
-| AXI-Lite system regression | ✅ Done | `make regress-axil` runs all 33 assembly tests through the AXI path |
+| AXI-Lite PLIC/CLINT support | ✅ Done | Inline PLIC + CLINT in `sisAxiLiteSlave.sv` (36/36 regress-axil) |
+| AXI-Lite system regression | ✅ Done | `make regress-axil` runs all 36 assembly tests through the AXI path |
 | cocotb bridge tests | ✅ Done | 11 tests: reset, R/W, errors, stalls, 100-txn random stress |
 | Formal AXI-Lite bridge | Optional | Bounded VALID stability, mutual exclusion, data stability (`make formal-axil`) |
 
