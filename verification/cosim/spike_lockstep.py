@@ -12,7 +12,7 @@ import tempfile
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
-SIM = Path(os.environ.get("COSIM_SIM", REPO / "build" / "sim_sisPlatformTop"))
+SIM = Path(os.environ.get("COSIM_SIM", str(REPO / "obj_dir" / "sim_cosim_sisPlatformTop"))).resolve()
 ELF2SISRV = REPO / "verification" / "riscof" / "scripts" / "elf2sisrv.py"
 LINK_LD = REPO / "verification" / "cosim" / "link.ld"
 

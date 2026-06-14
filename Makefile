@@ -193,9 +193,10 @@ sta-sky130:
 
 COSIM_SEEDS ?= 10000
 
-COSIM_SIM ?= $(BUILD)/sim_cosim_$(TOP)
+COSIM_SIM_BIN = obj_dir/sim_cosim_$(TOP)
+COSIM_STAMP   = $(BUILD)/.cosim_sim_built
 
-$(COSIM_SIM): $(RTL_SRCS) $(TB_SRCS) $(CPP_SRCS)
+$(COSIM_STAMP): $(RTL_SRCS) $(TB_SRCS) $(CPP_SRCS)
 	@mkdir -p $(BUILD)
 	$(VERILATOR) -Wall -Wno-UNUSEDSIGNAL -Wno-WIDTHTRUNC -Wno-WIDTHEXPAND -Wno-SELRANGE -Wno-UNUSEDPARAM -Wno-SYNCASYNCNET --cc --exe --build \
 	  -O3 --trace-fst \
@@ -208,10 +209,11 @@ $(COSIM_SIM): $(RTL_SRCS) $(TB_SRCS) $(CPP_SRCS)
 	  -GRESET_VECTOR=32\'h8000_0000 \
 	  $(RTL_SRCS) $(TB_SRCS) $(CPP_SRCS) \
 	  -o sim_cosim_$(TOP)
-	@cp obj_dir/sim_cosim_$(TOP) $(COSIM_SIM)
+	@test -x $(COSIM_SIM_BIN)
+	@touch $(COSIM_STAMP)
 
-cosim-lockstep: $(COSIM_SIM)
-	COSIM_SIM=$(COSIM_SIM) python3 verification/cosim/spike_lockstep.py --seeds $(COSIM_SEEDS)
+cosim-lockstep: $(COSIM_STAMP)
+	COSIM_SIM=$(abspath $(COSIM_SIM_BIN)) python3 verification/cosim/spike_lockstep.py --seeds $(COSIM_SEEDS)
 
 # ---------------------------------------------------------------------------
 # RISCOF architectural compliance (optional; requires external tools)
