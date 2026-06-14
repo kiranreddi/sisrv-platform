@@ -18,4 +18,4 @@ clean
 stat -liberty @LIBERTY_FILE@
 
 check
-write_verilog -noattr -nohex build/sisRvCore_sky130.v
+write_verilog -noattr -noexpr -nohex build/sisRvCore_sky130.v
