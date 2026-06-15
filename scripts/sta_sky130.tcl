@@ -5,7 +5,7 @@ read_liberty @LIBERTY_FILE@
 read_verilog @NETLIST_FILE@
 
 set linked 0
-foreach top {{ \sisRvCore} sisRvCore} {
+foreach top {{\sisRvCore} sisRvCore} {
   if {!$linked} {
     if {![catch {link_design $top} err]} {
       if {![catch {current_design} _]} {
