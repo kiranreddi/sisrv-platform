@@ -46,7 +46,7 @@ keeping the implementation readable and open.
 | Interrupts | CLINT (MSIP/MTIP/MTIME), PLIC (8 prioritized sources), GPIO→PLIC mux |
 | Debug | RISC-V DM 0.13 subset + JTAG DTM; abstract GPR wired to regfile while halted |
 | Bus | Internal corebus plus optional AXI4-Lite bridge path |
-| Verification | 36 assembly tests, 44 cocotb tests, formal proofs, RISCOF ACT + 10k lock-step co-sim |
+| Verification | 36 assembly tests, 44 cocotb tests, formal proofs, RISCOF ACT **95/95** + 10k lock-step co-sim |
 | Implementation | Synthesizable SystemVerilog, Verilator simulation, Yosys + Sky130 STA |
 | Product gap | Pipelined performance, PMP, physical GDS signoff |
 
@@ -89,7 +89,7 @@ flowchart TB
   RTL --> Cocotb["44 cocotb unit tests\nALU, regfile, decode, CSR, AXI"]
   RTL --> Formal["Formal proofs\nALU, regfile, decode, AXI safety"]
   RTL --> Synth["Yosys synthesis"]
-  Sim --> RISCOF["RISCOF ACT harness\n177 rv32imac_zicsr tests"]
+  Sim --> RISCOF["RISCOF ACT harness\n95 rv32imac_zicsr tests"]
 ```
 
 ## Commercial Positioning
@@ -225,7 +225,10 @@ branches, system instructions, and stress loops.
 ### RISCOF / Architectural Tests
 
 Reusable Spike co-simulation harness lives under `verification/riscof/` and
-`verification/cosim/`. The ACT target runs the full **rv32imac_zicsr** suite (~177 tests).
+`verification/cosim/`. The ACT target runs the **rv32imac_zicsr** suite with a profile
+filter: **95 tests** kept (I/M/C + Zicsr), **72 excluded** (PMP, A, privilege outside
+RV32IMCZicsr). Latest green CI:
+[run #27524072022](https://github.com/kiranreddi/sisrv-platform/actions/runs/27524072022).
 
 ```bash
 make riscof-act
@@ -253,7 +256,7 @@ Unsupported classes remain PMP, S/U modes, and A/F/D.
 
 | Region | Base | Size | Notes |
 |---|---:|---:|---|
-| ROM | `0x0000_0000` | 64 KB | Reset vector, program code |
+| ROM | `0x0000_0000` | 2 MB | Reset vector, program code (ACT link.ld) |
 | Timer / CLINT | `0x0200_0000` | 64 KB | MSIP, MTIMECMP, MTIME |
 | PLIC | `0x0C00_0000` | 64 KB | 8 external IRQ sources |
 | MMIO | `0x1000_0000` | 64 KB | tohost pass/fail signaling |
@@ -286,7 +289,7 @@ The workflow runs on every push/PR to `main`.
 | cocotb | 44 directed/randomized unit tests |
 | Formal | Required ALU, RegFile, Decode proofs; optional AXI safety |
 | Synth | Yosys synthesis of core + AXI bridge (PPA stat artifact) |
-| RISCOF + co-sim | RISCOF ACT (177 tests) + 10k-seed retired-instruction lock-step |
+| RISCOF + co-sim | RISCOF ACT (**95/95** filtered) + 10k-seed retired-instruction lock-step |
 
 All jobs above are required and gate merges.
 

@@ -1,6 +1,6 @@
 # Implementation Status
 
-**Last updated**: 2026-06-14 (P0 platform integration)
+**Last updated**: 2026-06-15 (Phase A closure — CI run [#27524072022](https://github.com/kiranreddi/sisrv-platform/actions/runs/27524072022))
 
 ## Summary
 
@@ -8,19 +8,20 @@ The sisrv-platform project implements a fully functional RV32IMAC RISC-V process
 with M-mode CSRs, trap handling, **CLINT/PLIC interrupts**, **RISC-V Debug subset**,
 GPIO, UART, and an AXI4-Lite master bridge.
 The core is verified through **36** directed assembly tests, 44 cocotb randomized unit tests,
-4 formal proofs, **RISCOF rv32imac_zicsr ACT suite** (177 tests, required CI), and
+4 formal proofs, **RISCOF rv32imac_zicsr ACT suite** (**95/95** filtered tests in CI; 72
+upstream tests excluded for PMP/A/privilege outside the RV32IMCZicsr profile), and
 **10k-seed retired-instruction Spike lock-step co-sim** — all on Verilator 5.038.
 
-### P0 closure snapshot (2026-06-14)
+### P0 closure snapshot (2026-06-15)
 
 | P0 item | Status | Evidence |
 |---------|--------|----------|
 | CLINT / PLIC | ✅ Complete | `sisClint.sv`, `sisPlic.sv`, `test_msip`, `test_timer`, `test_plic_irq` |
-| C extension | ✅ Complete | `sisDecompress.sv`, `ENABLE_C`, `test_compressed` |
+| C extension | ✅ Complete | `sisDecompress.sv`, `ENABLE_C`, `test_compressed`, **27/27 C ACT tests** |
 | Debug / JTAG | ✅ Complete | `sisDm.sv`, `sisJtagDtm.sv`, halt/resume/step, abstract GPR → regfile |
 | Product docs | ✅ Complete | `LICENSE`, Integration Guide, PRM, PPA datasheet |
-| PPA / STA | ✅ Sky130 HD | `make sta-sky130` → `build/sta_sky130_report.txt` (WNS/TNS/Fmax) in CI |
-| RISCOF / co-sim | ✅ Complete | `make riscof-act` + `make cosim-lockstep COSIM_SEEDS=10000` in CI |
+| PPA / STA | ✅ Sky130 HD | CI WNS **-175.621 ns**, TNS **-5566.819 ns**, Fmax **5.11 MHz** ([run](https://github.com/kiranreddi/sisrv-platform/actions/runs/27524072022)) |
+| RISCOF / co-sim | ✅ Complete | **95/95** ACT + **10k-seed** lock-step co-sim green in CI ([run](https://github.com/kiranreddi/sisrv-platform/actions/runs/27524072022)) |
 
 ## Milestone Status
 

@@ -27,10 +27,12 @@ is three things commercial cores treat as table stakes:
 1. **Performance.** Multi-cycle FSM runs at **~6–8 cycles per instruction (CPI)**.
    Commercial embedded cores are pipelined at **~1.0–1.3 CPI** — a **5–8× single-thread
    throughput gap** at the same clock.
-2. **Compliance sign-off.** RISCOF **rv32imac_zicsr** ACT suite (177 tests) and
-   **10k-seed retired-instruction** Spike lock-step co-sim are in required CI.
-3. **Productization rigor.** Sky130 HD STA (`make sta-sky130`) reports WNS/TNS/Fmax in CI;
-   competitive CoreMark/MHz evidence is still open.
+2. **Compliance sign-off.** RISCOF **rv32imac_zicsr** ACT suite (**95/95** filtered tests;
+   72 upstream PMP/A/privilege tests excluded) and **10k-seed retired-instruction** Spike
+   lock-step co-sim are green in CI
+   ([run #27524072022](https://github.com/kiranreddi/sisrv-platform/actions/runs/27524072022)).
+3. **Productization rigor.** Sky130 HD STA in CI: WNS **-175.621 ns**, TNS **-5566.819 ns**,
+   Fmax **5.11 MHz**; competitive CoreMark/MHz evidence is still open.
 
 The good news: the codebase is structured so each of these is an incremental milestone,
 not a rewrite. The plan in §6 takes us from "MVP core" to "product-grade soft IP" in a
@@ -52,8 +54,8 @@ defined sequence with hard exit gates.
 | Memory | Aligned-only assumed; no MPU/PMP; no cache; tightly-coupled ROM/RAM |
 | Bus | Internal corebus + AXI4-Lite **master** bridge (single outstanding, no bursts) |
 | Debug | **DM 0.13 subset + JTAG DTM** (halt/resume/step); **abstract GPR → regfile** |
-| Verification | **36** directed asm + 44 cocotb + 4 formal + **RISCOF ACT (CI)** + **10k-seed lock-step co-sim (CI)** |
-| Physical | Yosys synth + **Sky130 HD STA (CI)** + PPA datasheet |
+| Verification | **36** directed asm + 44 cocotb + 4 formal + **RISCOF ACT 95/95 (CI)** + **10k-seed lock-step co-sim (CI)** |
+| Physical | Yosys synth + **Sky130 HD STA** (WNS -175.6 ns, Fmax 5.11 MHz, CI) + PPA datasheet |
 | Collateral | **Apache-2.0**, Integration Guide, Programmer's Reference, PPA datasheet |
 
 ---
@@ -150,7 +152,7 @@ Legend: ✅ have · 🟡 partial · ❌ missing · **P0** = required for any pro
 
 | Feature | Industry standard | Us | Gap | Pri |
 |---|---|---|---|---|
-| RISCOF / riscv-arch-test compliance pass | **mandatory to call it RISC-V** | ✅ | `make riscof-act` (177 tests) in required CI | **P0** |
+| RISCOF / riscv-arch-test compliance pass | **mandatory to call it RISC-V** | ✅ | `make riscof-act` (**95/95** filtered) in CI | **P0** |
 | ISS lock-step co-simulation (e.g. Spike) random | yes | ✅ | `verification/cosim/spike_lockstep.py` — 10k seeds, retired PC+insn compare | **P0** |
 | Constrained-random + functional coverage (UVM or cocotb) | yes | 🟡 | unit-level only, no top-level coverage closure | P1 |
 | Formal of control/hazard logic | premium | 🟡 | ALU/decode/regfile/AXI only, not core FSM/pipeline | P1 |
@@ -209,6 +211,7 @@ top-to-bottom by risk-adjusted value.
 
 ### Phase A — "Real RISC-V" correctness & compliance (foundation)
 **Goal:** Pass official compliance; close the privileged-mode holes. No new perf.
+**Status: COMPLETE** (2026-06-15, CI [run #27524072022](https://github.com/kiranreddi/sisrv-platform/actions/runs/27524072022))
 
 - Add RISCOF + riscv-arch-test to CI; pick Spike as golden ISS.
 - Stand up Spike lock-step co-simulation harness (random instruction streams).
@@ -216,8 +219,11 @@ top-to-bottom by risk-adjusted value.
 - ✅ Route `rsp_err` → instruction/load/store **access-fault** traps.
 - ✅ Add CSRs: `misa`, `mvendorid`, `marchid`, `mimpid`, `mhartid`, `mconfigptr`,
   `mcycle`/`minstret`/`mcountinhibit` (Zicntr). WFI is legal no-op.
-- **Exit gate:** RISCOF rv32imac_zicsr ACT suite green in CI; 10k-seed retired-instruction
-  Spike lock-step co-sim clean; Sky130 STA report in CI; nested-trap + access-fault directed
+- ✅ RV32C: IALIGN=16 jump alignment, WB-stage latched decode, reserved `rd=x0` C encodings as NOP.
+- ✅ ROM decode expanded to 2 MB (matches ACT `link.ld`).
+- **Exit gate:** ✅ RISCOF rv32imac_zicsr ACT suite **95/95** green in CI; ✅ 10k-seed
+  retired-instruction Spike lock-step co-sim clean; ✅ Sky130 STA report in CI
+  (WNS -175.621 ns, TNS -5566.819 ns, Fmax 5.11 MHz); nested-trap + access-fault directed
   tests pass.
 
 ### Phase B — System integration (droppable into an SoC)
