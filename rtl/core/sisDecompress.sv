@@ -19,9 +19,9 @@ module sisDecompress (
   assign rs1p   = {2'b01, c_instr[9:7]};
   assign rs2p   = {2'b01, c_instr[4:2]};
 
-  // Quadrant-0 load/store byte offset
+  // Quadrant-0 C.LW / C.SW byte offset (scrambled encoding)
   logic [7:0] c0_ls_uimm;
-  assign c0_ls_uimm = {c_instr[12], c_instr[10:8], c_instr[6], 2'b00};
+  assign c0_ls_uimm = ((c_instr >> 7) & 8'h38) | ((c_instr >> 4) & 8'h04) | ((c_instr << 1) & 8'h40);
 
   // Quadrant-0 C.ADDI4SPN immediate
   logic [9:0] addi4spn_uimm;
@@ -42,21 +42,24 @@ module sisDecompress (
   logic [20:0] cj_off;
   assign cj_off = {{9{cj_imm12[11]}}, cj_imm12};
 
-  // C.BEQZ / C.BNEZ 12-bit byte offset (bit 0 = 0)
-  logic [11:0] cb_imm12;
-  assign cb_imm12 = {c_instr[12], c_instr[6:5], c_instr[2], c_instr[11:10], c_instr[4:3], 1'b0};
-  logic [12:0] cb_off;
-  assign cb_off = {{1{cb_imm12[11]}}, cb_imm12};
+  // C.BEQZ / C.BNEZ branch offset (12-bit, bit 0 = 0; sign at bit 8)
+  logic [11:0] cb_imm_pre;
+  assign cb_imm_pre = ((c_instr >> 4) & 12'h100) | ((c_instr << 1) & 12'h0C0) |
+                       ((c_instr << 3) & 12'h020) | ((c_instr >> 7) & 12'h018) |
+                       ((c_instr >> 2) & 12'h006);
+  logic signed [11:0] cb_imm_s;
+  assign cb_imm_s = cb_imm_pre[8] ? (cb_imm_pre - 12'h200) : cb_imm_pre;
+  logic signed [12:0] cb_imm_ext;
+  assign cb_imm_ext = {cb_imm_s[11], cb_imm_s};
+  logic [31:0] cb_insn_base;
+  assign cb_insn_base = ((cb_imm_ext & 13'h1000) << 19) | ((cb_imm_s & 12'h7E0) << 20) |
+                        ((cb_imm_s & 12'h01E) << 7) | ((cb_imm_s & 12'h800) >> 4);
 
   // Quadrant-2 C.LWSP / C.SWSP byte offset
   logic [7:0] lwsp_uimm;
   assign lwsp_uimm = {c_instr[3:2], c_instr[12], c_instr[6:4], 2'b00};
   logic [7:0] swsp_uimm;
   assign swsp_uimm = {c_instr[8:7], c_instr[12:9], 2'b00};
-
-  // Shift amount for C.SRLI / C.SRAI / C.SLLI
-  logic [5:0] shamt6;
-  assign shamt6 = {c_instr[12], c_instr[6:2]};
 
   logic [31:0] expanded;
   logic        legal;
@@ -70,7 +73,7 @@ module sisDecompress (
         unique case (funct3)
           3'b000: begin
             if (addi4spn_uimm == 10'd0) legal = 1'b0;
-            else expanded = {2'b00, addi4spn_uimm[9:2], 4'b0000, 3'b000, rdp, 7'b0010011};
+            else expanded = {2'b00, addi4spn_uimm, 5'd2, 3'b000, rdp, 7'b0010011};
           end
           3'b010:
             expanded = {c0_ls_uimm, rs1p, 3'b010, rdp, 7'b0000011};
@@ -93,7 +96,7 @@ module sisDecompress (
           3'b011: begin
             if (rd_rs1 == 5'd2) begin
               if (addi16sp_uimm == 10'd0) legal = 1'b0;
-              else expanded = {{2{addi16sp_uimm[9]}}, addi16sp_uimm[9:4], 5'd2, 3'b000, 5'd2, 7'b0010011};
+              else expanded = {{2{addi16sp_uimm[9]}}, addi16sp_uimm, 5'd2, 3'b000, 5'd2, 7'b0010011};
             end else begin
               if (imm6 == 6'sd0 || rd_rs1 == 5'd0) legal = 1'b0;
               else expanded = {{14{imm6[5]}}, imm6, rd_rs1, 7'b0110111};
@@ -125,9 +128,9 @@ module sisDecompress (
           3'b101:
             expanded = {cj_off[20], cj_off[10:1], cj_off[11], cj_off[19:12], 5'd0, 7'b1101111};
           3'b110:
-            expanded = {cb_off[12], cb_off[10:5], rs1p, 3'b000, 5'd0, cb_off[4:1], cb_off[11], 7'b1100011};
+            expanded = cb_insn_base | (rs1p << 15) | (3'b000 << 12) | 7'b1100011;
           3'b111:
-            expanded = {cb_off[12], cb_off[10:5], rs1p, 3'b001, 5'd0, cb_off[4:1], cb_off[11], 7'b1100011};
+            expanded = cb_insn_base | (rs1p << 15) | (3'b001 << 12) | 7'b1100011;
           default: legal = 1'b0;
         endcase
       end
