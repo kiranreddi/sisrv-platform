@@ -2,7 +2,7 @@
 // Routes corebus requests to ROM, RAM, CLINT, PLIC, or platform MMIO.
 //
 // Address map:
-//   ROM:   0x0000_0000 - 0x0000_FFFF
+//   ROM:   0x0000_0000 - 0x001F_FFFF (2 MB; matches ACT link.ld and sisRom depth)
 //   CLINT: 0x0200_0000 - 0x0200_FFFF
 //   MMIO:  0x1000_0000 - 0x1000_FFFF (tohost, GPIO, UART)
 //   PLIC:  0x0C00_0000 - 0x0C00_FFFF
@@ -86,7 +86,7 @@ module sisMemFabric (
 );
 
   logic sel_rom, sel_ram, sel_mmio, sel_clint, sel_plic;
-  assign sel_rom   = (m_req_addr[31:16] == 16'h0000);
+  assign sel_rom   = ~|m_req_addr[31:21];
   assign sel_clint = (m_req_addr[31:16] == 16'h0200);
   assign sel_mmio  = (m_req_addr[31:16] == 16'h1000);
   assign sel_plic  = (m_req_addr[31:16] == 16'h0C00);
