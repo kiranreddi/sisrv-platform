@@ -45,11 +45,11 @@ Exit gate: GDS DRC/LVS clean or documented deltas per milestone M8.
 
 ## CPI / Performance
 
-| Metric | Estimate |
-|--------|----------|
-| CPI (FSM) | ~6–8 |
-| CoreMark/MHz | ~0.4–0.6 (pre-pipeline) |
+| Metric | Current status |
+|--------|----------------|
+| Microarchitecture | 3-stage in-order pipeline (`IF`, `ID`, `EX/MEM/WB`) |
+| Directed pipeline smoke | `test_pipeline_forwarding` passes at cycle 188; `test_pipeline_load_use` at cycle 230; `test_pipeline_flush` at cycle 209 |
+| CoreMark/MHz | Not yet measured |
 
-M6.1 overlaps writeback with the next fetch request when the fabric is ready. This
-is a conservative first pipeline step; the full M6 3-stage pipeline still targets
-~1.0–1.3 CPI and E2-class CoreMark/MHz.
+M6 completes the RTL pipeline conversion. A CoreMark/Dhrystone harness and CPI report
+remain the follow-on product benchmark work.

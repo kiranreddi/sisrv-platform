@@ -34,21 +34,21 @@ keeping the implementation readable and open.
 **Not yet claimed**
 
 - Not a certified or licensable commercial RISC-V IP product.
-- No PMP, cache, pipelined performance, or physical GDS signoff yet.
+- No PMP, cache, benchmarked CoreMark/Dhrystone number, or physical GDS signoff yet.
 
 ## Product Snapshot
 
 | Area | Current capability |
 |---|---|
-| Core | RV32IMAC, 32 registers, multi-cycle FSM, single issue, in order |
+| Core | RV32IMAC, 32 registers, 3-stage in-order pipeline |
 | Privilege | Machine mode, core CSRs, trap entry/return, counters, WFI legal no-op |
 | Platform | ROM, RAM, tohost, CLINT, PLIC, GPIO, UART |
 | Interrupts | CLINT (MSIP/MTIP/MTIME), PLIC (8 prioritized sources), GPIO→PLIC mux |
 | Debug | RISC-V DM 0.13 subset + JTAG DTM; abstract GPR wired to regfile while halted |
 | Bus | Internal corebus plus optional AXI4-Lite bridge path |
-| Verification | 36 assembly tests, 44 cocotb tests, formal proofs, RISCOF ACT **95/95** + 10k lock-step co-sim |
+| Verification | 40 assembly tests, 44 cocotb tests, formal proofs, RISCOF ACT **95/95** + 10k lock-step co-sim |
 | Implementation | Synthesizable SystemVerilog, Verilator simulation, Yosys + Sky130 STA |
-| Product gap | Pipelined performance, PMP, physical GDS signoff |
+| Product gap | PMP, benchmarked CoreMark/Dhrystone, physical GDS signoff |
 
 ## Architecture At A Glance
 
@@ -118,7 +118,7 @@ analysis and product-grade roadmap.
 | M3 - AXI4-Lite master bridge | Complete |
 | M4 - Timer interrupt | Complete |
 | M5 - RV32M multiply/divide | Complete: 33/33 asm tests pass |
-| M6 - 3-stage pipeline | In progress: WB/fetch-overlap v1 complete |
+| M6 - 3-stage pipeline | Complete: IF/ID/EX-MEM-WB pipeline |
 | M7 - Yosys synthesis | Complete |
 | M8 - OpenROAD hardening | Planned |
 
@@ -160,8 +160,8 @@ make lint                     # Verilator lint
 make build/sim_sisPlatformTop # Build simulation binary
 make sw                       # Build assembly test hex files
 make sim                      # Run basic PASS test
-make regress                  # Run 33-test corebus regression
-make regress-axil             # Run 33-test AXI4-Lite regression
+make regress                  # Run 40-test corebus regression
+make regress-axil             # Run 40-test AXI4-Lite regression
 make cocotb                   # Run 44 cocotb tests
 make formal                   # Run required formal proofs
 make formal-axil              # Optional AXI4-Lite bounded formal safety check
@@ -237,7 +237,9 @@ make riscof-rv32i
 make riscof-rv32im
 ```
 
-Both `riscof-act` and 10k-seed retired-instruction lock-step co-sim are required in CI.
+`riscof-act` remains required in CI. During M6 branch bring-up, the long 10k-seed
+retired-instruction lock-step co-sim is available through manual workflow dispatch
+and should be re-enabled as a gated job once the shorter CI lanes are green.
 Unsupported classes remain PMP, S/U modes, and A/F/D.
 
 ## Architecture Reference
@@ -245,7 +247,8 @@ Unsupported classes remain PMP, S/U modes, and A/F/D.
 ### CPU Core
 
 - ISA: RV32IMAC (`rv32imac_zicsr`).
-- Microarchitecture: multi-cycle FSM, `FETCH -> DECODE -> EXECUTE -> MEM -> WB`.
+- Microarchitecture: 3-stage in-order pipeline (`IF`, `ID`, `EX/MEM/WB`) with a
+  single-outstanding corebus owner for instruction fetch vs data memory.
 - Privilege: M-mode CSRs including `mstatus`, `misa`, `mtvec`, `mepc`, `mcause`,
   `mtval`, `mscratch`, `mie`, `mip`, `mcycle`, and `minstret`.
 - Traps: ECALL, EBREAK, illegal instruction, misaligned access, access fault, MRET.
@@ -285,11 +288,11 @@ The workflow runs on every push/PR to `main`.
 | Job | What it proves |
 |---|---|
 | Lint | RTL parses and passes Verilator lint |
-| Regression | 36 assembly tests through corebus and AXI4-Lite paths |
+| Regression | 40 assembly tests through corebus and AXI4-Lite paths |
 | cocotb | 44 directed/randomized unit tests |
 | Formal | Required ALU, RegFile, Decode proofs; optional AXI safety |
 | Synth | Yosys synthesis of core + AXI bridge (PPA stat artifact) |
-| RISCOF + co-sim | RISCOF ACT (**95/95** filtered) + 10k-seed retired-instruction lock-step |
+| RISCOF + co-sim | RISCOF ACT (**95/95** filtered) + manually dispatched 10k-seed retired-instruction lock-step during M6 branch bring-up |
 
 All jobs above are required and gate merges.
 

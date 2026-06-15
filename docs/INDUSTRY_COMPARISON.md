@@ -15,18 +15,17 @@ licensable / product-grade RISC-V core.
 
 ## 1. Executive summary
 
-`sisRvCore` today is a **correct, well-verified RV32IMAC teaching/MVP platform**: a 7-state
-multi-cycle FSM, M-mode only, with clean RTL, real formal proofs, cocotb unit tests, a
-36-test directed suite, an AXI4-Lite bridge, CLINT/PLIC, debug/JTAG, C extension, and a
-Yosys synthesis path. That is a genuinely strong *foundation* — better verified than many
-hobby cores.
+`sisRvCore` today is a **correct, well-verified RV32IMAC teaching/MVP platform**: a
+3-stage in-order pipeline, M-mode only, with clean RTL, real formal proofs, cocotb unit
+tests, a 40-test directed suite, an AXI4-Lite bridge, CLINT/PLIC, debug/JTAG, C extension,
+and a Yosys synthesis path. That is a genuinely strong *foundation* — better verified
+than many hobby cores.
 
 It is **not yet an industry-standard product**. The gap is not the ISA subset alone — it
 is three things commercial cores treat as table stakes:
 
-1. **Performance.** Multi-cycle FSM runs at **~6–8 cycles per instruction (CPI)**.
-   Commercial embedded cores are pipelined at **~1.0–1.3 CPI** — a **5–8× single-thread
-   throughput gap** at the same clock.
+1. **Performance data.** The M6 pipeline is implemented, but CoreMark/Dhrystone and
+   benchmark CPI are not published yet. Commercial embedded cores publish those numbers.
 2. **Compliance sign-off.** RISCOF **rv32imac_zicsr** ACT suite (**95/95** filtered tests;
    72 upstream PMP/A/privilege tests excluded) and **10k-seed retired-instruction** Spike
    lock-step co-sim are green in CI
@@ -45,8 +44,8 @@ defined sequence with hard exit gates.
 | Dimension | Current state |
 |---|---|
 | ISA | RV32I + M + **C** (`rv32imac_zicsr`), M-mode only |
-| Microarchitecture | Multi-cycle FSM, 7 states, single outstanding bus txn |
-| Performance | ~6–8 CPI (no pipeline, no caches, no branch prediction) |
+| Microarchitecture | 3-stage in-order pipeline, single outstanding bus txn |
+| Performance | Pipelined RTL complete; CoreMark/Dhrystone not yet measured |
 | Privilege | M-mode only; no U/S mode; no PMP |
 | Traps | Illegal instr, ECALL, EBREAK, MRET; misaligned load/store/control-flow traps; instruction/load/store access faults |
 | Interrupts | **CLINT** (MSIP/MTIP/MTIME at 0x0200_0000) + **PLIC** (8 sources at 0x0C00_0000) |
@@ -54,7 +53,7 @@ defined sequence with hard exit gates.
 | Memory | Aligned-only assumed; no MPU/PMP; no cache; tightly-coupled ROM/RAM |
 | Bus | Internal corebus + AXI4-Lite **master** bridge (single outstanding, no bursts) |
 | Debug | **DM 0.13 subset + JTAG DTM** (halt/resume/step); **abstract GPR → regfile** |
-| Verification | **36** directed asm + 44 cocotb + 4 formal + **RISCOF ACT 95/95 (CI)** + **10k-seed lock-step co-sim (CI)** |
+| Verification | **40** directed asm + 44 cocotb + 4 formal + **RISCOF ACT 95/95 (CI)** + **10k-seed lock-step co-sim** |
 | Physical | Yosys synth + **Sky130 HD STA** (WNS -175.6 ns, Fmax 5.11 MHz, CI) + PPA datasheet |
 | Collateral | **Apache-2.0**, Integration Guide, Programmer's Reference, PPA datasheet |
 
@@ -73,12 +72,12 @@ For a 32-bit embedded core, the bar is set by two camps. Targets below are the r
 | **SiFive E21 / E2 series** | SiFive | RV32IMC | ~2.3–3.0 | 3-stage | Closest analog to our target point |
 | **Andes N25F / D25F** | Andes | RV32IMAC(F) | ~3.5+ | 5-stage | High-end embedded RISC-V IP |
 | **Cortex-M23 / M33** | Arm | ARMv8-M | ~2.5 / 4.0+ | 2/3-stage | TrustZone security bar |
-| **sisRvCore (today)** | — | RV32IMAC | **~0.4–0.6²** | multi-cycle FSM | our starting point |
+| **sisRvCore (today)** | — | RV32IMAC | not yet measured | 3-stage | current implementation |
 
 ¹ Representative published figures; exact numbers vary by config/compiler. Use as
 order-of-magnitude, not contractual.
-² Estimated: at ~6–8 CPI the effective CoreMark/MHz is roughly 5–8× below a 1-CPI
-pipelined RV32IM. This is the single biggest headline gap.
+² CoreMark and Dhrystone are still open product benchmarks; do not claim an
+industry-comparable score until those runs exist.
 
 **Takeaway:** The realistic product target is the **SiFive E2 / Cortex-M0+–M3 class**:
 a small, pipelined, RV32IMC core with debug, standard interrupts, and compliance
@@ -237,11 +236,10 @@ top-to-bottom by risk-adjusted value.
   protocol-compliance (formal/VIP) clean.
 
 ### Phase C — Performance (the headline number)
-**Goal:** ~1.0–1.3 CPI; publish a CoreMark number.
-*(This is the existing Milestone 6.)*
+**Goal:** publish CPI, CoreMark, and Dhrystone numbers for the completed M6 pipeline.
 
-- 3-stage F / D / EX+M+WB pipeline; ALU forwarding, load-use stall, branch flush,
-  trap/IRQ flush. Keep corebus contract initially.
+- 3-stage F / D / EX+M+WB pipeline is implemented; continue with benchmark bring-up
+  and any CPI-driven tuning.
 - Add the **C extension** (compressed) — interacts with fetch/PC alignment, so do it
   with the pipeline rework.
 - Add **A extension** (LR/SC + AMO) if targeting RTOS/multi-core.
@@ -287,7 +285,7 @@ Ship criteria — all must be true to make the claim:
 - [x] Base M-mode trap model covers misalign + access fault.
 - [x] Standard interrupt subsystem (CLINT + PLIC/CLIC), multiple prioritized sources.
 - [x] RISC-V Debug Module + JTAG (halt/resume/step subset); GDB/OpenOCD path documented.
-- [x] RV32IMC at minimum (multi-cycle FSM; pipeline ~1 CPI still open).
+- [x] RV32IMC at minimum with M6 3-stage pipeline implemented; benchmark numbers still open.
 - [x] Timing-closed on a named PDK with a PPA datasheet; GDS DRC/LVS clean (STA on Sky130 HD; GDS still open).
 - [x] OSI license, PRM + integration guide, versioned release collateral started.
 

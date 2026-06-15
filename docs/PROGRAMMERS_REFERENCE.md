@@ -53,4 +53,5 @@ RISC-V Debug Module 0.13 subset: halt, resume, single-step, abstract GPR access 
 
 ## Performance
 
-Multi-cycle FSM: ~6–8 CPI typical. See [PPA_DATASHEET.md](PPA_DATASHEET.md).
+The core is a 3-stage in-order pipeline. Benchmark CPI/CoreMark data is tracked in
+[PPA_DATASHEET.md](PPA_DATASHEET.md).

@@ -150,8 +150,8 @@ x0 always 0 ✅, PC word-aligned ✅, correct sign/zero extension ✅
 | AXI-Lite timer support | ✅ Done | `tb/models/sisAxiLiteSlave.sv` models MTIME/MTIMECMP and MTIP |
 | AXI-Lite GPIO support | ✅ Done | `tb/models/sisAxiLiteSlave.sv` models DATA/DIR/IN/SET/CLR |
 | AXI-Lite UART support | ✅ Done | `tb/models/sisAxiLiteSlave.sv` models TXDATA/RXDATA/STATUS/CTRL/BAUDDIV |
-| AXI-Lite PLIC/CLINT support | ✅ Done | Inline PLIC + CLINT in `sisAxiLiteSlave.sv` (36/36 regress-axil) |
-| AXI-Lite system regression | ✅ Done | `make regress-axil` runs all 36 assembly tests through the AXI path |
+| AXI-Lite PLIC/CLINT support | ✅ Done | Inline PLIC + CLINT in `sisAxiLiteSlave.sv` (40/40 regress-axil) |
+| AXI-Lite system regression | ✅ Done | `make regress-axil` runs all 40 assembly tests through the AXI path |
 | cocotb bridge tests | ✅ Done | 11 tests: reset, R/W, errors, stalls, 100-txn random stress |
 | Formal AXI-Lite bridge | Optional | Bounded VALID stability, mutual exclusion, data stability (`make formal-axil`) |
 
@@ -199,16 +199,17 @@ timer interrupt tests run with the AXI slave timer model ✅, CI covers `make re
 
 ---
 
-### 🟡 Milestone 6 — 3-stage pipeline
-**Status: IN PROGRESS**
+### ✅ Milestone 6 — 3-stage pipeline
+**Status: COMPLETE**
 
 | Deliverable | Status | Notes |
 |-------------|--------|-------|
-| WB/fetch-overlap v1 | ✅ Done | `sisRvCore` issues the next fetch request during writeback when `req_ready` is high |
-| Interface preservation | ✅ Done | Corebus, AXI bridge contract, CSR/trap, interrupt, debug, and compressed fetch behavior retained |
+| IF/ID/EX-MEM-WB pipeline | ✅ Done | `sisRvCore` now has independent fetch, decode, and execute/memory/writeback pipeline state |
+| Corebus owner arbitration | ✅ Done | One outstanding request preserved; data memory wins over instruction fetch |
+| Hazard controls | ✅ Done | WB bypass/forwarding, load-use stall, branch/jump flush, trap/interrupt/mret flush |
+| Interface preservation | ✅ Done | Corebus, AXI bridge contract, CSR/trap, interrupt, debug, compressed fetch, and DPI retire-log interfaces retained |
 | Local validation | ✅ Done | `make lint`, `make regress`, `make regress-axil`, `make regress-axil-stall` |
-| Full F/D/EX+WB pipeline | 🔲 Planned | Requires IF/ID and ID/EX registers plus retirement model |
-| Hazard controls | 🔲 Planned | ALU forwarding, load-use stall, branch flush, CSR/trap retirement verification |
+| Directed pipeline tests | ✅ Done | forwarding, load-use, branch/jump flush, trap flush |
 
 ---
 
@@ -258,8 +259,8 @@ Planned:
 | Verilator version | 5.038 |
 | Lint status | ✅ Clean (Wall, no warnings) |
 | Compiler | riscv64-linux-gnu-gcc 13.3 |
-| Assembly test suite | 36 tests |
-| Assembly regression | 36/36 passing through corebus path |
+| Assembly test suite | 40 tests |
+| Assembly regression | 40/40 passing through corebus, AXI-Lite, and stalled AXI-Lite paths |
 | cocotb unit tests | 44 tests (3 ALU + 4 RegFile + 11 Decode + 15 CSR + 11 AXI-Lite) |
 | cocotb status | 44/44 passing |
 | Formal proofs/checks | Required: ALU (all 10 ops), RegFile (x0=0), Decode (fields + legality). Optional: AXI-Lite bounded safety (`make formal-axil`) |
@@ -273,7 +274,7 @@ Planned:
 
 ### RTL (synthesizable)
 - `rtl/sisPlatformTop.sv` — Top-level platform integration (USE_AXIL param switch)
-- `rtl/core/sisRvCore.sv` — RV32IM multi-cycle FSM CPU core (with interrupt support)
+- `rtl/core/sisRvCore.sv` — RV32IMC 3-stage pipelined CPU core (with interrupt support)
 - `rtl/core/sisAlu.sv` — Arithmetic/Logic Unit
 - `rtl/core/sisDecode.sv` — Instruction decoder
 - `rtl/core/sisRegFile.sv` — 32-entry register file

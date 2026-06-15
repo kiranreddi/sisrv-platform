@@ -182,35 +182,34 @@ Key principles:
 
 ---
 
-## Milestone 6 — Optional: 3-stage pipeline v1 (2–4 weeks)
+## Milestone 6 — 3-stage pipeline v1
 ### Objectives
 - Improve performance while preserving ISA behavior and external interfaces.
 
 ### Current progress
-- ✅ M6.1 WB/fetch overlap: the core now issues the next instruction fetch request
-  during writeback when the fabric is ready, then advances directly to fetch wait.
-- ✅ Existing corebus, CSR/trap, interrupt, debug, compressed-instruction, and AXI
-  interfaces are preserved.
-- ✅ Local validation for the M6.1 change:
+- ✅ Replaced the single global core FSM with IF, ID, and EX/MEM/WB pipeline state.
+- ✅ Added a single-outstanding corebus owner for instruction fetch vs data memory;
+  data memory has priority.
+- ✅ Added WB bypass/forwarding, load-use stalls, branch/jump flush, and
+  trap/interrupt/mret flush from retirement.
+- ✅ Existing corebus, CSR/trap, interrupt, debug, compressed-instruction, AXI, and
+  DPI retire-log interfaces are preserved.
+- ✅ Local validation for the M6 change:
   - `make lint`
   - `make regress`
   - `make regress-axil`
   - `make regress-axil-stall`
 
 ### Approach
-- Continue toward a full 3-stage (F/D/EX+WB) implementation, while keeping:
+- Keep the 3-stage (IF/ID/EX+MEM+WB) implementation constrained to:
   - internal corebus interface
   - CSR/trap semantics
-- Hazards:
-  - ALU forwarding
-  - load-use stall
-  - branch resolved in EX; flush F/D
+  - precise retirement from EX/MEM/WB
 
 ### Exit criteria
-- Regression suite unchanged; all previous tests pass.
-- CPI measured on a small benchmark improves vs FSM baseline.
-- Full M6 closure still requires IF/ID and ID/EX pipeline registers,
-  forwarding/stall/flush logic, and CSR/trap retirement checks.
+- 40-test directed regression passes through direct corebus and AXI-Lite paths.
+- Pipeline-directed forwarding, load-use, branch/jump flush, and trap flush tests pass.
+- CPI/CoreMark benchmarking remains a follow-on product metric, not an M6 RTL gate.
 
 ---
 
