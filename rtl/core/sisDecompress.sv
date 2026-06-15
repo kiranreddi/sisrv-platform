@@ -11,10 +11,9 @@ module sisDecompress (
   logic [2:0] funct3;
   logic [4:0] rd_rs1;
   logic [4:0] rdp, rs1p, rs2p;
-  logic [2:0] f3p;
   logic [9:0] nzuimm;
-  logic [17:0] lui_imm;
   logic [9:0] sp_imm;
+  logic [7:0] c_ls_uimm;
 
   assign quad   = c_instr[1:0];
   assign funct3 = c_instr[15:13];
@@ -22,10 +21,12 @@ module sisDecompress (
   assign rdp    = {2'b01, c_instr[4:2]};
   assign rs1p   = {2'b01, c_instr[9:7]};
   assign rs2p   = {2'b01, c_instr[4:2]};
-  assign f3p    = c_instr[12:10];
   assign nzuimm = {c_instr[10:7], c_instr[12:11], c_instr[5], c_instr[6], 2'b00};
-  assign lui_imm = {{15{c_instr[12]}}, c_instr[12], c_instr[6:2]};
   assign sp_imm  = {c_instr[12], c_instr[4:3], c_instr[5], c_instr[2], c_instr[6], 4'b0000};
+  assign c_ls_uimm = {c_instr[12], c_instr[5], c_instr[10:8], c_instr[6], 2'b00};
+
+  logic [5:0] c_lui_imm6;
+  assign c_lui_imm6 = {c_instr[12], c_instr[6:2]};
 
   logic [31:0] expanded;
   logic        legal;
@@ -42,11 +43,9 @@ module sisDecompress (
             else expanded = {2'b00, nzuimm[9:2], 4'b0000, 3'b000, rdp, 7'b0010011};
           end
           3'b010:
-            expanded = {5'b0, c_instr[5], c_instr[12:10], c_instr[6], 2'b00,
-                        3'b010, rs1p, 2'b00, f3p, 7'b0000011};
+            expanded = {4'b0, c_ls_uimm, rs1p, 3'b010, rdp, 7'b0000011};
           3'b110:
-            expanded = {5'b0, c_instr[5], c_instr[12], 2'b00, rs2p,
-                        rs1p, 3'b010, c_instr[6:5], 2'b00, 7'b0100011};
+            expanded = {c_ls_uimm[7:1], rs2p, rs1p, 3'b010, c_ls_uimm[4:0], 7'b0100011};
           default: legal = 1'b0;
         endcase
       end
@@ -68,8 +67,8 @@ module sisDecompress (
               if (sp_imm == 10'd0) legal = 1'b0;
               else expanded = {{2{sp_imm[9]}}, sp_imm[9:4], 5'd2, 3'b000, 5'd2, 7'b0010011};
             end else begin
-              if (lui_imm == 18'd0 || rd_rs1 == 5'd2) legal = 1'b0;
-              else expanded = {lui_imm[17:12], rd_rs1, 7'b0110111};
+              if (c_lui_imm6 == 6'd0 || rd_rs1 == 5'd2) legal = 1'b0;
+              else expanded = {c_lui_imm6, rd_rs1, 7'b0110111};
             end
           end
           3'b100: begin
@@ -108,7 +107,10 @@ module sisDecompress (
             expanded = {{4{c_instr[12]}}, c_instr[12], c_instr[6:4], c_instr[8:7], 2'b00,
                         5'd2, 3'b010, rd_rs1, 7'b0000011};
           3'b100: begin
-            if (c_instr[12:11] == 2'b00) begin
+            if (c_instr[15:12] == 4'b1001) begin
+              if (c_instr[6:2] == 5'd0) legal = 1'b0;
+              else expanded = {7'b0000000, c_instr[6:2], rd_rs1, 3'b000, rd_rs1, 7'b0110011};
+            end else if (c_instr[12:11] == 2'b00) begin
               if (rd_rs1 == 5'd0) legal = 1'b0;
               else expanded = {12'h000, rd_rs1, 3'b000, 5'd0, 7'b1100111};
             end else if (c_instr[12:11] == 2'b01) begin

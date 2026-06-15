@@ -11,7 +11,7 @@
 //   RAM:  0x8000_0000 - 0x8003_FFFF (256 KB)
 
 module sisAxiLiteSlave #(
-    parameter int ROM_DEPTH_WORDS = 16384,
+    parameter int ROM_DEPTH_WORDS = 524288,
     parameter int RAM_DEPTH_WORDS = 65536,
     parameter     ROM_INIT_FILE   = "",
     parameter int STALL_RATE      = 0     // 0-100: % chance of stalling each channel

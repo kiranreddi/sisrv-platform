@@ -2,7 +2,7 @@
 // Corebus-compatible: single-cycle response for reads.
 
 module sisRom #(
-    parameter int DEPTH_WORDS = 16384, // 64KB / 4 = 16384 words
+    parameter int DEPTH_WORDS = 524288, // 2MB / 4 — matches link.ld ROM length
     parameter     INIT_FILE   = ""
 )(
     input  logic        clk,

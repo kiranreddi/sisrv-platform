@@ -28,18 +28,8 @@ if {!$linked} {
 read_sdc scripts/constraints_sisRvCore.sdc
 check_setup
 
-set wns 0.0
-set tns 0.0
-set setup_paths [get_timing_paths -max_paths 1000 -setup]
-if {[llength $setup_paths] > 0} {
-  set wns [get_attribute [lindex $setup_paths 0] slack]
-  foreach path $setup_paths {
-    set slack [get_attribute $path slack]
-    if {$slack < 0} {
-      set tns [expr {$tns + $slack}]
-    }
-  }
-}
+set wns [worst_slack -max]
+set tns [total_negative_slack -max]
 
 set fmax_mhz 50.0
 set ach [expr {20.0 - $wns}]

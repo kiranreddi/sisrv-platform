@@ -366,7 +366,7 @@ module sisPlatformTop #(
       // ROM (corebus path)
       // ---------------------------------------------------------------
       sisRom #(
-        .DEPTH_WORDS(16384),
+        .DEPTH_WORDS(524288),
         .INIT_FILE  (ROM_INIT_FILE)
       ) u_rom (
         .clk       (clk),
@@ -528,7 +528,7 @@ module sisPlatformTop #(
       );
 
       sisAxiLiteSlave #(
-        .ROM_DEPTH_WORDS(16384),
+        .ROM_DEPTH_WORDS(524288),
         .RAM_DEPTH_WORDS(65536),
         .ROM_INIT_FILE  (ROM_INIT_FILE),
         .STALL_RATE     (AXIL_STALL_RATE)

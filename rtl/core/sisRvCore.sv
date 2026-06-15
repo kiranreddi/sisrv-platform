@@ -643,19 +643,32 @@ module sisRvCore #(
         S_WB: begin
           // PC update (illegal instructions trap before any control-flow effect)
           if (fetch_err_reg || mem_err_reg || mem_misaligned_reg || instr_addr_misaligned || !dec_is_legal_eff) begin
+            fetch_need_next_word <= 1'b0;
+            fetch_upper_hold    <= 16'h0;
             pc <= mtvec_out;
           end else if (dec_is_jal) begin
+            fetch_need_next_word <= 1'b0;
+            fetch_upper_hold    <= 16'h0;
             pc <= jal_target;
           end else if (dec_is_jalr) begin
+            fetch_need_next_word <= 1'b0;
+            fetch_upper_hold    <= 16'h0;
             pc <= jalr_target;
           end else if (dec_is_branch && branch_taken) begin
+            fetch_need_next_word <= 1'b0;
+            fetch_upper_hold    <= 16'h0;
             pc <= branch_target;
           end else if (is_ecall || is_ebreak) begin
+            fetch_need_next_word <= 1'b0;
+            fetch_upper_hold    <= 16'h0;
             pc <= mtvec_out;
           end else if (is_mret) begin
+            fetch_need_next_word <= 1'b0;
+            fetch_upper_hold    <= 16'h0;
             pc <= mepc_out;
           end else if (irq_pending && !is_csr_op) begin
-            // Timer interrupt: take between instructions
+            fetch_need_next_word <= 1'b0;
+            fetch_upper_hold    <= 16'h0;
             pc <= mtvec_out;
           end else begin
             pc <= pc + (instr_len == 2'd2 ? 32'd2 : 32'd4);
