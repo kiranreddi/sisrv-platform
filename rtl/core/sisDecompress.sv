@@ -1,4 +1,4 @@
-// sisDecompress.sv — RV32C decompressor
+// sisDecompress.sv — RV32C decompressor (RV32IMC profile)
 
 module sisDecompress (
     input  logic [15:0] c_instr,
@@ -11,9 +11,6 @@ module sisDecompress (
   logic [2:0] funct3;
   logic [4:0] rd_rs1;
   logic [4:0] rdp, rs1p, rs2p;
-  logic [9:0] nzuimm;
-  logic [9:0] sp_imm;
-  logic [7:0] c_ls_uimm;
 
   assign quad   = c_instr[1:0];
   assign funct3 = c_instr[15:13];
@@ -21,12 +18,45 @@ module sisDecompress (
   assign rdp    = {2'b01, c_instr[4:2]};
   assign rs1p   = {2'b01, c_instr[9:7]};
   assign rs2p   = {2'b01, c_instr[4:2]};
-  assign nzuimm = {c_instr[10:7], c_instr[12:11], c_instr[5], c_instr[6], 2'b00};
-  assign sp_imm  = {c_instr[12], c_instr[4:3], c_instr[5], c_instr[2], c_instr[6], 4'b0000};
-  assign c_ls_uimm = {c_instr[12], c_instr[5], c_instr[10:8], c_instr[6], 2'b00};
 
-  logic [5:0] c_lui_imm6;
-  assign c_lui_imm6 = {c_instr[12], c_instr[6:2]};
+  // Quadrant-0 load/store byte offset
+  logic [7:0] c0_ls_uimm;
+  assign c0_ls_uimm = {c_instr[12], c_instr[10:8], c_instr[6], 2'b00};
+
+  // Quadrant-0 C.ADDI4SPN immediate
+  logic [9:0] addi4spn_uimm;
+  assign addi4spn_uimm = {c_instr[10:7], c_instr[12:11], c_instr[5], c_instr[6], 2'b00};
+
+  // Quadrant-1 6-bit signed immediates (C.ADDI, C.LI, C.LUI, C.ANDI, shifts)
+  logic signed [5:0] imm6;
+  assign imm6 = {c_instr[12], c_instr[6:2]};
+
+  // Quadrant-1 C.ADDI16SP immediate
+  logic [9:0] addi16sp_uimm;
+  assign addi16sp_uimm = {c_instr[12], c_instr[4:3], c_instr[5], c_instr[2], c_instr[6], 4'b0000};
+
+  // C.J / C.JAL 12-bit byte offset (bit 0 = 0)
+  logic [11:0] cj_imm12;
+  assign cj_imm12 = {c_instr[12], c_instr[8], c_instr[10:9], c_instr[6], c_instr[7],
+                     c_instr[2], c_instr[11], c_instr[5:3], 1'b0};
+  logic [20:0] cj_off;
+  assign cj_off = {{9{cj_imm12[11]}}, cj_imm12};
+
+  // C.BEQZ / C.BNEZ 12-bit byte offset (bit 0 = 0)
+  logic [11:0] cb_imm12;
+  assign cb_imm12 = {c_instr[12], c_instr[6:5], c_instr[2], c_instr[11:10], c_instr[4:3], 1'b0};
+  logic [12:0] cb_off;
+  assign cb_off = {{1{cb_imm12[11]}}, cb_imm12};
+
+  // Quadrant-2 C.LWSP / C.SWSP byte offset
+  logic [7:0] lwsp_uimm;
+  assign lwsp_uimm = {c_instr[3:2], c_instr[12], c_instr[6:4], 2'b00};
+  logic [7:0] swsp_uimm;
+  assign swsp_uimm = {c_instr[8:7], c_instr[12:9], 2'b00};
+
+  // Shift amount for C.SRLI / C.SRAI / C.SLLI
+  logic [5:0] shamt6;
+  assign shamt6 = {c_instr[12], c_instr[6:2]};
 
   logic [31:0] expanded;
   logic        legal;
@@ -39,96 +69,99 @@ module sisDecompress (
       2'b00: begin
         unique case (funct3)
           3'b000: begin
-            if (nzuimm == 10'd0) legal = 1'b0;
-            else expanded = {2'b00, nzuimm[9:2], 4'b0000, 3'b000, rdp, 7'b0010011};
+            if (addi4spn_uimm == 10'd0) legal = 1'b0;
+            else expanded = {2'b00, addi4spn_uimm[9:2], 4'b0000, 3'b000, rdp, 7'b0010011};
           end
           3'b010:
-            expanded = {4'b0, c_ls_uimm, rs1p, 3'b010, rdp, 7'b0000011};
+            expanded = {c0_ls_uimm, rs1p, 3'b010, rdp, 7'b0000011};
           3'b110:
-            expanded = {c_ls_uimm[7:1], rs2p, rs1p, 3'b010, c_ls_uimm[4:0], 7'b0100011};
+            expanded = {c0_ls_uimm[7:1], rs2p, rs1p, 3'b010, c0_ls_uimm[4:0], 7'b0100011};
           default: legal = 1'b0;
         endcase
       end
       2'b01: begin
         unique case (funct3)
           3'b000: begin
-            expanded = {{6{c_instr[12]}}, c_instr[12], c_instr[6:2], rd_rs1, 3'b000, rd_rs1, 7'b0010011};
+            expanded = {{6{imm6[5]}}, imm6, rd_rs1, 3'b000, rd_rs1, 7'b0010011};
           end
           3'b001:
-            expanded = {{9{c_instr[12]}}, c_instr[12], c_instr[8], c_instr[10:9], c_instr[6],
-                        c_instr[7], c_instr[2], c_instr[11], c_instr[5:3], 1'b0,
-                        5'd1, 7'b1101111};
+            expanded = {cj_off[20], cj_off[10:1], cj_off[11], cj_off[19:12], 5'd1, 7'b1101111};
           3'b010: begin
             if (rd_rs1 == 5'd0) legal = 1'b0;
-            else expanded = {{6{c_instr[12]}}, c_instr[12], c_instr[6:2], 5'd0, 3'b000, rd_rs1, 7'b0010011};
+            else expanded = {{6{imm6[5]}}, imm6, 5'd0, 3'b000, rd_rs1, 7'b0010011};
           end
           3'b011: begin
             if (rd_rs1 == 5'd2) begin
-              if (sp_imm == 10'd0) legal = 1'b0;
-              else expanded = {{2{sp_imm[9]}}, sp_imm[9:4], 5'd2, 3'b000, 5'd2, 7'b0010011};
+              if (addi16sp_uimm == 10'd0) legal = 1'b0;
+              else expanded = {{2{addi16sp_uimm[9]}}, addi16sp_uimm[9:4], 5'd2, 3'b000, 5'd2, 7'b0010011};
             end else begin
-              if (c_lui_imm6 == 6'd0 || rd_rs1 == 5'd2) legal = 1'b0;
-              else expanded = {c_lui_imm6, rd_rs1, 7'b0110111};
+              if (imm6 == 6'sd0 || rd_rs1 == 5'd0) legal = 1'b0;
+              else expanded = {{14{imm6[5]}}, imm6, rd_rs1, 7'b0110111};
             end
           end
           3'b100: begin
             unique case (c_instr[11:10])
-              2'b00: expanded = {7'b0000000, c_instr[6:2], rs1p, 3'b101, rdp, 7'b0010011};
-              2'b01: expanded = {7'b0100000, c_instr[6:2], rs1p, 3'b101, rdp, 7'b0010011};
-              2'b10: expanded = {{6{c_instr[12]}}, c_instr[12], c_instr[6:2], rs1p, 3'b111, rdp, 7'b0010011};
+              2'b00: begin
+                if (c_instr[12] != 1'b0 || c_instr[6:2] == 5'd0) legal = 1'b0;
+                else expanded = {7'b0000000, c_instr[6:2], rs1p, 3'b101, rs1p, 7'b0010011};
+              end
+              2'b01: begin
+                if (c_instr[12] != 1'b0 || c_instr[6:2] == 5'd0) legal = 1'b0;
+                else expanded = {7'b0100000, c_instr[6:2], rs1p, 3'b101, rs1p, 7'b0010011};
+              end
+              2'b10:
+                expanded = {{6{imm6[5]}}, imm6, rs1p, 3'b111, rs1p, 7'b0010011};
               2'b11: begin
-                unique case (c_instr[6:5])
-                  2'b00: expanded = {7'b0100000, rs2p, rs1p, 3'b000, rdp, 7'b0110011};
-                  2'b01: expanded = {7'b0000000, rs2p, rs1p, 3'b100, rdp, 7'b0110011};
-                  2'b10: expanded = {7'b0000000, rs2p, rs1p, 3'b110, rdp, 7'b0110011};
-                  2'b11: expanded = {7'b0000000, rs2p, rs1p, 3'b111, rdp, 7'b0110011};
+                if (c_instr[12] != 1'b0) legal = 1'b0;
+                else unique case (c_instr[6:5])
+                  2'b00: expanded = {7'b0100000, rs2p, rs1p, 3'b000, rs1p, 7'b0110011};
+                  2'b01: expanded = {7'b0000000, rs2p, rs1p, 3'b100, rs1p, 7'b0110011};
+                  2'b10: expanded = {7'b0000000, rs2p, rs1p, 3'b110, rs1p, 7'b0110011};
+                  2'b11: expanded = {7'b0000000, rs2p, rs1p, 3'b111, rs1p, 7'b0110011};
                 endcase
               end
             endcase
           end
           3'b101:
-            expanded = {{10{c_instr[12]}}, c_instr[12], c_instr[8], c_instr[10:9], c_instr[6],
-                        c_instr[7], c_instr[2], c_instr[11], c_instr[5:3], 1'b0,
-                        5'd0, 7'b1101111};
+            expanded = {cj_off[20], cj_off[10:1], cj_off[11], cj_off[19:12], 5'd0, 7'b1101111};
           3'b110:
-            expanded = {{5{c_instr[12]}}, c_instr[12], c_instr[6:5], c_instr[2], c_instr[11:10],
-                        c_instr[4:3], 1'b0, rs1p, 3'b000, 5'd0, 7'b1100011};
+            expanded = {cb_off[12], cb_off[10:5], rs1p, 3'b000, 5'd0, cb_off[4:1], cb_off[11], 7'b1100011};
           3'b111:
-            expanded = {{5{c_instr[12]}}, c_instr[12], c_instr[6:5], c_instr[2], c_instr[11:10],
-                        c_instr[4:3], 1'b0, rs1p, 3'b001, 5'd0, 7'b1100011};
+            expanded = {cb_off[12], cb_off[10:5], rs1p, 3'b001, 5'd0, cb_off[4:1], cb_off[11], 7'b1100011};
           default: legal = 1'b0;
         endcase
       end
       2'b10: begin
         unique case (funct3)
-          3'b000:
-            expanded = {7'b0000000, c_instr[6:2], rd_rs1, 3'b001, rd_rs1, 7'b0010011};
-          3'b010:
-            expanded = {{4{c_instr[12]}}, c_instr[12], c_instr[6:4], c_instr[8:7], 2'b00,
-                        5'd2, 3'b010, rd_rs1, 7'b0000011};
+          3'b000: begin
+            if (c_instr[12] != 1'b0 || c_instr[6:2] == 5'd0 || rd_rs1 == 5'd0) legal = 1'b0;
+            else expanded = {7'b0000000, c_instr[6:2], rd_rs1, 3'b001, rd_rs1, 7'b0010011};
+          end
+          3'b010: begin
+            if (rd_rs1 == 5'd0) legal = 1'b0;
+            else expanded = {lwsp_uimm, 5'd2, 3'b010, rd_rs1, 7'b0000011};
+          end
           3'b100: begin
-            if (c_instr[15:12] == 4'b1001) begin
-              if (c_instr[6:2] == 5'd0) legal = 1'b0;
-              else expanded = {7'b0000000, c_instr[6:2], rd_rs1, 3'b000, rd_rs1, 7'b0110011};
-            end else if (c_instr[12:11] == 2'b00) begin
-              if (rd_rs1 == 5'd0) legal = 1'b0;
-              else expanded = {12'h000, rd_rs1, 3'b000, 5'd0, 7'b1100111};
-            end else if (c_instr[12:11] == 2'b01) begin
+            if (c_instr[12] == 1'b0) begin
               if (c_instr[6:2] == 5'd0) begin
                 if (rd_rs1 == 5'd0) legal = 1'b0;
-                else expanded = {12'h000, rd_rs1, 3'b000, 5'd1, 7'b1100111};
+                else expanded = {12'h000, rd_rs1, 3'b000, 5'd0, 7'b1100111};
               end else begin
-                expanded = {7'b0000000, c_instr[6:2], 5'd0, 3'b000, rd_rs1, 7'b0110011};
+                if (rd_rs1 == 5'd0) legal = 1'b0;
+                else expanded = {7'b0000000, c_instr[6:2], 5'd0, 3'b000, rd_rs1, 7'b0110011};
               end
-            end else if (c_instr[12:11] == 2'b10) begin
-              if (c_instr[6:2] == 5'd0)
-                expanded = {12'h001, 5'd0, 3'b000, 5'd0, 7'b1110011};
-              else
+            end else begin
+              if (c_instr[6:2] == 5'd0 && rd_rs1 == 5'd0)
+                expanded = 32'h0010_0073;
+              else if (c_instr[6:2] == 5'd0) begin
+                if (rd_rs1 == 5'd0) legal = 1'b0;
+                else expanded = {12'h000, rd_rs1, 3'b000, 5'd1, 7'b1100111};
+              end else
                 expanded = {7'b0000000, c_instr[6:2], rd_rs1, 3'b000, rd_rs1, 7'b0110011};
-            end else legal = 1'b0;
+            end
           end
           3'b110:
-            expanded = {4'b0, c_instr[8:7], c_instr[12:9], 5'd2, 3'b010, c_instr[6:2], 7'b0100011};
+            expanded = {swsp_uimm[7:5], c_instr[6:2], 5'd2, 3'b010, swsp_uimm[4:0], 7'b0100011};
           default: legal = 1'b0;
         endcase
       end

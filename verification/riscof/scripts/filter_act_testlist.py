@@ -4,6 +4,7 @@
 Excludes architectural tests outside the advertised RV32IMCZicsr M-mode scope:
   - PMP (not implemented; documented P1)
   - A extension / atomics (not implemented; documented P1)
+  - Privilege / misaligned traps (no trap handler; documented P1)
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ EXCLUDE_PATH_PARTS = (
     "/pmp/",
     "/A/",
     "/vm_pmp/",
+    "/privilege/",
 )
 
 
@@ -52,7 +54,7 @@ def main() -> int:
 
     print(
         f"ACT filter: kept {len(kept)} tests, excluded {len(data) - len(kept)} "
-        f"(PMP/A outside RV32IMCZicsr profile)",
+        f"(PMP/A/privilege outside RV32IMCZicsr profile)",
         file=sys.stderr,
     )
     return 0
