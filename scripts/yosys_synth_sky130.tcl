@@ -20,5 +20,6 @@ clean
 stat -liberty @LIBERTY_FILE@
 
 check
+hierarchy -top sisRvCore
 select -module sisRvCore
 write_verilog -noattr -noexpr -nohex -selected build/sisRvCore_sky130.v

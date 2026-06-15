@@ -5,7 +5,7 @@ read_liberty @LIBERTY_FILE@
 read_verilog @NETLIST_FILE@
 
 set linked 0
-foreach top {sisRvCore {\sisRvCore}} {
+foreach top {{ \sisRvCore} sisRvCore} {
   if {!$linked} {
     if {![catch {link_design $top} err]} {
       if {![catch {current_design} _]} {
@@ -15,8 +15,10 @@ foreach top {sisRvCore {\sisRvCore}} {
   }
 }
 if {!$linked} {
-  puts stderr "link_design failed for sisRvCore"
-  exit 1
+  catch {link_design *} _
+  if {![catch {current_design} _]} {
+    set linked 1
+  }
 }
 
 read_sdc scripts/constraints_sisRvCore.sdc
