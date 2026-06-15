@@ -1,7 +1,7 @@
 mtime:
-  implemented: false
+  implemented: true
 mtimecmp:
-  implemented: false
+  implemented: true
 nmi:
   label: nmi_vector
 reset:

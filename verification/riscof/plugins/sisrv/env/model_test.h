@@ -16,10 +16,25 @@
   sw t0, 0(t1); \
   riscof_halt_spin: j riscof_halt_spin;
 
-#define RVMODEL_SET_MSW_INT
-#define RVMODEL_CLEAR_MSW_INT
-#define RVMODEL_CLEAR_MTIMER_INT
-#define RVMODEL_CLEAR_MEXT_INT
+/* CLINT at 0x0200_0000 — software/timer interrupt hooks for ACT tests. */
+#define RVMODEL_SET_MSW_INT \
+  li t0, 0x02000000; \
+  li t1, 1; \
+  sw t1, 0(t0);
+
+#define RVMODEL_CLEAR_MSW_INT \
+  li t0, 0x02000000; \
+  sw x0, 0(t0);
+
+#define RVMODEL_CLEAR_MTIMER_INT \
+  li t0, 0x02004000; \
+  li t1, -1; \
+  sw t1, 0(t0); \
+  sw t1, 4(t0);
+
+#define RVMODEL_CLEAR_MEXT_INT \
+  li t0, 0x0C002000; \
+  sw x0, 0(t0);
 
 #define RVMODEL_IO_INIT
 #define RVMODEL_IO_WRITE_STR(_R, _STR)

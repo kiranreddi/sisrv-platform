@@ -186,9 +186,11 @@ sta-sky130:
 	@sed "s|@LIBERTY_FILE@|$(SKY130_LIB)|g" scripts/yosys_synth_sky130.tcl > $(BUILD)/yosys_synth_sky130.ys
 	@yosys -s $(BUILD)/yosys_synth_sky130.ys
 	@command -v sta >/dev/null || (echo "OpenSTA not installed"; exit 1)
-	@LIBERTY_FILE=$(SKY130_LIB) NETLIST_FILE=$(BUILD)/sisRvCore_sky130.v \
-	  REPORT_FILE=$(BUILD)/sta_sky130_report.txt \
-	  sta -no_splash scripts/sta_sky130.tcl
+	@sed -e "s|@LIBERTY_FILE@|$(SKY130_LIB)|g" \
+	     -e "s|@NETLIST_FILE@|$(BUILD)/sisRvCore_sky130.v|g" \
+	     -e "s|@REPORT_FILE@|$(BUILD)/sta_sky130_report.txt|g" \
+	     scripts/sta_sky130.tcl > $(BUILD)/sta_sky130_run.tcl
+	@sta -no_splash $(BUILD)/sta_sky130_run.tcl
 	@test -s $(BUILD)/sta_sky130_report.txt
 	@cat $(BUILD)/sta_sky130_report.txt
 
