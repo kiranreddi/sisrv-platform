@@ -20,15 +20,31 @@ if {!$linked} {
     set linked 1
   }
 }
+if {!$linked} {
+  puts stderr "link_design failed for sisRvCore"
+  exit 1
+}
 
 read_sdc scripts/constraints_sisRvCore.sdc
 check_setup
 
-set wns [worst_slack]
-set tns [total_negative_slack]
+set wns 0.0
+set tns 0.0
+set setup_paths [get_timing_paths -max_paths 1000 -setup]
+if {[llength $setup_paths] > 0} {
+  set wns [get_attribute [lindex $setup_paths 0] slack]
+  foreach path $setup_paths {
+    set slack [get_attribute $path slack]
+    if {$slack < 0} {
+      set tns [expr {$tns + $slack}]
+    }
+  }
+}
+
 set fmax_mhz 50.0
-if {$wns < 1e29} {
-  set fmax_mhz [expr 1000.0 / (20.0 - $wns)]
+set ach [expr {20.0 - $wns}]
+if {$ach > 0.001} {
+  set fmax_mhz [expr {1000.0 / $ach}]
 }
 
 set report_fp [open @REPORT_FILE@ w]
