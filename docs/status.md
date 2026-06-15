@@ -1,16 +1,16 @@
 # Implementation Status
 
-**Last updated**: 2026-06-15 (Phase A closure — CI run [#27524072022](https://github.com/kiranreddi/sisrv-platform/actions/runs/27524072022))
+**Last updated**: 2026-06-15 (M6 closure — latest short CI run [#27565469770](https://github.com/kiranreddi/sisrv-platform/actions/runs/27565469770))
 
 ## Summary
 
 The sisrv-platform project implements a fully functional RV32IMAC RISC-V processor core
 with M-mode CSRs, trap handling, **CLINT/PLIC interrupts**, **RISC-V Debug subset**,
 GPIO, UART, and an AXI4-Lite master bridge.
-The core is verified through **36** directed assembly tests, 44 cocotb randomized unit tests,
+The core is verified through **42** directed assembly tests, one pipeline debug-step Verilator test, 43 cocotb randomized unit tests,
 4 formal proofs, **RISCOF rv32imac_zicsr ACT suite** (**95/95** filtered tests in CI; 72
 upstream tests excluded for PMP/A/privilege outside the RV32IMCZicsr profile), and
-**10k-seed retired-instruction Spike lock-step co-sim** — all on Verilator 5.038.
+**10k-seed retired-instruction Spike lock-step co-sim** as a final gated CI lane.
 
 ### P0 closure snapshot (2026-06-15)
 
@@ -20,8 +20,8 @@ upstream tests excluded for PMP/A/privilege outside the RV32IMCZicsr profile), a
 | C extension | ✅ Complete | `sisDecompress.sv`, `ENABLE_C`, `test_compressed`, **27/27 C ACT tests** |
 | Debug / JTAG | ✅ Complete | `sisDm.sv`, `sisJtagDtm.sv`, halt/resume/step, abstract GPR → regfile |
 | Product docs | ✅ Complete | `LICENSE`, Integration Guide, PRM, PPA datasheet |
-| PPA / STA | ✅ Sky130 HD | CI WNS **-175.621 ns**, TNS **-5566.819 ns**, Fmax **5.11 MHz** ([run](https://github.com/kiranreddi/sisrv-platform/actions/runs/27524072022)) |
-| RISCOF / co-sim | ✅ Complete | **95/95** ACT + **10k-seed** lock-step co-sim green in CI ([run](https://github.com/kiranreddi/sisrv-platform/actions/runs/27524072022)) |
+| PPA / STA | ✅ Sky130 HD | CI WNS **-199.946 ns**, TNS **-10929.076 ns**, Fmax **4.55 MHz** ([run](https://github.com/kiranreddi/sisrv-platform/actions/runs/27565469770)) |
+| RISCOF / co-sim | ✅ Gated | **95/95** ACT green in latest short CI; **10k-seed** lock-step restored as final gated CI job |
 
 ## Milestone Status
 
@@ -55,7 +55,7 @@ upstream tests excluded for PMP/A/privilege outside the RV32IMCZicsr profile), a
 | `sisDecode.sv` | ✅ Done | All RV32I/RV32M instruction types decoded |
 | `sisMemFabric.sv` | ✅ Done | Address decoder: ROM/RAM/MMIO routing |
 
-**Test coverage** (33 directed tests, all passing):
+**Test coverage** (42 directed tests, all passing):
 
 | Test | Instructions Covered |
 |------|---------------------|
@@ -131,7 +131,7 @@ x0 always 0 ✅, PC word-aligned ✅, correct sign/zero extension ✅
 | Formal RegFile proof | ✅ Done | x0-always-zero (k-induction, SymbiYosys + z3) |
 | Formal Decode proof | ✅ Done | Field extraction, immediate invariants, legality consistency (yosys SAT) |
 | Formal AXI-Lite check | Optional | Bounded VALID stability, mutual exclusion, data stability (`make formal-axil`) |
-| CI pipeline | ✅ Done | GitHub Actions: lint, regress, cocotb, formal |
+| CI pipeline | ✅ Done | GitHub Actions: lint, regress, pipeline debug, cocotb, formal, synth, RISCOF, STA, gated 10k co-sim |
 
 ---
 
@@ -150,8 +150,8 @@ x0 always 0 ✅, PC word-aligned ✅, correct sign/zero extension ✅
 | AXI-Lite timer support | ✅ Done | `tb/models/sisAxiLiteSlave.sv` models MTIME/MTIMECMP and MTIP |
 | AXI-Lite GPIO support | ✅ Done | `tb/models/sisAxiLiteSlave.sv` models DATA/DIR/IN/SET/CLR |
 | AXI-Lite UART support | ✅ Done | `tb/models/sisAxiLiteSlave.sv` models TXDATA/RXDATA/STATUS/CTRL/BAUDDIV |
-| AXI-Lite PLIC/CLINT support | ✅ Done | Inline PLIC + CLINT in `sisAxiLiteSlave.sv` (40/40 regress-axil) |
-| AXI-Lite system regression | ✅ Done | `make regress-axil` runs all 40 assembly tests through the AXI path |
+| AXI-Lite PLIC/CLINT support | ✅ Done | Inline PLIC + CLINT in `sisAxiLiteSlave.sv` (42/42 regress-axil) |
+| AXI-Lite system regression | ✅ Done | `make regress-axil` runs all 42 assembly tests through the AXI path |
 | cocotb bridge tests | ✅ Done | 11 tests: reset, R/W, errors, stalls, 100-txn random stress |
 | Formal AXI-Lite bridge | Optional | Bounded VALID stability, mutual exclusion, data stability (`make formal-axil`) |
 
@@ -208,8 +208,8 @@ timer interrupt tests run with the AXI slave timer model ✅, CI covers `make re
 | Corebus owner arbitration | ✅ Done | One outstanding request preserved; data memory wins over instruction fetch |
 | Hazard controls | ✅ Done | WB bypass/forwarding, load-use stall, branch/jump flush, trap/interrupt/mret flush |
 | Interface preservation | ✅ Done | Corebus, AXI bridge contract, CSR/trap, interrupt, debug, compressed fetch, and DPI retire-log interfaces retained |
-| Local validation | ✅ Done | `make lint`, `make regress`, `make regress-axil`, `make regress-axil-stall` |
-| Directed pipeline tests | ✅ Done | forwarding, load-use, branch/jump flush, trap flush |
+| Local validation | ✅ Done | `make lint`, `make regress`, `make regress-axil`, `make regress-axil-stall`, `make pipeline-debug` |
+| Directed pipeline tests | ✅ Done | forwarding, load-use, branch/jump flush, trap flush, interrupt flush, debug halt/single-step |
 
 ---
 
@@ -259,15 +259,15 @@ Planned:
 | Verilator version | 5.038 |
 | Lint status | ✅ Clean (Wall, no warnings) |
 | Compiler | riscv64-linux-gnu-gcc 13.3 |
-| Assembly test suite | 40 tests |
-| Assembly regression | 40/40 passing through corebus, AXI-Lite, and stalled AXI-Lite paths |
-| cocotb unit tests | 44 tests (3 ALU + 4 RegFile + 11 Decode + 15 CSR + 11 AXI-Lite) |
-| cocotb status | 44/44 passing |
+| Assembly test suite | 42 tests |
+| Assembly regression | 42/42 passing through corebus, AXI-Lite, and stalled AXI-Lite paths |
+| cocotb unit tests | 43 tests (3 ALU + 4 RegFile + 11 Decode + 14 CSR + 11 AXI-Lite) |
+| cocotb status | 43/43 passing |
 | Formal proofs/checks | Required: ALU (all 10 ops), RegFile (x0=0), Decode (fields + legality). Optional: AXI-Lite bounded safety (`make formal-axil`) |
 | Formal status | All proofs PASS |
 | Simulation time | < 2s per test |
 | Waveform format | FST |
-| CI pipeline | GitHub Actions (lint, regress, cocotb, formal, synth, RISCOF, co-sim) |
+| CI pipeline | GitHub Actions (lint, regress, pipeline debug, cocotb, formal, synth, RISCOF, STA, gated 10k co-sim) |
 | Synthesis | Yosys (make synth) |
 
 ## Files Implemented
@@ -315,9 +315,9 @@ Planned:
 ### Software
 - `sw/bsp/crt0.S` — C runtime startup
 - `sw/bsp/link.ld` — Linker script
-- `sw/tests/asm/test_*.S` — 33 assembly test programs
+- `sw/tests/asm/test_*.S` — 42 assembly test programs
 
 ### Build & CI
 - `Makefile` — Build, lint, sim, regression, cocotb, formal, synth targets
-- `.github/workflows/ci.yml` — CI pipeline (lint, regress, cocotb, formal, synth)
+- `.github/workflows/ci.yml` — CI pipeline (lint, regress, pipeline debug, cocotb, formal, synth, RISCOF, STA, gated 10k co-sim)
 - `scripts/yosys_synth.tcl` — Yosys synthesis script

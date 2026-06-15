@@ -202,6 +202,7 @@ module sisRvCore #(
   logic        ex_mem_misaligned;
 
   logic        halted;
+  logic        step_active;
   assign dbg_halted = halted;
 
   // ---------------------------------------------------------------
@@ -576,7 +577,7 @@ module sisRvCore #(
   logic if_rsp_fire;
 
   assign data_req_active = ex_valid && (ex_state == EX_MEM_REQ);
-  assign if_req_active   = !halted && !dbg_halt_req && !dbg_single_step &&
+  assign if_req_active   = !halted && !dbg_halt_req && (!dbg_single_step || step_active) &&
                            !ex_redirect &&
                            !if_id_valid &&
                            ((if_state == IF_REQ) || (if_state == IF_SECOND_REQ));
@@ -700,8 +701,8 @@ module sisRvCore #(
 
   assign ex_can_accept = !ex_valid || (ex_valid && (ex_state == EX_WB));
   assign id_to_ex_fire = if_id_valid && ex_can_accept && !ex_redirect &&
-                         !halted && !dbg_halt_req && !dbg_single_step;
-  assign wb_single_step_stop = dbg_single_step && ex_valid && (ex_state == EX_WB) && instr_retire;
+                         !halted && !dbg_halt_req && (!dbg_single_step || step_active);
+  assign wb_single_step_stop = step_active && ex_valid && (ex_state == EX_WB) && instr_retire;
 
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
@@ -760,13 +761,17 @@ module sisRvCore #(
       ex_mem_err            <= 1'b0;
       ex_mem_misaligned     <= 1'b0;
       halted                <= 1'b0;
+      step_active           <= 1'b0;
     end else begin
       if (dbg_halt_req) begin
-        halted <= 1'b1;
+        halted      <= 1'b1;
+        step_active <= 1'b0;
       end else if (dbg_resume_req) begin
-        halted <= 1'b0;
+        step_active <= halted && dbg_single_step;
+        halted      <= 1'b0;
       end else if (wb_single_step_stop) begin
-        halted <= 1'b1;
+        halted      <= 1'b1;
+        step_active <= 1'b0;
       end
 
       if (data_req_fire) begin

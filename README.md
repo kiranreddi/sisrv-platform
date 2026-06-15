@@ -2,8 +2,8 @@
 
 [![CI](https://github.com/kiranreddi/sisrv-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/kiranreddi/sisrv-platform/actions/workflows/ci.yml)
 ![ISA](https://img.shields.io/badge/ISA-RV32IMAC-blue)
-![ASM](https://img.shields.io/badge/asm-36%2F36%20passing-brightgreen)
-![cocotb](https://img.shields.io/badge/cocotb-44%20tests-brightgreen)
+![ASM](https://img.shields.io/badge/asm-42%2F42%20passing-brightgreen)
+![cocotb](https://img.shields.io/badge/cocotb-43%20tests-brightgreen)
 ![formal](https://img.shields.io/badge/formal-4%20proof%20sets-brightgreen)
 ![synth](https://img.shields.io/badge/synthesis-Yosys-informational)
 ![maturity](https://img.shields.io/badge/maturity-productizing-yellow)
@@ -44,9 +44,9 @@ keeping the implementation readable and open.
 | Privilege | Machine mode, core CSRs, trap entry/return, counters, WFI legal no-op |
 | Platform | ROM, RAM, tohost, CLINT, PLIC, GPIO, UART |
 | Interrupts | CLINT (MSIP/MTIP/MTIME), PLIC (8 prioritized sources), GPIO→PLIC mux |
-| Debug | RISC-V DM 0.13 subset + JTAG DTM; abstract GPR wired to regfile while halted |
+| Debug | RISC-V DM 0.13 subset + JTAG DTM; halt/resume/step, abstract GPR wired to regfile while halted |
 | Bus | Internal corebus plus optional AXI4-Lite bridge path |
-| Verification | 40 assembly tests, 44 cocotb tests, formal proofs, RISCOF ACT **95/95** + 10k lock-step co-sim |
+| Verification | 42 assembly tests, pipeline debug-step test, 43 cocotb tests, formal proofs, RISCOF ACT **95/95** + gated 10k lock-step co-sim |
 | Implementation | Synthesizable SystemVerilog, Verilator simulation, Yosys + Sky130 STA |
 | Product gap | PMP, benchmarked CoreMark/Dhrystone, physical GDS signoff |
 
@@ -85,8 +85,8 @@ stateDiagram-v2
 flowchart TB
   RTL["RTL"] --> Lint["Verilator lint"]
   RTL --> Sim["Verilator platform sim"]
-  Sim --> ASM["33 directed asm tests\ncorebus + AXI4-Lite"]
-  RTL --> Cocotb["44 cocotb unit tests\nALU, regfile, decode, CSR, AXI"]
+  Sim --> ASM["42 directed asm tests\ncorebus + AXI4-Lite"]
+  RTL --> Cocotb["43 cocotb unit tests\nALU, regfile, decode, CSR, AXI"]
   RTL --> Formal["Formal proofs\nALU, regfile, decode, AXI safety"]
   RTL --> Synth["Yosys synthesis"]
   Sim --> RISCOF["RISCOF ACT harness\n95 rv32imac_zicsr tests"]
@@ -114,7 +114,7 @@ analysis and product-grade roadmap.
 | M0 - Sim harness and golden flow | Complete |
 | M1 - RV32I multi-cycle core | Complete |
 | M2 - CSRs and traps (M-mode) | Complete |
-| M2.5 - Verification infrastructure | Complete: 44 cocotb tests + 4 formal proof sets |
+| M2.5 - Verification infrastructure | Complete: 43 cocotb tests + 4 formal proof sets |
 | M3 - AXI4-Lite master bridge | Complete |
 | M4 - Timer interrupt | Complete |
 | M5 - RV32M multiply/divide | Complete: 33/33 asm tests pass |
@@ -160,9 +160,10 @@ make lint                     # Verilator lint
 make build/sim_sisPlatformTop # Build simulation binary
 make sw                       # Build assembly test hex files
 make sim                      # Run basic PASS test
-make regress                  # Run 40-test corebus regression
-make regress-axil             # Run 40-test AXI4-Lite regression
-make cocotb                   # Run 44 cocotb tests
+make regress                  # Run 42-test corebus regression
+make regress-axil             # Run 42-test AXI4-Lite regression
+make pipeline-debug           # Run M6 debug halt/single-step retirement check
+make cocotb                   # Run 43 cocotb tests
 make formal                   # Run required formal proofs
 make formal-axil              # Optional AXI4-Lite bounded formal safety check
 make synth                    # Run Yosys synthesis
@@ -188,7 +189,7 @@ $ make regress
   ...
   PASS: test_uart
   PASS: test_x0
-=== Results: 33/33 passed, 0 failed ===
+=== Results: 42/42 passed, 0 failed ===
 ```
 
 ## Verification
@@ -227,8 +228,7 @@ branches, system instructions, and stress loops.
 Reusable Spike co-simulation harness lives under `verification/riscof/` and
 `verification/cosim/`. The ACT target runs the **rv32imac_zicsr** suite with a profile
 filter: **95 tests** kept (I/M/C + Zicsr), **72 excluded** (PMP, A, privilege outside
-RV32IMCZicsr). Latest green CI:
-[run #27524072022](https://github.com/kiranreddi/sisrv-platform/actions/runs/27524072022).
+RV32IMCZicsr). Latest short CI green run: [#27565469770](https://github.com/kiranreddi/sisrv-platform/actions/runs/27565469770).
 
 ```bash
 make riscof-act
@@ -237,9 +237,9 @@ make riscof-rv32i
 make riscof-rv32im
 ```
 
-`riscof-act` remains required in CI. During M6 branch bring-up, the long 10k-seed
-retired-instruction lock-step co-sim is available through manual workflow dispatch
-and should be re-enabled as a gated job once the shorter CI lanes are green.
+`riscof-act` remains required in CI. The long 10k-seed retired-instruction
+lock-step co-sim is restored as the final gated CI job after lint, regression,
+cocotb, formal, synthesis, RISCOF, and Sky130 STA lanes are green.
 Unsupported classes remain PMP, S/U modes, and A/F/D.
 
 ## Architecture Reference
@@ -288,11 +288,11 @@ The workflow runs on every push/PR to `main`.
 | Job | What it proves |
 |---|---|
 | Lint | RTL parses and passes Verilator lint |
-| Regression | 40 assembly tests through corebus and AXI4-Lite paths |
-| cocotb | 44 directed/randomized unit tests |
+| Regression | 42 assembly tests through corebus and AXI-Lite paths, plus M6 debug-step check |
+| cocotb | 43 directed/randomized unit tests |
 | Formal | Required ALU, RegFile, Decode proofs; optional AXI safety |
 | Synth | Yosys synthesis of core + AXI bridge (PPA stat artifact) |
-| RISCOF + co-sim | RISCOF ACT (**95/95** filtered) + manually dispatched 10k-seed retired-instruction lock-step during M6 branch bring-up |
+| RISCOF + co-sim | RISCOF ACT (**95/95** filtered) + final gated 10k-seed retired-instruction lock-step |
 
 All jobs above are required and gate merges.
 

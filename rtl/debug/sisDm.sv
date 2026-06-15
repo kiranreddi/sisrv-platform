@@ -94,6 +94,7 @@ module sisDm #(
           unique case (dmi_req_addr)
             DMI_DMCONTROL: begin
               dm_active   <= dmi_req_wdata[0];
+              step_r      <= dmi_req_wdata[2];
               haltreq_r   <= dmi_req_wdata[31];
               resumereq_r <= dmi_req_wdata[30];
             end
@@ -110,7 +111,7 @@ module sisDm #(
           endcase
         end else begin
           unique case (dmi_req_addr)
-            DMI_DMCONTROL:  dmi_rdata_reg <= {haltreq_r, resumereq_r, 29'b0, dm_active};
+            DMI_DMCONTROL:  dmi_rdata_reg <= {haltreq_r, resumereq_r, 27'b0, step_r, 1'b0, dm_active};
             DMI_DMSTATUS:   dmi_rdata_reg <= {core_halted, core_running, 30'b0};
             DMI_ABSTRACTCS: dmi_rdata_reg <= {30'b0, abs_state[1:0]};
             DMI_DATA0:      dmi_rdata_reg <= data0;

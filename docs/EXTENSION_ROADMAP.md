@@ -13,7 +13,7 @@ cocotb unit tests, formal checks, and CI coverage.
 | 3 | RV32M | Isolated ISA extension before microarchitecture churn | Embedded math, DSP kernels, compiler support for `rv32im` | Done: MUL/DIV/REM assembly tests, disabled-mode decode proof |
 | 4 | PMP | Adds protection checks on existing memory requests | Firmware sandboxing, MMIO/ROM/RAM access policy validation | CSR tests plus access-fault assembly tests |
 | 5 | Debug | Needs stable bus, CSRs, and halt behavior | External halt/resume, register inspection, bring-up workflows | Halt/resume smoke test and debug CSR/register access model |
-| 6 | 3-stage pipeline | Largest behavior change, best after ISA/peripheral baseline | Better IPC while preserving the same software contract | Existing 30-test suite unchanged, plus hazard/flush tests |
+| 6 | 3-stage pipeline | Largest behavior change, best after ISA/peripheral baseline | Better IPC while preserving the same software contract | 42-test suite plus forwarding, load-use, flush, interrupt, and debug-step coverage |
 
 ## Implemented slice 1: GPIO
 

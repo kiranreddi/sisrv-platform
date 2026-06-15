@@ -26,13 +26,14 @@ TB_DIRS  := tb/verilator tb/models
 
 RTL_SRCS := $(wildcard $(addsuffix /*.sv,$(RTL_DIRS)))
 TB_SRCS  := $(wildcard $(addsuffix /*.sv,$(TB_DIRS)))
-CPP_SRCS := $(wildcard tb/verilator/*.cpp)
+CPP_SRCS := tb/verilator/main.cpp
+PIPELINE_DEBUG_CPP_SRCS := tb/verilator/pipeline_debug_main.cpp
 
 # Test sources
 ASM_TESTS := $(wildcard sw/tests/asm/*.S)
 ASM_HEXES := $(patsubst sw/tests/asm/%.S,$(BUILD)/tests/%.hex,$(ASM_TESTS))
 
-.PHONY: sim lint clean wave regress regress-axil regress-axil-stall sw all tests cocotb formal formal-axil synth sta sta-sky130 cosim-lockstep \
+.PHONY: sim lint clean wave regress regress-axil regress-axil-stall pipeline-debug sw all tests cocotb formal formal-axil synth sta sta-sky130 cosim-lockstep \
         riscof-check-tools riscof-smoke riscof-act riscof-rv32i riscof-rv32im
 
 
@@ -131,8 +132,29 @@ run-%: $(SIM) $(BUILD)/tests/%.hex
 	@cp $(BUILD)/tests/$*.hex rom.hex
 	@$(SIM) && rm -f rom.hex ram.hex || (rm -f rom.hex ram.hex; exit 1)
 
+PIPELINE_DEBUG_TOP := sisPipelineDebugTb
+PIPELINE_DEBUG_SIM := $(BUILD)/sim_$(PIPELINE_DEBUG_TOP)
+PIPELINE_DEBUG_OBJ := obj_dir_pipeline_debug
+
+$(PIPELINE_DEBUG_SIM): $(RTL_SRCS) $(TB_SRCS) $(PIPELINE_DEBUG_CPP_SRCS)
+	@mkdir -p $(BUILD)
+	$(VERILATOR) -Wall -Wno-UNUSEDSIGNAL -Wno-WIDTHTRUNC -Wno-WIDTHEXPAND -Wno-SELRANGE -Wno-UNUSEDPARAM -Wno-SYNCASYNCNET --cc --exe --build \
+	  -O3 \
+	  --Mdir $(PIPELINE_DEBUG_OBJ) \
+	  -Irtl -Irtl/core -Irtl/bus -Irtl/periph -Irtl/debug -Itb/models \
+	  --top-module $(PIPELINE_DEBUG_TOP) \
+	  -GROM_INIT_FILE='"rom.hex"' \
+	  $(RTL_SRCS) $(TB_SRCS) $(PIPELINE_DEBUG_CPP_SRCS) \
+	  -o sim_$(PIPELINE_DEBUG_TOP)
+	@cp $(PIPELINE_DEBUG_OBJ)/sim_$(PIPELINE_DEBUG_TOP) $(PIPELINE_DEBUG_SIM)
+
+pipeline-debug: $(PIPELINE_DEBUG_SIM) $(BUILD)/tests/test_pipeline_debug_step.hex
+	@touch ram.hex
+	@cp $(BUILD)/tests/test_pipeline_debug_step.hex rom.hex
+	@$(PIPELINE_DEBUG_SIM) && rm -f rom.hex ram.hex || (rm -f rom.hex ram.hex; exit 1)
+
 clean:
-	rm -rf $(BUILD) obj_dir rom.hex
+	rm -rf $(BUILD) obj_dir obj_dir_pipeline_debug rom.hex ram.hex
 
 # cocotb tests (requires cocotb + verilator 5.038+)
 cocotb:

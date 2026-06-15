@@ -7,7 +7,7 @@ tests, randomized cocotb unit tests, and formal proofs. All tests run on Verilat
 
 ## Verification Tiers
 
-### Tier 1: Directed Assembly Tests (33 tests)
+### Tier 1: Directed Assembly Tests (42 tests)
 
 Self-checking assembly tests that write 1 to `0x10000000` (PASS) or 0 (FAIL).
 Compiled with `rv32im_zicsr` ISA and run on the full platform simulation.
@@ -31,8 +31,9 @@ Compiled with `rv32im_zicsr` ISA and run on the full platform simulation.
 | UART | test_uart | TXDATA/RXDATA/STATUS/CTRL/BAUDDIV MMIO registers and loopback |
 | System | test_fence, test_lui_auipc, test_x0, test_wfi, test_pass | FENCE NOP, LUI/AUIPC, x0=0 invariant, WFI legal no-op |
 | Stress | test_back_to_back | Fibonacci, register stress, tight loops |
+| Pipeline | test_pipeline_forwarding, test_pipeline_load_use, test_pipeline_flush, test_pipeline_trap_flush, test_pipeline_interrupt_flush, test_pipeline_debug_step | M6 forwarding, load-use stall, branch/jump/trap/interrupt flush, debug-step program |
 
-### Tier 2: cocotb Randomized Tests (44 tests)
+### Tier 2: cocotb Randomized Tests (43 tests)
 
 Unit-level tests using cocotb with constrained random stimulus on Verilator 5.038.
 
@@ -118,10 +119,13 @@ Unit-level tests using cocotb with constrained random stimulus on Verilator 5.03
 ## Running Tests
 
 ```bash
-# Run all assembly tests (33 tests)
+# Run all assembly tests (42 tests)
 make regress
 
-# Run cocotb tests (44 tests)
+# Run M6 debug halt/single-step retirement check
+make pipeline-debug
+
+# Run cocotb tests (43 tests)
 make cocotb
 
 # Run formal proofs
@@ -134,7 +138,7 @@ make formal-axil
 make synth
 
 # Run everything
-make lint && make regress && make cocotb && make formal
+make lint && make regress && make pipeline-debug && make cocotb && make formal
 ```
 
 ### Tier 4: RISCOF Architectural Compliance (optional smoke)
@@ -161,11 +165,13 @@ See `verification/riscof/README.md` for toolchain install, signature dump flow, 
 
 GitHub Actions workflow (`.github/workflows/ci.yml`) runs on every push/PR:
 1. **Lint** — Verilator lint check
-2. **Regression** — 33 assembly tests (corebus + AXI4-Lite paths)
-3. **cocotb** — 44 randomized unit tests
+2. **Regression** — 42 assembly tests (corebus + AXI-Lite paths) plus `make pipeline-debug`
+3. **cocotb** — 43 randomized unit tests
 4. **Formal** — ALU + RegFile + Decoder proofs
 5. **Synth** — Yosys synthesis (`make synth`)
-6. **RISCOF smoke** — optional; runs when Spike + `riscv64-unknown-elf-gcc` are available
+6. **RISCOF ACT** — rv32imac_zicsr filtered architectural compliance
+7. **Sky130 STA** — post-synth OpenSTA timing report
+8. **10k lock-step co-sim** — final gated retired-instruction compare against Spike
 
 ## Debug Knobs
 
@@ -194,3 +200,4 @@ GitHub Actions workflow (`.github/workflows/ci.yml`) runs on every push/PR:
 - ✅ MRET exact resume point (no skipped/repeated instructions)
 - ✅ GPIO MMIO register behavior
 - ✅ UART MMIO loopback and console TX behavior
+- ✅ M6 forwarding, load-use, branch/jump flush, trap flush, interrupt flush, and debug single-step retirement

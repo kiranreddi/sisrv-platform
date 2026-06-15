@@ -50,6 +50,8 @@ Taken between instructions when `mstatus.MIE` and the corresponding `mie` bit ar
 ## Debug
 
 RISC-V Debug Module 0.13 subset: halt, resume, single-step, abstract GPR access via DMI/JTAG.
+The current DMCONTROL subset uses bit 31 for `haltreq`, bit 30 for `resumereq`,
+bit 2 for step mode, and bit 0 for `dmactive`.
 
 ## Performance
 

@@ -17,7 +17,7 @@ licensable / product-grade RISC-V core.
 
 `sisRvCore` today is a **correct, well-verified RV32IMAC teaching/MVP platform**: a
 3-stage in-order pipeline, M-mode only, with clean RTL, real formal proofs, cocotb unit
-tests, a 40-test directed suite, an AXI4-Lite bridge, CLINT/PLIC, debug/JTAG, C extension,
+tests, a 42-test directed suite, an AXI4-Lite bridge, CLINT/PLIC, debug/JTAG, C extension,
 and a Yosys synthesis path. That is a genuinely strong *foundation* — better verified
 than many hobby cores.
 
@@ -27,11 +27,11 @@ is three things commercial cores treat as table stakes:
 1. **Performance data.** The M6 pipeline is implemented, but CoreMark/Dhrystone and
    benchmark CPI are not published yet. Commercial embedded cores publish those numbers.
 2. **Compliance sign-off.** RISCOF **rv32imac_zicsr** ACT suite (**95/95** filtered tests;
-   72 upstream PMP/A/privilege tests excluded) and **10k-seed retired-instruction** Spike
-   lock-step co-sim are green in CI
-   ([run #27524072022](https://github.com/kiranreddi/sisrv-platform/actions/runs/27524072022)).
-3. **Productization rigor.** Sky130 HD STA in CI: WNS **-175.621 ns**, TNS **-5566.819 ns**,
-   Fmax **5.11 MHz**; competitive CoreMark/MHz evidence is still open.
+   72 upstream PMP/A/privilege tests excluded) is green in CI, and the
+   **10k-seed retired-instruction** Spike lock-step co-sim is restored as the
+   final gated CI lane.
+3. **Productization rigor.** Sky130 HD STA in CI: WNS **-199.946 ns**, TNS **-10929.076 ns**,
+   Fmax **4.55 MHz**; competitive CoreMark/MHz evidence is still open.
 
 The good news: the codebase is structured so each of these is an incremental milestone,
 not a rewrite. The plan in §6 takes us from "MVP core" to "product-grade soft IP" in a
@@ -53,8 +53,8 @@ defined sequence with hard exit gates.
 | Memory | Aligned-only assumed; no MPU/PMP; no cache; tightly-coupled ROM/RAM |
 | Bus | Internal corebus + AXI4-Lite **master** bridge (single outstanding, no bursts) |
 | Debug | **DM 0.13 subset + JTAG DTM** (halt/resume/step); **abstract GPR → regfile** |
-| Verification | **40** directed asm + 44 cocotb + 4 formal + **RISCOF ACT 95/95 (CI)** + **10k-seed lock-step co-sim** |
-| Physical | Yosys synth + **Sky130 HD STA** (WNS -175.6 ns, Fmax 5.11 MHz, CI) + PPA datasheet |
+| Verification | **42** directed asm + pipeline debug-step + 43 cocotb + 4 formal + **RISCOF ACT 95/95 (CI)** + final gated **10k-seed lock-step co-sim** |
+| Physical | Yosys synth + **Sky130 HD STA** (WNS -199.946 ns, Fmax 4.55 MHz, CI) + PPA datasheet |
 | Collateral | **Apache-2.0**, Integration Guide, Programmer's Reference, PPA datasheet |
 
 ---
@@ -152,7 +152,7 @@ Legend: ✅ have · 🟡 partial · ❌ missing · **P0** = required for any pro
 | Feature | Industry standard | Us | Gap | Pri |
 |---|---|---|---|---|
 | RISCOF / riscv-arch-test compliance pass | **mandatory to call it RISC-V** | ✅ | `make riscof-act` (**95/95** filtered) in CI | **P0** |
-| ISS lock-step co-simulation (e.g. Spike) random | yes | ✅ | `verification/cosim/spike_lockstep.py` — 10k seeds, retired PC+insn compare | **P0** |
+| ISS lock-step co-simulation (e.g. Spike) random | yes | ✅ | `verification/cosim/spike_lockstep.py` — 10k seeds, retired PC+insn compare as final gated CI lane | **P0** |
 | Constrained-random + functional coverage (UVM or cocotb) | yes | 🟡 | unit-level only, no top-level coverage closure | P1 |
 | Formal of control/hazard logic | premium | 🟡 | ALU/decode/regfile/AXI only, not core FSM/pipeline | P1 |
 | Code + functional coverage metrics & goals | yes | ❌ | no coverage reporting in CI | P1 |
@@ -210,7 +210,7 @@ top-to-bottom by risk-adjusted value.
 
 ### Phase A — "Real RISC-V" correctness & compliance (foundation)
 **Goal:** Pass official compliance; close the privileged-mode holes. No new perf.
-**Status: COMPLETE** (2026-06-15, CI [run #27524072022](https://github.com/kiranreddi/sisrv-platform/actions/runs/27524072022))
+**Status: COMPLETE** (2026-06-15, latest short CI [run #27565469770](https://github.com/kiranreddi/sisrv-platform/actions/runs/27565469770); 10k co-sim restored as final gated lane)
 
 - Add RISCOF + riscv-arch-test to CI; pick Spike as golden ISS.
 - Stand up Spike lock-step co-simulation harness (random instruction streams).
@@ -221,8 +221,8 @@ top-to-bottom by risk-adjusted value.
 - ✅ RV32C: IALIGN=16 jump alignment, WB-stage latched decode, reserved `rd=x0` C encodings as NOP.
 - ✅ ROM decode expanded to 2 MB (matches ACT `link.ld`).
 - **Exit gate:** ✅ RISCOF rv32imac_zicsr ACT suite **95/95** green in CI; ✅ 10k-seed
-  retired-instruction Spike lock-step co-sim clean; ✅ Sky130 STA report in CI
-  (WNS -175.621 ns, TNS -5566.819 ns, Fmax 5.11 MHz); nested-trap + access-fault directed
+  retired-instruction Spike lock-step co-sim restored as final gated CI; ✅ Sky130 STA report in CI
+  (WNS -199.946 ns, TNS -10929.076 ns, Fmax 4.55 MHz); nested-trap + access-fault directed
   tests pass.
 
 ### Phase B — System integration (droppable into an SoC)
@@ -281,12 +281,12 @@ top-to-bottom by risk-adjusted value.
 Ship criteria — all must be true to make the claim:
 
 - [x] Passes RISCOF / riscv-arch-test for its advertised ISA string, in CI.
-- [x] Clean multi-thousand-seed ISS lock-step co-simulation (10k retired-instruction compare).
+- [x] Multi-thousand-seed ISS lock-step co-simulation harness, restored as a final gated 10k CI job.
 - [x] Base M-mode trap model covers misalign + access fault.
 - [x] Standard interrupt subsystem (CLINT + PLIC/CLIC), multiple prioritized sources.
 - [x] RISC-V Debug Module + JTAG (halt/resume/step subset); GDB/OpenOCD path documented.
 - [x] RV32IMC at minimum with M6 3-stage pipeline implemented; benchmark numbers still open.
-- [x] Timing-closed on a named PDK with a PPA datasheet; GDS DRC/LVS clean (STA on Sky130 HD; GDS still open).
+- [x] STA reported on a named PDK with a PPA datasheet; timing closure and GDS DRC/LVS remain M8 work.
 - [x] OSI license, PRM + integration guide, versioned release collateral started.
 
 ---

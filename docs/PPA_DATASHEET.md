@@ -30,8 +30,8 @@ includes core FSM, decode, CSR, CLINT/PLIC, debug DM/DTM, and AXI bridge.
 | Metric | Value | Method |
 |--------|-------|--------|
 | Target period | 20 ns | SDC `create_clock` |
-| STA sign-off | Post-synth OpenSTA | `make sta` |
-| Fmax | See CI synth+STA artifact | WNS/TNS from OpenSTA |
+| STA sign-off | Post-synth OpenSTA | `make sta-sky130` |
+| Sky130 HD latest CI | WNS -199.946 ns, TNS -10929.076 ns, estimated Fmax 4.55 MHz | CI run #27565469770 |
 
 ## Power
 
@@ -48,7 +48,7 @@ Exit gate: GDS DRC/LVS clean or documented deltas per milestone M8.
 | Metric | Current status |
 |--------|----------------|
 | Microarchitecture | 3-stage in-order pipeline (`IF`, `ID`, `EX/MEM/WB`) |
-| Directed pipeline smoke | `test_pipeline_forwarding` passes at cycle 188; `test_pipeline_load_use` at cycle 230; `test_pipeline_flush` at cycle 209 |
+| Directed pipeline smoke | forwarding 85 cycles; load-use 97; branch/jump flush 84; trap flush 77; interrupt flush 112; debug single-step 34 |
 | CoreMark/MHz | Not yet measured |
 
 M6 completes the RTL pipeline conversion. A CoreMark/Dhrystone harness and CPI report
