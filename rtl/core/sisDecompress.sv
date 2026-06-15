@@ -53,8 +53,7 @@ module sisDecompress (
       2'b01: begin
         unique case (funct3)
           3'b000: begin
-            if (rd_rs1 == 5'd0) legal = 1'b0;
-            else expanded = {{6{c_instr[12]}}, c_instr[12], c_instr[6:2], rd_rs1, 3'b000, rd_rs1, 7'b0010011};
+            expanded = {{6{c_instr[12]}}, c_instr[12], c_instr[6:2], rd_rs1, 3'b000, rd_rs1, 7'b0010011};
           end
           3'b001:
             expanded = {{9{c_instr[12]}}, c_instr[12], c_instr[8], c_instr[10:9], c_instr[6],

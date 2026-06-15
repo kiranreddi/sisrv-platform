@@ -74,6 +74,8 @@ module sisRvCore #(
   logic [31:0] instr_reg;
   logic [1:0]  instr_len; // 2=16-bit, 0=32-bit (encoded as 2 or 0 for PC add)
   logic        instr_is_compressed;
+  logic [15:0] fetch_upper_hold;
+  logic        fetch_need_next_word;
 
   // ---------------------------------------------------------------
   // Decoder wires
@@ -543,6 +545,8 @@ module sisRvCore #(
       fetch_err_reg <= 1'b0;
       mem_err_reg   <= 1'b0;
       mem_misaligned_reg <= 1'b0;
+      fetch_upper_hold    <= 16'h0;
+      fetch_need_next_word <= 1'b0;
     end else if (dbg_halt_req) begin
       halted <= 1'b1;
     end else if (dbg_resume_req) begin
@@ -565,7 +569,14 @@ module sisRvCore #(
         S_FETCH_WAIT: begin
           if (rsp_valid) begin
             fetch_word <= rsp_rdata;
-            if (pc[1] == 1'b0) begin
+            fetch_err_reg <= rsp_err;
+            if (fetch_need_next_word) begin
+              instr_raw           <= {rsp_rdata[15:0], fetch_upper_hold};
+              instr_is_compressed <= 1'b0;
+              instr_len           <= 2'd0;
+              fetch_need_next_word <= 1'b0;
+              state               <= S_DECODE;
+            end else if (pc[1] == 1'b0) begin
               if (ENABLE_C && (rsp_rdata[1:0] != 2'b11)) begin
                 instr_raw           <= {16'h0, rsp_rdata[15:0]};
                 instr_is_compressed <= 1'b1;
@@ -575,13 +586,19 @@ module sisRvCore #(
                 instr_is_compressed <= 1'b0;
                 instr_len           <= 2'd0;
               end
+              state <= S_DECODE;
             end else begin
-              instr_raw           <= {16'h0, rsp_rdata[31:16]};
-              instr_is_compressed <= 1'b1;
-              instr_len           <= 2'd2;
+              if (ENABLE_C && (rsp_rdata[17:16] != 2'b11)) begin
+                instr_raw           <= {16'h0, rsp_rdata[31:16]};
+                instr_is_compressed <= 1'b1;
+                instr_len           <= 2'd2;
+                state               <= S_DECODE;
+              end else begin
+                fetch_upper_hold     <= rsp_rdata[31:16];
+                fetch_need_next_word <= 1'b1;
+                state                <= S_FETCH_REQ;
+              end
             end
-            fetch_err_reg <= rsp_err;
-            state         <= S_DECODE;
           end
         end
 
@@ -666,7 +683,7 @@ module sisRvCore #(
     case (state)
       S_FETCH_REQ: begin
         out_req_valid = 1'b1;
-        out_req_addr  = pc;
+        out_req_addr  = fetch_need_next_word ? ({pc[31:2], 2'b00} + 32'd4) : {pc[31:2], 2'b00};
         out_req_we    = 1'b0;
         out_req_wstrb = 4'h0;
         out_rsp_ready = 1'b0;

@@ -270,7 +270,8 @@ $(RISCOF_WORK)/act.testlist: $(ARCH_TEST_ROOT) $(RISCOF_VENV)/bin/activate
 	  riscof testlist --config $(RISCOF_CONFIG) \
 	    --suite $(ARCH_TEST_SUITE) --env $(ARCH_TEST_ENV) \
 	    --work-dir $(RISCOF_WORK)
-	@cp $(RISCOF_WORK)/test_list.yaml $(RISCOF_WORK)/act.testlist
+	@python3 $(RISCOF_DIR)/scripts/filter_act_testlist.py \
+	  $(RISCOF_WORK)/test_list.yaml $(RISCOF_WORK)/act.testlist
 
 riscof-act: $(RISCOF_WORK)/act.testlist build/sim_sisPlatformTop
 	@. $(RISCOF_VENV)/bin/activate && \
