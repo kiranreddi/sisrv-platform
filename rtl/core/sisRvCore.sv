@@ -155,6 +155,8 @@ module sisRvCore #(
   logic        wb_dec_is_legal_eff;
   logic        wb_branch_taken;
   logic [31:0] wb_branch_target, wb_jal_target, wb_jalr_target, wb_next_pc_target;
+  logic [31:0] wb_pc_next;
+  logic        wb_overlap_fetch;
 
   sisDecode #(
     .ENABLE_M (ENABLE_M),
@@ -516,6 +518,27 @@ module sisRvCore #(
   assign wb_is_mret   = wb_dec_is_system && (wb_dec_funct3 == 3'b000) && (instr_reg[31:20] == 12'h302);
   assign wb_is_csr_op = wb_dec_is_system && (wb_dec_funct3 != 3'b000);
 
+  always_comb begin
+    wb_pc_next = wb_pc + (wb_instr_len == 2'd2 ? 32'd2 : 32'd4);
+    if (fetch_err_reg || mem_err_reg || mem_misaligned_reg || wb_instr_addr_misaligned || !wb_dec_is_legal_eff) begin
+      wb_pc_next = mtvec_out;
+    end else if (wb_dec_is_jal) begin
+      wb_pc_next = wb_jal_target;
+    end else if (wb_dec_is_jalr) begin
+      wb_pc_next = wb_jalr_target;
+    end else if (wb_dec_is_branch && wb_branch_taken) begin
+      wb_pc_next = wb_branch_target;
+    end else if (wb_is_ecall || wb_is_ebreak) begin
+      wb_pc_next = mtvec_out;
+    end else if (wb_is_mret) begin
+      wb_pc_next = mepc_out;
+    end else if (irq_pending && !wb_is_csr_op) begin
+      wb_pc_next = mtvec_out;
+    end
+  end
+
+  assign wb_overlap_fetch = (state == S_WB) && !halted && !dbg_halt_req && !dbg_resume_req && !dbg_single_step;
+
   // CSR operation type from funct3
   // funct3: 001=CSRRW, 010=CSRRS, 011=CSRRC, 101=CSRRWI, 110=CSRRSI, 111=CSRRCI
   logic [1:0] csr_op_type;
@@ -749,40 +772,17 @@ module sisRvCore #(
 
         // ----- WRITEBACK + PC UPDATE -----
         S_WB: begin
-          // PC update (illegal instructions trap before any control-flow effect)
-          if (fetch_err_reg || mem_err_reg || mem_misaligned_reg || wb_instr_addr_misaligned || !wb_dec_is_legal_eff) begin
-            fetch_need_next_word <= 1'b0;
-            fetch_upper_hold    <= 16'h0;
-            pc <= mtvec_out;
-          end else if (wb_dec_is_jal) begin
-            fetch_need_next_word <= 1'b0;
-            fetch_upper_hold    <= 16'h0;
-            pc <= wb_jal_target;
-          end else if (wb_dec_is_jalr) begin
-            fetch_need_next_word <= 1'b0;
-            fetch_upper_hold    <= 16'h0;
-            pc <= wb_jalr_target;
-          end else if (wb_dec_is_branch && wb_branch_taken) begin
-            fetch_need_next_word <= 1'b0;
-            fetch_upper_hold    <= 16'h0;
-            pc <= wb_branch_target;
-          end else if (wb_is_ecall || wb_is_ebreak) begin
-            fetch_need_next_word <= 1'b0;
-            fetch_upper_hold    <= 16'h0;
-            pc <= mtvec_out;
-          end else if (wb_is_mret) begin
-            fetch_need_next_word <= 1'b0;
-            fetch_upper_hold    <= 16'h0;
-            pc <= mepc_out;
-          end else if (irq_pending && !wb_is_csr_op) begin
-            fetch_need_next_word <= 1'b0;
-            fetch_upper_hold    <= 16'h0;
-            pc <= mtvec_out;
-          end else begin
-            pc <= wb_pc + (wb_instr_len == 2'd2 ? 32'd2 : 32'd4);
-          end
+          // PC update (illegal instructions trap before any control-flow effect).
+          // When the fabric accepts it, the next fetch request is issued in this
+          // same WB cycle and the core advances directly to FETCH_WAIT.
+          pc <= wb_pc_next;
+          fetch_need_next_word <= 1'b0;
+          fetch_upper_hold     <= 16'h0;
+          fetch_err_reg        <= 1'b0;
+          mem_err_reg          <= 1'b0;
+          mem_misaligned_reg   <= 1'b0;
 
-          state <= S_FETCH_REQ;
+          state <= (wb_overlap_fetch && req_ready) ? S_FETCH_WAIT : S_FETCH_REQ;
         end
 
         default: state <= S_FETCH_REQ;
@@ -822,6 +822,14 @@ module sisRvCore #(
       end
       S_MEM_WAIT: begin
         out_rsp_ready = 1'b1;
+      end
+      S_WB: begin
+        if (wb_overlap_fetch) begin
+          out_req_valid = 1'b1;
+          out_req_addr  = {wb_pc_next[31:2], 2'b00};
+          out_req_we    = 1'b0;
+          out_req_wstrb = 4'h0;
+        end
       end
       default: ;
     endcase

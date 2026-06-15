@@ -186,8 +186,19 @@ Key principles:
 ### Objectives
 - Improve performance while preserving ISA behavior and external interfaces.
 
+### Current progress
+- ✅ M6.1 WB/fetch overlap: the core now issues the next instruction fetch request
+  during writeback when the fabric is ready, then advances directly to fetch wait.
+- ✅ Existing corebus, CSR/trap, interrupt, debug, compressed-instruction, and AXI
+  interfaces are preserved.
+- ✅ Local validation for the M6.1 change:
+  - `make lint`
+  - `make regress`
+  - `make regress-axil`
+  - `make regress-axil-stall`
+
 ### Approach
-- Replace FSM core with 3-stage (F/D/EX+WB), while keeping:
+- Continue toward a full 3-stage (F/D/EX+WB) implementation, while keeping:
   - internal corebus interface
   - CSR/trap semantics
 - Hazards:
@@ -198,6 +209,8 @@ Key principles:
 ### Exit criteria
 - Regression suite unchanged; all previous tests pass.
 - CPI measured on a small benchmark improves vs FSM baseline.
+- Full M6 closure still requires IF/ID and ID/EX pipeline registers,
+  forwarding/stall/flush logic, and CSR/trap retirement checks.
 
 ---
 

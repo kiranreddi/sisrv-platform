@@ -118,7 +118,7 @@ analysis and product-grade roadmap.
 | M3 - AXI4-Lite master bridge | Complete |
 | M4 - Timer interrupt | Complete |
 | M5 - RV32M multiply/divide | Complete: 33/33 asm tests pass |
-| M6 - 3-stage pipeline | Planned |
+| M6 - 3-stage pipeline | In progress: WB/fetch-overlap v1 complete |
 | M7 - Yosys synthesis | Complete |
 | M8 - OpenROAD hardening | Planned |
 

@@ -199,12 +199,16 @@ timer interrupt tests run with the AXI slave timer model ✅, CI covers `make re
 
 ---
 
-### 🔲 Milestone 6 — 3-stage pipeline
-**Status: NOT STARTED**
+### 🟡 Milestone 6 — 3-stage pipeline
+**Status: IN PROGRESS**
 
-Planned:
-- Replace FSM with 3-stage F/D/EX+WB pipeline
-- ALU forwarding, load-use stall, branch flush
+| Deliverable | Status | Notes |
+|-------------|--------|-------|
+| WB/fetch-overlap v1 | ✅ Done | `sisRvCore` issues the next fetch request during writeback when `req_ready` is high |
+| Interface preservation | ✅ Done | Corebus, AXI bridge contract, CSR/trap, interrupt, debug, and compressed fetch behavior retained |
+| Local validation | ✅ Done | `make lint`, `make regress`, `make regress-axil`, `make regress-axil-stall` |
+| Full F/D/EX+WB pipeline | 🔲 Planned | Requires IF/ID and ID/EX registers plus retirement model |
+| Hazard controls | 🔲 Planned | ALU forwarding, load-use stall, branch flush, CSR/trap retirement verification |
 
 ---
 

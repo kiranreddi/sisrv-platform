@@ -50,4 +50,6 @@ Exit gate: GDS DRC/LVS clean or documented deltas per milestone M8.
 | CPI (FSM) | ~6–8 |
 | CoreMark/MHz | ~0.4–0.6 (pre-pipeline) |
 
-Pipeline milestone M6 targets ~1.0–1.3 CPI and E2-class CoreMark/MHz.
+M6.1 overlaps writeback with the next fetch request when the fabric is ready. This
+is a conservative first pipeline step; the full M6 3-stage pipeline still targets
+~1.0–1.3 CPI and E2-class CoreMark/MHz.
