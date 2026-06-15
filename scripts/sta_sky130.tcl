@@ -24,8 +24,8 @@ if {!$linked} {
 read_sdc scripts/constraints_sisRvCore.sdc
 check_setup
 
-set wns [sta::worst_slack max]
-set tns [sta::total_negative_slack max]
+set wns [worst_slack]
+set tns [total_negative_slack]
 set fmax_mhz 50.0
 if {$wns < 1e29} {
   set fmax_mhz [expr 1000.0 / (20.0 - $wns)]
