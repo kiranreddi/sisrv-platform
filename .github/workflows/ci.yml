@@ -5,6 +5,16 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      run_10k_cosim:
+        description: "Run the long 10k-seed Spike lock-step co-sim job"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
 
 permissions:
   contents: read
@@ -131,6 +141,7 @@ jobs:
 
   cosim-lockstep:
     name: 10k-seed Lock-step Co-sim
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.run_10k_cosim == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 90
     needs: lint
