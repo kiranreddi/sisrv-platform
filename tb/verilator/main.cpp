@@ -14,6 +14,31 @@
 
 extern "C" int unsigned dpi_sisrv_ram_read_word(int unsigned word_idx);
 
+static bool g_dpi_ram_scope_set = false;
+
+static void ensure_dpi_ram_scope() {
+  if (g_dpi_ram_scope_set) {
+    return;
+  }
+
+  static const char* kScopes[] = {
+      "TOP.sisPlatformTop.gen_corebus.u_ram",
+      "TOP.sisPlatformTop.u_ram",
+      nullptr,
+  };
+
+  for (int i = 0; kScopes[i] != nullptr; ++i) {
+    svScope scope = svGetScopeFromName(kScopes[i]);
+    if (scope != nullptr) {
+      svSetScope(scope);
+      g_dpi_ram_scope_set = true;
+      return;
+    }
+  }
+
+  std::fprintf(stderr, "Failed to set DPI scope for RAM signature dump\n");
+}
+
 static constexpr uint32_t kRamBase       = 0x80000000u;
 static constexpr uint32_t kTohostAddr    = 0x10000000u;
 static constexpr uint32_t kRiscofHalt    = 3u;
@@ -182,8 +207,16 @@ static uint32_t read_ram_word(VsisPlatformTop* top, uint32_t phys_addr) {
 }
 
 static bool dump_signature(VsisPlatformTop* top, const SimConfig& cfg) {
-  if (cfg.signature_out.empty() || cfg.sig_end <= cfg.sig_start) {
+  if (cfg.signature_out.empty()) {
+    return true;
+  }
+  if (cfg.sig_end <= cfg.sig_start) {
     std::fprintf(stderr, "Invalid signature dump configuration\n");
+    return false;
+  }
+
+  ensure_dpi_ram_scope();
+  if (!g_dpi_ram_scope_set) {
     return false;
   }
 
