@@ -577,6 +577,7 @@ module sisRvCore #(
 
   assign data_req_active = ex_valid && (ex_state == EX_MEM_REQ);
   assign if_req_active   = !halted && !dbg_halt_req && !dbg_single_step &&
+                           !ex_redirect &&
                            !if_id_valid &&
                            ((if_state == IF_REQ) || (if_state == IF_SECOND_REQ));
 
@@ -887,9 +888,10 @@ module sisRvCore #(
         if_id_valid      <= 1'b0;
         fetch_upper_hold <= 16'h0;
         fetch_err_hold   <= 1'b0;
-        if (bus_owner == BUS_IF) begin
+        if ((bus_owner == BUS_IF) && !if_rsp_fire) begin
           if_discard_rsp <= 1'b1;
         end else begin
+          if_discard_rsp <= 1'b0;
           if_state <= IF_REQ;
         end
       end
