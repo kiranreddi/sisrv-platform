@@ -21,7 +21,8 @@ jal_target:
     bne   x3, x0, fail
     beq   x4, x0, fail
 
-    la    x5, jalr_target
+1:  auipc x5, %pcrel_hi(jalr_target)
+    addi  x5, x5, %pcrel_lo(1b)
     jalr  x6, 0(x5)
     li    x2, 0x33333333
     sw    x2, 0(x20)

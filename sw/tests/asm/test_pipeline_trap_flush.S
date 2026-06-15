@@ -9,7 +9,8 @@ trap_handler:
     csrr  x5, mcause
     li    x6, 11
     bne   x5, x6, fail
-    la    x7, after_wrong_path
+1:  auipc x7, %pcrel_hi(after_wrong_path)
+    addi  x7, x7, %pcrel_lo(1b)
     csrw  mepc, x7
     mret
 

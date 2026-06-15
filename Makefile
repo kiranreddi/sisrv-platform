@@ -19,7 +19,7 @@ RV_OBJDUMP := $(RV_PREFIX)objdump
 
 RV_ARCH   := rv32im_zicsr
 RV_ABI    := ilp32
-RV_CFLAGS := -march=$(RV_ARCH) -mabi=$(RV_ABI) -nostdlib -nostartfiles -ffreestanding -static -O2 -Wl,--build-id=none
+RV_CFLAGS := -march=$(RV_ARCH) -mabi=$(RV_ABI) -nostdlib -nostartfiles -ffreestanding -static -fno-pic -fno-pie -no-pie -O2 -Wl,--build-id=none
 
 RTL_DIRS := rtl rtl/core rtl/bus rtl/periph rtl/debug
 TB_DIRS  := tb/verilator tb/models
@@ -77,7 +77,7 @@ $(BUILD)/tests/%.elf: sw/tests/asm/%.S sw/bsp/link.ld
 
 $(BUILD)/tests/test_compressed.elf: sw/tests/asm/test_compressed.S sw/bsp/link.ld
 	@mkdir -p $(BUILD)/tests
-	$(RV_GCC) -march=rv32imc_zicsr -mabi=$(RV_ABI) -nostdlib -nostartfiles -ffreestanding -static -O2 -Wl,--build-id=none -T sw/bsp/link.ld -o $@ $<
+	$(RV_GCC) -march=rv32imc_zicsr -mabi=$(RV_ABI) -nostdlib -nostartfiles -ffreestanding -static -fno-pic -fno-pie -no-pie -O2 -Wl,--build-id=none -T sw/bsp/link.ld -o $@ $<
 
 $(BUILD)/tests/%.bin: $(BUILD)/tests/%.elf
 	$(RV_OBJCOPY) -O binary $< $@
@@ -107,6 +107,9 @@ regress: $(SIM) $(ASM_HEXES)
 	    pass=$$((pass + 1)); \
 	  else \
 	    echo "  FAIL: $$name (exit=$$?)"; \
+	    echo "  --- $$name.log ---"; \
+	    tail -120 $(BUILD)/tests/$$name.log || true; \
+	    echo "  --- end $$name.log ---"; \
 	    fail=$$((fail + 1)); \
 	  fi; \
 	  rm -f rom.hex ram.hex; \
