@@ -122,13 +122,11 @@ setup:
     lw    x2, 2(x20)          # load address misaligned
     sh    x2, 1(x20)          # store address misaligned
     sw    x2, 2(x20)          # store address misaligned
-    li    x3, 0x12
-    jalr  x0, 0(x3)           # instruction address misaligned (JALR)
-    .balign 4
-    jal   x0, . + 2           # instruction address misaligned (JAL)
-    .balign 4
-    li    x10, 1
-    beq   x10, x10, . + 2     # taken branch to misaligned target
+    # RV32C: JAL/branch offsets and JALR masking always yield 2-byte-aligned
+    # targets (IALIGN=16), so instruction-address-misaligned is unreachable.
+    csrr  x5, mscratch
+    addi  x5, x5, 3
+    csrw  mscratch, x5
     li    x3, 0x20000000
     lw    x4, 0(x3)           # load access fault
     sw    x4, 0(x3)           # store access fault

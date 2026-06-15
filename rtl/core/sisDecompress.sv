@@ -90,16 +90,21 @@ module sisDecompress (
           3'b001:
             expanded = {cj_off[20], cj_off[10:1], cj_off[11], cj_off[19:12], 5'd1, 7'b1101111};
           3'b010: begin
-            if (rd_rs1 == 5'd0) legal = 1'b0;
-            else expanded = {{6{imm6[5]}}, imm6, 5'd0, 3'b000, rd_rs1, 7'b0010011};
+            if (rd_rs1 == 5'd0)
+              expanded = {{6{imm6[5]}}, imm6, 5'd0, 3'b000, 5'd0, 7'b0010011};
+            else
+              expanded = {{6{imm6[5]}}, imm6, 5'd0, 3'b000, rd_rs1, 7'b0010011};
           end
           3'b011: begin
             if (rd_rs1 == 5'd2) begin
               if (addi16sp_uimm == 10'd0) legal = 1'b0;
               else expanded = {{2{addi16sp_uimm[9]}}, addi16sp_uimm, 5'd2, 3'b000, 5'd2, 7'b0010011};
             end else begin
-              if (imm6 == 6'sd0 || rd_rs1 == 5'd0) legal = 1'b0;
-              else expanded = {{14{imm6[5]}}, imm6, rd_rs1, 7'b0110111};
+              if (imm6 == 6'sd0) legal = 1'b0;
+              else if (rd_rs1 == 5'd0)
+                expanded = {{14{imm6[5]}}, imm6, 5'd0, 7'b0110111};
+              else
+                expanded = {{14{imm6[5]}}, imm6, rd_rs1, 7'b0110111};
             end
           end
           3'b100: begin
@@ -150,8 +155,7 @@ module sisDecompress (
                 if (rd_rs1 == 5'd0) legal = 1'b0;
                 else expanded = {12'h000, rd_rs1, 3'b000, 5'd0, 7'b1100111};
               end else begin
-                if (rd_rs1 == 5'd0) legal = 1'b0;
-                else expanded = {7'b0000000, c_instr[6:2], 5'd0, 3'b000, rd_rs1, 7'b0110011};
+                expanded = {7'b0000000, c_instr[6:2], 5'd0, 3'b000, rd_rs1, 7'b0110011};
               end
             end else begin
               if (c_instr[6:2] == 5'd0 && rd_rs1 == 5'd0)

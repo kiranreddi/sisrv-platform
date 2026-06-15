@@ -74,6 +74,11 @@ module sisRvCore #(
   logic [31:0] instr_reg;
   logic [1:0]  instr_len; // 2=16-bit, 0=32-bit (encoded as 2 or 0 for PC add)
   logic        instr_is_compressed;
+  logic [31:0] wb_pc;
+  logic [1:0]  wb_instr_len;
+  logic        wb_is_compressed;
+  logic [31:0] wb_instr_raw;
+  logic        wb_illegal_compressed;
   logic [15:0] fetch_upper_hold;
   logic        fetch_need_next_word;
 
@@ -135,6 +140,90 @@ module sisRvCore #(
     .is_fence  (dec_is_fence),
     .is_legal  (dec_is_legal)
   );
+
+  // WB-stage decode from latched instruction (avoids fetch/decode hazards)
+  logic [4:0]  wb_dec_rs1, wb_dec_rs2, wb_dec_rd;
+  logic [31:0] wb_dec_imm_i, wb_dec_imm_s, wb_dec_imm_b, wb_dec_imm_j, wb_dec_imm_u;
+  logic [2:0]  wb_dec_funct3;
+  logic [6:0]  wb_dec_opcode;
+  logic [6:0]  wb_dec_funct7;
+  logic        wb_dec_is_fence;
+  logic        wb_dec_is_jal, wb_dec_is_jalr, wb_dec_is_branch;
+  logic        wb_dec_is_load, wb_dec_is_store;
+  logic        wb_dec_is_alu_reg, wb_dec_is_alu_imm, wb_dec_is_lui, wb_dec_is_auipc;
+  logic        wb_dec_is_system, wb_dec_is_legal;
+  logic        wb_dec_is_legal_eff;
+  logic        wb_branch_taken;
+  logic [31:0] wb_branch_target, wb_jal_target, wb_jalr_target, wb_next_pc_target;
+
+  sisDecode #(
+    .ENABLE_M (ENABLE_M),
+    .ENABLE_C (ENABLE_C)
+  ) u_decode_wb (
+    .instr     (instr_reg),
+    .rs1       (wb_dec_rs1),
+    .rs2       (wb_dec_rs2),
+    .rd        (wb_dec_rd),
+    .imm_i     (wb_dec_imm_i),
+    .imm_s     (wb_dec_imm_s),
+    .imm_b     (wb_dec_imm_b),
+    .imm_u     (wb_dec_imm_u),
+    .imm_j     (wb_dec_imm_j),
+    .opcode    (wb_dec_opcode),
+    .funct3    (wb_dec_funct3),
+    .funct7    (wb_dec_funct7),
+    .is_lui    (wb_dec_is_lui),
+    .is_auipc  (wb_dec_is_auipc),
+    .is_jal    (wb_dec_is_jal),
+    .is_jalr   (wb_dec_is_jalr),
+    .is_branch (wb_dec_is_branch),
+    .is_load   (wb_dec_is_load),
+    .is_store  (wb_dec_is_store),
+    .is_alu_imm(wb_dec_is_alu_imm),
+    .is_alu_reg(wb_dec_is_alu_reg),
+    .is_system (wb_dec_is_system),
+    .is_fence  (wb_dec_is_fence),
+    .is_legal  (wb_dec_is_legal)
+  );
+
+  assign wb_dec_is_legal_eff = ENABLE_C ? (wb_dec_is_legal && !wb_illegal_compressed) :
+                               (wb_dec_is_legal && !wb_is_compressed);
+
+  always_comb begin
+    wb_branch_taken = 1'b0;
+    if (wb_dec_is_branch) begin
+      case (wb_dec_funct3)
+        3'b000: wb_branch_taken = (rs1_val == rs2_val);
+        3'b001: wb_branch_taken = (rs1_val != rs2_val);
+        3'b100: wb_branch_taken = ($signed(rs1_val) < $signed(rs2_val));
+        3'b101: wb_branch_taken = ($signed(rs1_val) >= $signed(rs2_val));
+        3'b110: wb_branch_taken = (rs1_val < rs2_val);
+        3'b111: wb_branch_taken = (rs1_val >= rs2_val);
+        default: wb_branch_taken = 1'b0;
+      endcase
+    end
+  end
+
+  assign wb_branch_target = wb_pc + wb_dec_imm_b;
+  assign wb_jal_target    = wb_pc + wb_dec_imm_j;
+  assign wb_jalr_target   = (rs1_val + wb_dec_imm_i) & 32'hFFFF_FFFE;
+
+  always_comb begin
+    wb_next_pc_target = wb_pc + 32'd4;
+    if (wb_dec_is_jal) begin
+      wb_next_pc_target = wb_jal_target;
+    end else if (wb_dec_is_jalr) begin
+      wb_next_pc_target = wb_jalr_target;
+    end else if (wb_dec_is_branch && wb_branch_taken) begin
+      wb_next_pc_target = wb_branch_target;
+    end
+  end
+
+  wire wb_instr_addr_misaligned = wb_dec_is_legal_eff &&
+                                  (wb_dec_is_jal || wb_dec_is_jalr || (wb_dec_is_branch && wb_branch_taken)) &&
+                                  (ENABLE_C ? (wb_next_pc_target[0] != 1'b0) :
+                                              (wb_is_compressed ? (wb_next_pc_target[0] != 1'b0) :
+                                                                 (wb_next_pc_target[1:0] != 2'b00)));
 
   // ---------------------------------------------------------------
   // Register file
@@ -373,10 +462,12 @@ module sisRvCore #(
 
   wire dec_is_legal_eff = ENABLE_C ? (dec_is_legal && !(instr_is_compressed && decomp_illegal)) :
                                      (dec_is_legal && !instr_is_compressed);
+  // With C extension IALIGN=16: all branch/jump targets need 2-byte alignment only.
   assign instr_addr_misaligned = dec_is_legal_eff &&
                                  (dec_is_jal || dec_is_jalr || (dec_is_branch && branch_taken)) &&
-                                 (instr_is_compressed ? (next_pc_target[0] != 1'b0) :
-                                                        (next_pc_target[1:0] != 2'b00));
+                                 (ENABLE_C ? (next_pc_target[0] != 1'b0) :
+                                             (instr_is_compressed ? (next_pc_target[0] != 1'b0) :
+                                                                    (next_pc_target[1:0] != 2'b00)));
 
   function automatic logic is_mem_misaligned(
       input logic [31:0] addr,
@@ -419,9 +510,16 @@ module sisRvCore #(
   assign is_mret   = dec_is_system && (dec_funct3 == 3'b000) && (decoded_instr[31:20] == 12'h302);
   assign is_csr_op = dec_is_system && (dec_funct3 != 3'b000);
 
+  logic wb_is_ecall, wb_is_ebreak, wb_is_mret, wb_is_csr_op;
+  assign wb_is_ecall  = wb_dec_is_system && (wb_dec_funct3 == 3'b000) && (instr_reg[31:20] == 12'h000);
+  assign wb_is_ebreak = wb_dec_is_system && (wb_dec_funct3 == 3'b000) && (instr_reg[31:20] == 12'h001);
+  assign wb_is_mret   = wb_dec_is_system && (wb_dec_funct3 == 3'b000) && (instr_reg[31:20] == 12'h302);
+  assign wb_is_csr_op = wb_dec_is_system && (wb_dec_funct3 != 3'b000);
+
   // CSR operation type from funct3
   // funct3: 001=CSRRW, 010=CSRRS, 011=CSRRC, 101=CSRRWI, 110=CSRRSI, 111=CSRRCI
   logic [1:0] csr_op_type;
+  logic [1:0] wb_csr_op_type;
   always_comb begin
     case (dec_funct3[1:0])
       2'b01: csr_op_type = 2'b01; // RW
@@ -429,11 +527,16 @@ module sisRvCore #(
       2'b11: csr_op_type = 2'b11; // RC
       default: csr_op_type = 2'b00;
     endcase
+    case (wb_dec_funct3[1:0])
+      2'b01: wb_csr_op_type = 2'b01;
+      2'b10: wb_csr_op_type = 2'b10;
+      2'b11: wb_csr_op_type = 2'b11;
+      default: wb_csr_op_type = 2'b00;
+    endcase
   end
 
-  // CSR source: immediate (funct3[2]=1) or register
   logic [31:0] csr_src_val;
-  assign csr_src_val = dec_funct3[2] ? {27'b0, dec_rs1} : rs1_val;
+  assign csr_src_val = wb_dec_funct3[2] ? {27'b0, wb_dec_rs1} : rs1_val;
 
   // ---------------------------------------------------------------
   // Store data and write strobe generation
@@ -604,7 +707,12 @@ module sisRvCore #(
 
         // ----- DECODE -----
         S_DECODE: begin
-          instr_reg <= decoded_instr;
+          instr_reg         <= decoded_instr;
+          wb_pc             <= pc;
+          wb_instr_len      <= instr_len;
+          wb_is_compressed  <= instr_is_compressed;
+          wb_instr_raw      <= instr_raw;
+          wb_illegal_compressed <= instr_is_compressed && decomp_illegal;
           rs1_val <= rf_rs1_data;
           rs2_val <= rf_rs2_data;
           state   <= S_EXECUTE;
@@ -642,36 +750,36 @@ module sisRvCore #(
         // ----- WRITEBACK + PC UPDATE -----
         S_WB: begin
           // PC update (illegal instructions trap before any control-flow effect)
-          if (fetch_err_reg || mem_err_reg || mem_misaligned_reg || instr_addr_misaligned || !dec_is_legal_eff) begin
+          if (fetch_err_reg || mem_err_reg || mem_misaligned_reg || wb_instr_addr_misaligned || !wb_dec_is_legal_eff) begin
             fetch_need_next_word <= 1'b0;
             fetch_upper_hold    <= 16'h0;
             pc <= mtvec_out;
-          end else if (dec_is_jal) begin
+          end else if (wb_dec_is_jal) begin
             fetch_need_next_word <= 1'b0;
             fetch_upper_hold    <= 16'h0;
-            pc <= jal_target;
-          end else if (dec_is_jalr) begin
+            pc <= wb_jal_target;
+          end else if (wb_dec_is_jalr) begin
             fetch_need_next_word <= 1'b0;
             fetch_upper_hold    <= 16'h0;
-            pc <= jalr_target;
-          end else if (dec_is_branch && branch_taken) begin
+            pc <= wb_jalr_target;
+          end else if (wb_dec_is_branch && wb_branch_taken) begin
             fetch_need_next_word <= 1'b0;
             fetch_upper_hold    <= 16'h0;
-            pc <= branch_target;
-          end else if (is_ecall || is_ebreak) begin
+            pc <= wb_branch_target;
+          end else if (wb_is_ecall || wb_is_ebreak) begin
             fetch_need_next_word <= 1'b0;
             fetch_upper_hold    <= 16'h0;
             pc <= mtvec_out;
-          end else if (is_mret) begin
+          end else if (wb_is_mret) begin
             fetch_need_next_word <= 1'b0;
             fetch_upper_hold    <= 16'h0;
             pc <= mepc_out;
-          end else if (irq_pending && !is_csr_op) begin
+          end else if (irq_pending && !wb_is_csr_op) begin
             fetch_need_next_word <= 1'b0;
             fetch_upper_hold    <= 16'h0;
             pc <= mtvec_out;
           end else begin
-            pc <= pc + (instr_len == 2'd2 ? 32'd2 : 32'd4);
+            pc <= wb_pc + (wb_instr_len == 2'd2 ? 32'd2 : 32'd4);
           end
 
           state <= S_FETCH_REQ;
@@ -728,24 +836,25 @@ module sisRvCore #(
     rf_rd_data = 32'h0;
 
     if (state == S_WB) begin
-      if (!fetch_err_reg && !mem_err_reg && !mem_misaligned_reg && !instr_addr_misaligned &&
-          dec_is_legal_eff && (dec_is_alu_reg || dec_is_alu_imm)) begin
+      rf_rd_addr = wb_dec_rd;
+      if (!fetch_err_reg && !mem_err_reg && !mem_misaligned_reg && !wb_instr_addr_misaligned &&
+          wb_dec_is_legal_eff && (wb_dec_is_alu_reg || wb_dec_is_alu_imm)) begin
         rf_wr_en  = 1'b1;
         rf_rd_data = alu_result_reg;
-      end else if (!fetch_err_reg && !mem_err_reg && !mem_misaligned_reg && !instr_addr_misaligned &&
-                   dec_is_legal_eff && (dec_is_lui || dec_is_auipc)) begin
+      end else if (!fetch_err_reg && !mem_err_reg && !mem_misaligned_reg && !wb_instr_addr_misaligned &&
+                   wb_dec_is_legal_eff && (wb_dec_is_lui || wb_dec_is_auipc)) begin
         rf_wr_en  = 1'b1;
         rf_rd_data = alu_result_reg;
-      end else if (!fetch_err_reg && !mem_err_reg && !mem_misaligned_reg && !instr_addr_misaligned &&
-                   dec_is_legal_eff && (dec_is_jal || dec_is_jalr)) begin
+      end else if (!fetch_err_reg && !mem_err_reg && !mem_misaligned_reg && !wb_instr_addr_misaligned &&
+                   wb_dec_is_legal_eff && (wb_dec_is_jal || wb_dec_is_jalr)) begin
         rf_wr_en  = 1'b1;
         rf_rd_data = alu_result_reg; // pc+4 (return address)
-      end else if (!fetch_err_reg && !mem_err_reg && !mem_misaligned_reg && !instr_addr_misaligned &&
-                   dec_is_legal_eff && dec_is_load) begin
+      end else if (!fetch_err_reg && !mem_err_reg && !mem_misaligned_reg && !wb_instr_addr_misaligned &&
+                   wb_dec_is_legal_eff && wb_dec_is_load) begin
         rf_wr_en  = 1'b1;
         rf_rd_data = load_result;
-      end else if (!fetch_err_reg && !mem_err_reg && !mem_misaligned_reg && !instr_addr_misaligned &&
-                   dec_is_legal_eff && is_csr_op) begin
+      end else if (!fetch_err_reg && !mem_err_reg && !mem_misaligned_reg && !wb_instr_addr_misaligned &&
+                   wb_dec_is_legal_eff && wb_is_csr_op) begin
         rf_wr_en  = 1'b1;
         rf_rd_data = csr_rdata_w;
       end
@@ -757,69 +866,69 @@ module sisRvCore #(
   // CSR control logic
   // ---------------------------------------------------------------
   always_comb begin
-    csr_addr_w  = decoded_instr[31:20];
+    csr_addr_w  = instr_reg[31:20];
     csr_wdata_w = csr_src_val;
-    csr_op_w    = csr_op_type;
+    csr_op_w    = wb_csr_op_type;
     csr_wen_w   = 1'b0;
     trap_enter  = 1'b0;
     trap_cause  = 32'h0;
     trap_val    = 32'h0;
-    trap_epc    = pc;
+    trap_epc    = wb_pc;
     mret_exec   = 1'b0;
     instr_retire = 1'b0;
 
     if (state == S_WB) begin
-      instr_retire = !(fetch_err_reg || mem_err_reg || mem_misaligned_reg || instr_addr_misaligned || !dec_is_legal_eff ||
-                       is_ecall || is_ebreak || irq_pending);
+      instr_retire = !(fetch_err_reg || mem_err_reg || mem_misaligned_reg || wb_instr_addr_misaligned || !wb_dec_is_legal_eff ||
+                       wb_is_ecall || wb_is_ebreak || irq_pending);
 
       if (fetch_err_reg) begin
         trap_enter = 1'b1;
         trap_cause = 32'd1; // Instruction access fault
-        trap_val   = pc;
-        trap_epc   = pc;
+        trap_val   = wb_pc;
+        trap_epc   = wb_pc;
         instr_retire = 1'b0;
       end else if (mem_misaligned_reg) begin
         trap_enter = 1'b1;
-        trap_cause = dec_is_store ? 32'd6 : 32'd4; // Store/load address misaligned
+        trap_cause = wb_dec_is_store ? 32'd6 : 32'd4; // Store/load address misaligned
         trap_val   = mem_addr_reg;
-        trap_epc   = pc;
+        trap_epc   = wb_pc;
         instr_retire = 1'b0;
       end else if (mem_err_reg) begin
         trap_enter = 1'b1;
-        trap_cause = dec_is_store ? 32'd7 : 32'd5; // Store/load access fault
+        trap_cause = wb_dec_is_store ? 32'd7 : 32'd5; // Store/load access fault
         trap_val   = mem_addr_reg;
-        trap_epc   = pc;
+        trap_epc   = wb_pc;
         instr_retire = 1'b0;
-      end else if (instr_addr_misaligned) begin
+      end else if (wb_instr_addr_misaligned) begin
         trap_enter = 1'b1;
         trap_cause = 32'd0; // Instruction address misaligned
-        trap_val   = next_pc_target;
-        trap_epc   = pc;
+        trap_val   = wb_next_pc_target;
+        trap_epc   = wb_pc;
         instr_retire = 1'b0;
-      end else if (!dec_is_legal_eff) begin
+      end else if (!wb_dec_is_legal_eff) begin
         trap_enter = 1'b1;
         trap_cause = 32'd2;
-        trap_val   = instr_is_compressed ? {16'h0, instr_raw[15:0]} : instr_raw;
-        trap_epc   = pc;
+        trap_val   = wb_is_compressed ? {16'h0, wb_instr_raw[15:0]} : wb_instr_raw;
+        trap_epc   = wb_pc;
         instr_retire = 1'b0;
-      end else if (dec_is_legal_eff && is_csr_op) begin
+      end else if (wb_dec_is_legal_eff && wb_is_csr_op) begin
         csr_wen_w = 1'b1;
-      end else if (is_ecall) begin
+      end else if (wb_is_ecall) begin
         trap_enter = 1'b1;
         trap_cause = 32'd11; // Environment call from M-mode
-        trap_epc   = pc;
+        trap_epc   = wb_pc;
         instr_retire = 1'b0;
-      end else if (is_ebreak) begin
+      end else if (wb_is_ebreak) begin
         trap_enter = 1'b1;
         trap_cause = 32'd3; // Breakpoint
-        trap_epc   = pc;
+        trap_epc   = wb_pc;
         instr_retire = 1'b0;
-      end else if (is_mret) begin
+      end else if (wb_is_mret) begin
         mret_exec = 1'b1;
       end else if (irq_pending) begin
         trap_enter = 1'b1;
         trap_cause = irq_cause;
-        trap_epc   = pc + (instr_len == 2'd2 ? 32'd2 : 32'd4);
+        trap_epc   = wb_pc + (wb_instr_len == 2'd2 ? 32'd2 : 32'd4);
         instr_retire = 1'b0;
       end
     end
@@ -837,7 +946,7 @@ module sisRvCore #(
   always_ff @(posedge clk) begin
     if (rst_n && state == S_WB && instr_retire) begin
       dpi_sisrv_retire_insn(
-        pc,
+        wb_pc,
         instr_reg,
         rf_rd_addr,
         rf_rd_data,
