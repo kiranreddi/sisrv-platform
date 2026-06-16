@@ -34,7 +34,7 @@ jobs:
         run: make lint
 
   regress:
-    name: Assembly Regression (42 tests + pipeline debug)
+    name: Assembly Regression (42 tests + pipeline guards)
     runs-on: ubuntu-latest
     needs: lint
     steps:
@@ -58,6 +58,9 @@ jobs:
 
       - name: Run Regression
         run: make regress
+
+      - name: Run Pipeline Throughput Guard
+        run: make pipeline-throughput
 
       - name: Run AXI-Lite Regression
         run: make regress-axil
