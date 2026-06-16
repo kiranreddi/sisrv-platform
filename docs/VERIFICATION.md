@@ -7,7 +7,7 @@ tests, randomized cocotb unit tests, and formal proofs. All tests run on Verilat
 
 ## Verification Tiers
 
-### Tier 1: Directed Assembly Tests (42 tests)
+### Tier 1: Directed Assembly Tests (42 regression tests + throughput guard)
 
 Self-checking assembly tests that write 1 to `0x10000000` (PASS) or 0 (FAIL).
 Compiled with `rv32im_zicsr` ISA and run on the full platform simulation.
@@ -31,7 +31,7 @@ Compiled with `rv32im_zicsr` ISA and run on the full platform simulation.
 | UART | test_uart | TXDATA/RXDATA/STATUS/CTRL/BAUDDIV MMIO registers and loopback |
 | System | test_fence, test_lui_auipc, test_x0, test_wfi, test_pass | FENCE NOP, LUI/AUIPC, x0=0 invariant, WFI legal no-op |
 | Stress | test_back_to_back | Fibonacci, register stress, tight loops |
-| Pipeline | test_pipeline_forwarding, test_pipeline_load_use, test_pipeline_flush, test_pipeline_trap_flush, test_pipeline_interrupt_flush, test_pipeline_debug_step | M6 forwarding, load-use stall, branch/jump/trap/interrupt flush, debug-step program |
+| Pipeline | test_pipeline_forwarding, test_pipeline_load_use, test_pipeline_flush, test_pipeline_trap_flush, test_pipeline_interrupt_flush, test_pipeline_debug_step; `make pipeline-throughput` runs test_pipeline_throughput on direct corebus | M6 forwarding, load-use stall, branch/jump/trap/interrupt flush, independent ALU throughput guard, debug-step program |
 
 ### Tier 2: cocotb Randomized Tests (43 tests)
 
@@ -119,8 +119,11 @@ Unit-level tests using cocotb with constrained random stimulus on Verilator 5.03
 ## Running Tests
 
 ```bash
-# Run all assembly tests (42 tests)
+# Run all assembly regression tests (42 tests)
 make regress
+
+# Run direct-corebus pipeline throughput guard
+make pipeline-throughput
 
 # Run M6 debug halt/single-step retirement check
 make pipeline-debug
@@ -165,7 +168,7 @@ See `verification/riscof/README.md` for toolchain install, signature dump flow, 
 
 GitHub Actions workflow (`.github/workflows/ci.yml`) runs on every push/PR:
 1. **Lint** — Verilator lint check
-2. **Regression** — 42 assembly tests (corebus + AXI-Lite paths) plus `make pipeline-debug`
+2. **Regression** — 42 assembly tests (corebus + AXI-Lite paths) plus `make pipeline-debug` and `make pipeline-throughput`
 3. **cocotb** — 43 randomized unit tests
 4. **Formal** — ALU + RegFile + Decoder proofs
 5. **Synth** — Yosys synthesis (`make synth`)

@@ -187,10 +187,11 @@ Key principles:
 - Improve performance while preserving ISA behavior and external interfaces.
 
 ### Current progress
-- ✅ Replaced the single global core FSM with IF, ID, and EX/MEM/WB pipeline state.
+- ✅ Replaced the single global core FSM with independent IF, ID, EX/MEM, and
+  WB/retire pipeline state.
 - ✅ Added a single-outstanding corebus owner for instruction fetch vs data memory;
   data memory has priority.
-- ✅ Added WB bypass/forwarding, load-use stalls, branch/jump flush,
+- ✅ Added EX/WB bypass/forwarding, load-use stalls, branch/jump flush,
   trap/interrupt/mret flush from retirement, and debug single-step retirement
   gating.
 - ✅ Existing corebus, CSR/trap, interrupt, debug, compressed-instruction, AXI, and
@@ -203,15 +204,15 @@ Key principles:
   - `make pipeline-debug`
 
 ### Approach
-- Keep the 3-stage (IF/ID/EX+MEM+WB) implementation constrained to:
+- Keep the IF/ID/EX-MEM pipeline plus WB/retire slot constrained to:
   - internal corebus interface
   - CSR/trap semantics
-  - precise retirement from EX/MEM/WB
+  - precise retirement from WB
 
 ### Exit criteria
 - 42-test directed regression passes through direct corebus and AXI-Lite paths.
 - Pipeline-directed forwarding, load-use, branch/jump flush, trap flush,
-  interrupt flush, and debug halt/single-step tests pass.
+  interrupt flush, throughput, and debug halt/single-step tests pass.
 - CPI/CoreMark benchmarking remains a follow-on product metric, not an M6 RTL gate.
 
 ---

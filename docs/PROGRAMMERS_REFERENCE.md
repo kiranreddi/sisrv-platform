@@ -55,5 +55,6 @@ bit 2 for step mode, and bit 0 for `dmactive`.
 
 ## Performance
 
-The core is a 3-stage in-order pipeline. Benchmark CPI/CoreMark data is tracked in
+The core is an in-order IF/ID/EX-MEM pipeline with an independent WB/retire slot.
+Benchmark CPI/CoreMark data is tracked in
 [PPA_DATASHEET.md](PPA_DATASHEET.md).

@@ -30,10 +30,11 @@ CPP_SRCS := tb/verilator/main.cpp
 PIPELINE_DEBUG_CPP_SRCS := tb/verilator/pipeline_debug_main.cpp
 
 # Test sources
-ASM_TESTS := $(wildcard sw/tests/asm/*.S)
+PIPELINE_THROUGHPUT_TEST := sw/tests/asm/test_pipeline_throughput.S
+ASM_TESTS := $(filter-out $(PIPELINE_THROUGHPUT_TEST),$(wildcard sw/tests/asm/*.S))
 ASM_HEXES := $(patsubst sw/tests/asm/%.S,$(BUILD)/tests/%.hex,$(ASM_TESTS))
 
-.PHONY: sim lint clean wave regress regress-axil regress-axil-stall pipeline-debug sw all tests cocotb formal formal-axil synth sta sta-sky130 cosim-lockstep \
+.PHONY: sim lint clean wave regress regress-axil regress-axil-stall pipeline-debug pipeline-throughput sw all tests cocotb formal formal-axil synth sta sta-sky130 cosim-lockstep \
         riscof-check-tools riscof-smoke riscof-act riscof-rv32i riscof-rv32im
 
 
@@ -152,6 +153,11 @@ pipeline-debug: $(PIPELINE_DEBUG_SIM) $(BUILD)/tests/test_pipeline_debug_step.he
 	@touch ram.hex
 	@cp $(BUILD)/tests/test_pipeline_debug_step.hex rom.hex
 	@$(PIPELINE_DEBUG_SIM) && rm -f rom.hex ram.hex || (rm -f rom.hex ram.hex; exit 1)
+
+pipeline-throughput: $(SIM) $(BUILD)/tests/test_pipeline_throughput.hex
+	@touch ram.hex
+	@cp $(BUILD)/tests/test_pipeline_throughput.hex rom.hex
+	@$(SIM) && rm -f rom.hex ram.hex || (rm -f rom.hex ram.hex; exit 1)
 
 clean:
 	rm -rf $(BUILD) obj_dir obj_dir_pipeline_debug rom.hex ram.hex

@@ -1,8 +1,9 @@
-// sisRvCore.sv - RV32IMC core with a 3-stage pipeline.
+// sisRvCore.sv - RV32IMC core with an in-order pipeline.
 // Stages:
 //   IF        - instruction fetch, including RV32C halfword assembly
 //   ID        - decode and register read
-//   EX/MEM/WB - execute, data memory, writeback, CSR/trap retirement
+//   EX/MEM    - execute and data-memory request/response
+//   WB        - writeback, CSR/trap retirement
 //
 // The external corebus contract remains single-outstanding. Instruction fetch
 // and data memory arbitrate internally; data memory has priority.
@@ -171,7 +172,7 @@ module sisRvCore #(
   assign dbg_abs_ready = dbg_abs_valid && halted;
 
   // ---------------------------------------------------------------
-  // EX/MEM/WB stage registers
+  // EX/MEM stage registers
   // ---------------------------------------------------------------
   ex_state_t  ex_state;
   logic       ex_valid;
@@ -200,6 +201,41 @@ module sisRvCore #(
   logic [31:0] ex_mem_rdata_reg;
   logic        ex_mem_err;
   logic        ex_mem_misaligned;
+
+  // ---------------------------------------------------------------
+  // WB/retire stage registers
+  // ---------------------------------------------------------------
+  logic        wb_valid;
+  logic [31:0] wb_pc;
+  logic [31:0] wb_instr;
+  logic [31:0] wb_raw;
+  logic [1:0]  wb_len;
+  logic        wb_is_compressed;
+  logic        wb_fetch_err;
+  logic        wb_illegal_compressed;
+
+  logic [4:0]  wb_rd;
+  logic [2:0]  wb_funct3;
+  logic        wb_is_lui, wb_is_auipc, wb_is_jal, wb_is_jalr;
+  logic        wb_is_load, wb_is_store;
+  logic        wb_is_alu_imm, wb_is_alu_reg;
+  logic        wb_is_legal;
+
+  logic [31:0] wb_alu_result;
+  logic [31:0] wb_mem_addr;
+  logic [31:0] wb_mem_rdata;
+  logic        wb_mem_err;
+  logic        wb_mem_misaligned;
+  logic        wb_instr_addr_misaligned;
+  logic        wb_dec_is_legal_eff;
+  logic        wb_is_ecall, wb_is_ebreak, wb_is_mret, wb_is_csr_op;
+  logic [1:0]  wb_csr_op_type;
+  logic [31:0] wb_csr_src_val;
+  logic [31:0] wb_pc_sequential;
+  logic [31:0] wb_next_pc_target;
+  logic [31:0] wb_pc_next;
+  logic        wb_irq_pending;
+  logic [31:0] wb_irq_cause;
 
   logic        halted;
   logic        step_active;
@@ -372,12 +408,25 @@ module sisRvCore #(
   logic        ex_instr_addr_misaligned;
   logic        ex_redirect;
   logic [1:0]  ex_csr_op_type;
-  logic [31:0] csr_src_val;
-  logic [31:0] load_result;
+  logic [31:0] ex_csr_src_val;
+  logic [31:0] wb_load_result;
   logic [31:0] store_data;
   logic [3:0]  store_strb;
-  logic [31:0] ex_wb_result;
-  logic        ex_writes_rd;
+  logic [31:0] wb_result;
+  logic        wb_writes_rd;
+  logic        ex_mem_access;
+  logic        ex_exec_to_wb;
+  logic        ex_mem_to_wb;
+  logic        ex_to_wb_fire;
+  logic [31:0] ex_complete_alu_result;
+  logic [31:0] ex_complete_mem_addr;
+  logic [31:0] ex_complete_mem_rdata;
+  logic        ex_complete_mem_err;
+  logic        ex_complete_mem_misaligned;
+  logic        ex_forward_valid;
+  logic [31:0] ex_forward_result;
+  logic        id_depends_ex_rd;
+  logic        id_ex_hazard;
 
   assign ex_pc_sequential = ex_pc + ((ex_len == 2'd2) ? 32'd2 : 32'd4);
   assign ex_is_ecall  = ex_is_system && (ex_funct3 == 3'b000) && (ex_instr[31:20] == 12'h000);
@@ -423,9 +472,37 @@ module sisRvCore #(
                                                 (ex_is_compressed ? (ex_next_pc_target[0] != 1'b0) :
                                                                     (ex_next_pc_target[1:0] != 2'b00)));
 
+  function automatic logic is_mem_misaligned(
+      input logic [31:0] addr,
+      input logic [2:0]  funct3
+  );
+    begin
+      case (funct3[1:0])
+        2'b00: is_mem_misaligned = 1'b0;
+        2'b01: is_mem_misaligned = addr[0];
+        2'b10: is_mem_misaligned = |addr[1:0];
+        default: is_mem_misaligned = 1'b0;
+      endcase
+    end
+  endfunction
+
+  assign ex_mem_access = (ex_is_load || ex_is_store) && !is_mem_misaligned(alu_result, ex_funct3);
+  assign ex_exec_to_wb = ex_valid && (ex_state == EX_EXEC) && !ex_mem_access;
+  assign ex_mem_to_wb  = ex_valid && (ex_state == EX_MEM_WAIT) && data_rsp_fire;
+  assign ex_to_wb_fire = ex_exec_to_wb || ex_mem_to_wb;
+
+  assign ex_complete_alu_result     = ex_exec_to_wb ? (ex_is_m_op ? m_result : alu_result) : ex_alu_result_reg;
+  assign ex_complete_mem_addr       = ex_exec_to_wb ? alu_result : ex_mem_addr_reg;
+  assign ex_complete_mem_rdata      = ex_mem_to_wb ? rsp_rdata : ex_mem_rdata_reg;
+  assign ex_complete_mem_err        = ex_mem_to_wb ? rsp_err : ex_mem_err;
+  assign ex_complete_mem_misaligned = ex_exec_to_wb ?
+                                      ((ex_is_load || ex_is_store) && is_mem_misaligned(alu_result, ex_funct3)) :
+                                      ex_mem_misaligned;
+
   always_comb begin
     ex_pc_next = ex_pc_sequential;
-    if (ex_fetch_err || ex_mem_err || ex_mem_misaligned || ex_instr_addr_misaligned || !ex_dec_is_legal_eff) begin
+    if (ex_fetch_err || ex_complete_mem_err || ex_complete_mem_misaligned ||
+        ex_instr_addr_misaligned || !ex_dec_is_legal_eff) begin
       ex_pc_next = mtvec_out;
     end else if (ex_is_jal) begin
       ex_pc_next = ex_jal_target;
@@ -442,26 +519,12 @@ module sisRvCore #(
     end
   end
 
-  assign ex_redirect = ex_valid && (ex_state == EX_WB) &&
-                       (ex_fetch_err || ex_mem_err || ex_mem_misaligned ||
+  assign ex_redirect = ex_to_wb_fire && !wb_single_step_stop &&
+                       (ex_fetch_err || ex_complete_mem_err || ex_complete_mem_misaligned ||
                         ex_instr_addr_misaligned || !ex_dec_is_legal_eff ||
                         ex_is_jal || ex_is_jalr || (ex_is_branch && ex_branch_taken) ||
                         ex_is_ecall || ex_is_ebreak || ex_is_mret ||
                         (irq_pending && !ex_is_csr_op));
-
-  function automatic logic is_mem_misaligned(
-      input logic [31:0] addr,
-      input logic [2:0]  funct3
-  );
-    begin
-      case (funct3[1:0])
-        2'b00: is_mem_misaligned = 1'b0;
-        2'b01: is_mem_misaligned = addr[0];
-        2'b10: is_mem_misaligned = |addr[1:0];
-        default: is_mem_misaligned = 1'b0;
-      endcase
-    end
-  endfunction
 
   always_comb begin
     store_data = 32'h0;
@@ -490,38 +553,38 @@ module sisRvCore #(
   end
 
   always_comb begin
-    load_result = 32'h0;
-    case (ex_funct3)
+    wb_load_result = 32'h0;
+    case (wb_funct3)
       3'b000: begin
-        case (ex_mem_addr_reg[1:0])
-          2'b00: load_result = {{24{ex_mem_rdata_reg[7]}},  ex_mem_rdata_reg[7:0]};
-          2'b01: load_result = {{24{ex_mem_rdata_reg[15]}}, ex_mem_rdata_reg[15:8]};
-          2'b10: load_result = {{24{ex_mem_rdata_reg[23]}}, ex_mem_rdata_reg[23:16]};
-          2'b11: load_result = {{24{ex_mem_rdata_reg[31]}}, ex_mem_rdata_reg[31:24]};
+        case (wb_mem_addr[1:0])
+          2'b00: wb_load_result = {{24{wb_mem_rdata[7]}},  wb_mem_rdata[7:0]};
+          2'b01: wb_load_result = {{24{wb_mem_rdata[15]}}, wb_mem_rdata[15:8]};
+          2'b10: wb_load_result = {{24{wb_mem_rdata[23]}}, wb_mem_rdata[23:16]};
+          2'b11: wb_load_result = {{24{wb_mem_rdata[31]}}, wb_mem_rdata[31:24]};
         endcase
       end
       3'b001: begin
-        case (ex_mem_addr_reg[1])
-          1'b0: load_result = {{16{ex_mem_rdata_reg[15]}}, ex_mem_rdata_reg[15:0]};
-          1'b1: load_result = {{16{ex_mem_rdata_reg[31]}}, ex_mem_rdata_reg[31:16]};
+        case (wb_mem_addr[1])
+          1'b0: wb_load_result = {{16{wb_mem_rdata[15]}}, wb_mem_rdata[15:0]};
+          1'b1: wb_load_result = {{16{wb_mem_rdata[31]}}, wb_mem_rdata[31:16]};
         endcase
       end
-      3'b010: load_result = ex_mem_rdata_reg;
+      3'b010: wb_load_result = wb_mem_rdata;
       3'b100: begin
-        case (ex_mem_addr_reg[1:0])
-          2'b00: load_result = {24'b0, ex_mem_rdata_reg[7:0]};
-          2'b01: load_result = {24'b0, ex_mem_rdata_reg[15:8]};
-          2'b10: load_result = {24'b0, ex_mem_rdata_reg[23:16]};
-          2'b11: load_result = {24'b0, ex_mem_rdata_reg[31:24]};
+        case (wb_mem_addr[1:0])
+          2'b00: wb_load_result = {24'b0, wb_mem_rdata[7:0]};
+          2'b01: wb_load_result = {24'b0, wb_mem_rdata[15:8]};
+          2'b10: wb_load_result = {24'b0, wb_mem_rdata[23:16]};
+          2'b11: wb_load_result = {24'b0, wb_mem_rdata[31:24]};
         endcase
       end
       3'b101: begin
-        case (ex_mem_addr_reg[1])
-          1'b0: load_result = {16'b0, ex_mem_rdata_reg[15:0]};
-          1'b1: load_result = {16'b0, ex_mem_rdata_reg[31:16]};
+        case (wb_mem_addr[1])
+          1'b0: wb_load_result = {16'b0, wb_mem_rdata[15:0]};
+          1'b1: wb_load_result = {16'b0, wb_mem_rdata[31:16]};
         endcase
       end
-      default: load_result = ex_mem_rdata_reg;
+      default: wb_load_result = wb_mem_rdata;
     endcase
   end
 
@@ -535,34 +598,52 @@ module sisRvCore #(
     endcase
   end
 
-  assign csr_src_val = ex_funct3[2] ? {27'b0, ex_rs1} : ex_rs1_val;
+  assign ex_csr_src_val = ex_funct3[2] ? {27'b0, ex_rs1} : ex_rs1_val;
 
   always_comb begin
-    ex_wb_result = ex_alu_result_reg;
-    if (ex_is_load) begin
-      ex_wb_result = load_result;
-    end else if (ex_is_csr_op) begin
-      ex_wb_result = csr_rdata_w;
+    wb_result = wb_alu_result;
+    if (wb_is_load) begin
+      wb_result = wb_load_result;
+    end else if (wb_is_csr_op) begin
+      wb_result = csr_rdata_w;
     end
   end
 
-  assign ex_writes_rd = ex_valid && (ex_state == EX_WB) &&
-                        !ex_fetch_err && !ex_mem_err && !ex_mem_misaligned &&
-                        !ex_instr_addr_misaligned && ex_dec_is_legal_eff &&
-                        (ex_is_alu_reg || ex_is_alu_imm || ex_is_lui ||
-                         ex_is_auipc || ex_is_jal || ex_is_jalr ||
-                         ex_is_load || ex_is_csr_op);
+  assign wb_writes_rd = wb_valid &&
+                        !wb_fetch_err && !wb_mem_err && !wb_mem_misaligned &&
+                        !wb_instr_addr_misaligned && wb_dec_is_legal_eff &&
+                        (wb_is_alu_reg || wb_is_alu_imm || wb_is_lui ||
+                         wb_is_auipc || wb_is_jal || wb_is_jalr ||
+                         wb_is_load || wb_is_csr_op);
 
-  // ID reads see same-cycle WB data through this bypass.
+  assign ex_forward_valid = ex_valid && (ex_state == EX_EXEC) &&
+                            !ex_fetch_err && !ex_instr_addr_misaligned &&
+                            ex_dec_is_legal_eff && !ex_is_load && !ex_is_store &&
+                            !ex_is_csr_op &&
+                            (ex_is_alu_reg || ex_is_alu_imm || ex_is_lui ||
+                             ex_is_auipc || ex_is_jal || ex_is_jalr);
+  assign ex_forward_result = ex_is_m_op ? m_result : alu_result;
+
+  assign id_depends_ex_rd = if_id_valid && ex_valid && (ex_rd != 5'd0) &&
+                            ((ex_rd == dec_rs1) || (ex_rd == dec_rs2));
+  assign id_ex_hazard = id_depends_ex_rd && !ex_forward_valid;
+
+  // ID reads see WB and same-cycle EX completion through these bypasses.
   logic [31:0] id_rs1_val, id_rs2_val;
   always_comb begin
     id_rs1_val = rf_rs1_data;
     id_rs2_val = rf_rs2_data;
-    if (ex_writes_rd && (ex_rd != 5'd0) && (ex_rd == dec_rs1)) begin
-      id_rs1_val = ex_wb_result;
+    if (wb_writes_rd && (wb_rd != 5'd0) && (wb_rd == dec_rs1)) begin
+      id_rs1_val = wb_result;
     end
-    if (ex_writes_rd && (ex_rd != 5'd0) && (ex_rd == dec_rs2)) begin
-      id_rs2_val = ex_wb_result;
+    if (wb_writes_rd && (wb_rd != 5'd0) && (wb_rd == dec_rs2)) begin
+      id_rs2_val = wb_result;
+    end
+    if (ex_forward_valid && (ex_rd != 5'd0) && (ex_rd == dec_rs1)) begin
+      id_rs1_val = ex_forward_result;
+    end
+    if (ex_forward_valid && (ex_rd != 5'd0) && (ex_rd == dec_rs2)) begin
+      id_rs2_val = ex_forward_result;
     end
   end
 
@@ -578,8 +659,9 @@ module sisRvCore #(
 
   assign data_req_active = ex_valid && (ex_state == EX_MEM_REQ);
   assign if_req_active   = !halted && !dbg_halt_req && (!dbg_single_step || step_active) &&
+                           !wb_single_step_stop &&
                            !ex_redirect &&
-                           !if_id_valid &&
+                           (!if_id_valid || id_to_ex_fire) &&
                            ((if_state == IF_REQ) || (if_state == IF_SECOND_REQ));
 
   always_comb begin
@@ -614,79 +696,79 @@ module sisRvCore #(
   // Register file write logic
   // ---------------------------------------------------------------
   always_comb begin
-    rf_wr_en   = ex_writes_rd;
-    rf_rd_addr = ex_rd;
-    rf_rd_data = ex_wb_result;
+    rf_wr_en   = wb_writes_rd;
+    rf_rd_addr = wb_rd;
+    rf_rd_data = wb_result;
   end
 
   // ---------------------------------------------------------------
   // CSR control logic
   // ---------------------------------------------------------------
   always_comb begin
-    csr_addr_w   = ex_instr[31:20];
-    csr_wdata_w  = csr_src_val;
-    csr_op_w     = ex_csr_op_type;
+    csr_addr_w   = wb_instr[31:20];
+    csr_wdata_w  = wb_csr_src_val;
+    csr_op_w     = wb_csr_op_type;
     csr_wen_w    = 1'b0;
     trap_enter   = 1'b0;
     trap_cause   = 32'h0;
     trap_val     = 32'h0;
-    trap_epc     = ex_pc;
+    trap_epc     = wb_pc;
     mret_exec    = 1'b0;
     instr_retire = 1'b0;
 
-    if (ex_valid && (ex_state == EX_WB)) begin
-      instr_retire = !(ex_fetch_err || ex_mem_err || ex_mem_misaligned ||
-                       ex_instr_addr_misaligned || !ex_dec_is_legal_eff ||
-                       ex_is_ecall || ex_is_ebreak || (irq_pending && !ex_is_csr_op));
+    if (wb_valid) begin
+      instr_retire = !(wb_fetch_err || wb_mem_err || wb_mem_misaligned ||
+                       wb_instr_addr_misaligned || !wb_dec_is_legal_eff ||
+                       wb_is_ecall || wb_is_ebreak || (wb_irq_pending && !wb_is_csr_op));
 
-      if (ex_fetch_err) begin
+      if (wb_fetch_err) begin
         trap_enter = 1'b1;
         trap_cause = 32'd1;
-        trap_val   = ex_pc;
-        trap_epc   = ex_pc;
+        trap_val   = wb_pc;
+        trap_epc   = wb_pc;
         instr_retire = 1'b0;
-      end else if (ex_mem_misaligned) begin
+      end else if (wb_mem_misaligned) begin
         trap_enter = 1'b1;
-        trap_cause = ex_is_store ? 32'd6 : 32'd4;
-        trap_val   = ex_mem_addr_reg;
-        trap_epc   = ex_pc;
+        trap_cause = wb_is_store ? 32'd6 : 32'd4;
+        trap_val   = wb_mem_addr;
+        trap_epc   = wb_pc;
         instr_retire = 1'b0;
-      end else if (ex_mem_err) begin
+      end else if (wb_mem_err) begin
         trap_enter = 1'b1;
-        trap_cause = ex_is_store ? 32'd7 : 32'd5;
-        trap_val   = ex_mem_addr_reg;
-        trap_epc   = ex_pc;
+        trap_cause = wb_is_store ? 32'd7 : 32'd5;
+        trap_val   = wb_mem_addr;
+        trap_epc   = wb_pc;
         instr_retire = 1'b0;
-      end else if (ex_instr_addr_misaligned) begin
+      end else if (wb_instr_addr_misaligned) begin
         trap_enter = 1'b1;
         trap_cause = 32'd0;
-        trap_val   = ex_next_pc_target;
-        trap_epc   = ex_pc;
+        trap_val   = wb_next_pc_target;
+        trap_epc   = wb_pc;
         instr_retire = 1'b0;
-      end else if (!ex_dec_is_legal_eff) begin
+      end else if (!wb_dec_is_legal_eff) begin
         trap_enter = 1'b1;
         trap_cause = 32'd2;
-        trap_val   = ex_is_compressed ? {16'h0, ex_raw[15:0]} : ex_raw;
-        trap_epc   = ex_pc;
+        trap_val   = wb_is_compressed ? {16'h0, wb_raw[15:0]} : wb_raw;
+        trap_epc   = wb_pc;
         instr_retire = 1'b0;
-      end else if (ex_is_csr_op) begin
+      end else if (wb_is_csr_op) begin
         csr_wen_w = 1'b1;
-      end else if (ex_is_ecall) begin
+      end else if (wb_is_ecall) begin
         trap_enter = 1'b1;
         trap_cause = 32'd11;
-        trap_epc   = ex_pc;
+        trap_epc   = wb_pc;
         instr_retire = 1'b0;
-      end else if (ex_is_ebreak) begin
+      end else if (wb_is_ebreak) begin
         trap_enter = 1'b1;
         trap_cause = 32'd3;
-        trap_epc   = ex_pc;
+        trap_epc   = wb_pc;
         instr_retire = 1'b0;
-      end else if (ex_is_mret) begin
+      end else if (wb_is_mret) begin
         mret_exec = 1'b1;
-      end else if (irq_pending && !ex_is_csr_op) begin
+      end else if (wb_irq_pending && !wb_is_csr_op) begin
         trap_enter = 1'b1;
-        trap_cause = irq_cause;
-        trap_epc   = ex_pc_sequential;
+        trap_cause = wb_irq_cause;
+        trap_epc   = wb_pc_sequential;
         instr_retire = 1'b0;
       end
     end
@@ -699,10 +781,12 @@ module sisRvCore #(
   logic id_to_ex_fire;
   logic wb_single_step_stop;
 
-  assign ex_can_accept = !ex_valid || (ex_valid && (ex_state == EX_WB));
+  assign ex_can_accept = !ex_valid || ex_to_wb_fire;
   assign id_to_ex_fire = if_id_valid && ex_can_accept && !ex_redirect &&
+                         !id_ex_hazard &&
+                         !wb_single_step_stop &&
                          !halted && !dbg_halt_req && (!dbg_single_step || step_active);
-  assign wb_single_step_stop = step_active && ex_valid && (ex_state == EX_WB) && instr_retire;
+  assign wb_single_step_stop = step_active && wb_valid && instr_retire;
 
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
@@ -760,9 +844,50 @@ module sisRvCore #(
       ex_mem_rdata_reg      <= 32'h0;
       ex_mem_err            <= 1'b0;
       ex_mem_misaligned     <= 1'b0;
+
+      wb_valid                <= 1'b0;
+      wb_pc                   <= 32'h0;
+      wb_instr                <= 32'h0000_0013;
+      wb_raw                  <= 32'h0000_0013;
+      wb_len                  <= 2'd0;
+      wb_is_compressed        <= 1'b0;
+      wb_fetch_err            <= 1'b0;
+      wb_illegal_compressed   <= 1'b0;
+      wb_rd                   <= 5'd0;
+      wb_funct3               <= 3'h0;
+      wb_is_lui               <= 1'b0;
+      wb_is_auipc             <= 1'b0;
+      wb_is_jal               <= 1'b0;
+      wb_is_jalr              <= 1'b0;
+      wb_is_load              <= 1'b0;
+      wb_is_store             <= 1'b0;
+      wb_is_alu_imm           <= 1'b0;
+      wb_is_alu_reg           <= 1'b0;
+      wb_is_legal             <= 1'b0;
+      wb_alu_result           <= 32'h0;
+      wb_mem_addr             <= 32'h0;
+      wb_mem_rdata            <= 32'h0;
+      wb_mem_err              <= 1'b0;
+      wb_mem_misaligned       <= 1'b0;
+      wb_instr_addr_misaligned <= 1'b0;
+      wb_dec_is_legal_eff     <= 1'b0;
+      wb_is_ecall             <= 1'b0;
+      wb_is_ebreak            <= 1'b0;
+      wb_is_mret              <= 1'b0;
+      wb_is_csr_op            <= 1'b0;
+      wb_csr_op_type          <= 2'b00;
+      wb_csr_src_val          <= 32'h0;
+      wb_pc_sequential        <= 32'h0;
+      wb_next_pc_target       <= 32'h0;
+      wb_pc_next              <= 32'h0;
+      wb_irq_pending          <= 1'b0;
+      wb_irq_cause            <= 32'h0;
+
       halted                <= 1'b0;
       step_active           <= 1'b0;
     end else begin
+      wb_valid <= 1'b0;
+
       if (dbg_halt_req) begin
         halted      <= 1'b1;
         step_active <= 1'b0;
@@ -859,10 +984,10 @@ module sisRvCore #(
             ex_mem_addr_reg   <= alu_result;
             ex_mem_misaligned <= (ex_is_load || ex_is_store) && is_mem_misaligned(alu_result, ex_funct3);
             ex_mem_err        <= 1'b0;
-            if ((ex_is_load || ex_is_store) && !is_mem_misaligned(alu_result, ex_funct3)) begin
+            if (ex_mem_access) begin
               ex_state <= EX_MEM_REQ;
-            end else begin
-              ex_state <= EX_WB;
+            end else if (ex_to_wb_fire) begin
+              ex_valid <= 1'b0;
             end
           end
 
@@ -876,7 +1001,7 @@ module sisRvCore #(
             if (data_rsp_fire) begin
               ex_mem_rdata_reg <= rsp_rdata;
               ex_mem_err       <= rsp_err;
-              ex_state         <= EX_WB;
+              ex_valid         <= 1'b0;
             end
           end
 
@@ -886,6 +1011,46 @@ module sisRvCore #(
 
           default: ex_state <= EX_EXEC;
         endcase
+      end
+
+      if (ex_to_wb_fire) begin
+        wb_valid                <= 1'b1;
+        wb_pc                   <= ex_pc;
+        wb_instr                <= ex_instr;
+        wb_raw                  <= ex_raw;
+        wb_len                  <= ex_len;
+        wb_is_compressed        <= ex_is_compressed;
+        wb_fetch_err            <= ex_fetch_err;
+        wb_illegal_compressed   <= ex_illegal_compressed;
+        wb_rd                   <= ex_rd;
+        wb_funct3               <= ex_funct3;
+        wb_is_lui               <= ex_is_lui;
+        wb_is_auipc             <= ex_is_auipc;
+        wb_is_jal               <= ex_is_jal;
+        wb_is_jalr              <= ex_is_jalr;
+        wb_is_load              <= ex_is_load;
+        wb_is_store             <= ex_is_store;
+        wb_is_alu_imm           <= ex_is_alu_imm;
+        wb_is_alu_reg           <= ex_is_alu_reg;
+        wb_is_legal             <= ex_is_legal;
+        wb_alu_result           <= ex_complete_alu_result;
+        wb_mem_addr             <= ex_complete_mem_addr;
+        wb_mem_rdata            <= ex_complete_mem_rdata;
+        wb_mem_err              <= ex_complete_mem_err;
+        wb_mem_misaligned       <= ex_complete_mem_misaligned;
+        wb_instr_addr_misaligned <= ex_instr_addr_misaligned;
+        wb_dec_is_legal_eff     <= ex_dec_is_legal_eff;
+        wb_is_ecall             <= ex_is_ecall;
+        wb_is_ebreak            <= ex_is_ebreak;
+        wb_is_mret              <= ex_is_mret;
+        wb_is_csr_op            <= ex_is_csr_op;
+        wb_csr_op_type          <= ex_csr_op_type;
+        wb_csr_src_val          <= ex_csr_src_val;
+        wb_pc_sequential        <= ex_pc_sequential;
+        wb_next_pc_target       <= ex_next_pc_target;
+        wb_pc_next              <= ex_pc_next;
+        wb_irq_pending          <= irq_pending;
+        wb_irq_cause            <= irq_cause;
       end
 
       if (ex_redirect) begin
@@ -898,6 +1063,22 @@ module sisRvCore #(
         end else begin
           if_discard_rsp <= 1'b0;
           if_state <= IF_REQ;
+        end
+      end
+
+      if (wb_single_step_stop) begin
+        fetch_pc         <= wb_pc_next;
+        wb_valid         <= 1'b0;
+        ex_valid         <= 1'b0;
+        ex_state         <= EX_EXEC;
+        if_id_valid      <= 1'b0;
+        fetch_upper_hold <= 16'h0;
+        fetch_err_hold   <= 1'b0;
+        if ((bus_owner == BUS_IF) && !if_rsp_fire) begin
+          if_discard_rsp <= 1'b1;
+        end else begin
+          if_discard_rsp <= 1'b0;
+          if_state       <= IF_REQ;
         end
       end
 
@@ -957,10 +1138,10 @@ module sisRvCore #(
   );
 
   always_ff @(posedge clk) begin
-    if (rst_n && ex_valid && (ex_state == EX_WB) && instr_retire) begin
+    if (rst_n && wb_valid && instr_retire) begin
       dpi_sisrv_retire_insn(
-        ex_pc,
-        ex_instr,
+        wb_pc,
+        wb_instr,
         rf_rd_addr,
         rf_rd_data,
         {7'b0, rf_wr_en}

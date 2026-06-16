@@ -15,9 +15,9 @@ licensable / product-grade RISC-V core.
 
 ## 1. Executive summary
 
-`sisRvCore` today is a **correct, well-verified RV32IMAC teaching/MVP platform**: a
-3-stage in-order pipeline, M-mode only, with clean RTL, real formal proofs, cocotb unit
-tests, a 42-test directed suite, an AXI4-Lite bridge, CLINT/PLIC, debug/JTAG, C extension,
+`sisRvCore` today is a **correct, well-verified RV32IMAC teaching/MVP platform**: an
+in-order IF/ID/EX-MEM pipeline with independent WB/retire, M-mode only, with clean RTL,
+real formal proofs, cocotb unit tests, a 42-test directed regression plus pipeline throughput guard, an AXI4-Lite bridge, CLINT/PLIC, debug/JTAG, C extension,
 and a Yosys synthesis path. That is a genuinely strong *foundation* — better verified
 than many hobby cores.
 
@@ -44,7 +44,7 @@ defined sequence with hard exit gates.
 | Dimension | Current state |
 |---|---|
 | ISA | RV32I + M + **C** (`rv32imac_zicsr`), M-mode only |
-| Microarchitecture | 3-stage in-order pipeline, single outstanding bus txn |
+| Microarchitecture | In-order IF/ID/EX-MEM pipeline with independent WB/retire; single outstanding bus txn |
 | Performance | Pipelined RTL complete; CoreMark/Dhrystone not yet measured |
 | Privilege | M-mode only; no U/S mode; no PMP |
 | Traps | Illegal instr, ECALL, EBREAK, MRET; misaligned load/store/control-flow traps; instruction/load/store access faults |
@@ -53,7 +53,7 @@ defined sequence with hard exit gates.
 | Memory | Aligned-only assumed; no MPU/PMP; no cache; tightly-coupled ROM/RAM |
 | Bus | Internal corebus + AXI4-Lite **master** bridge (single outstanding, no bursts) |
 | Debug | **DM 0.13 subset + JTAG DTM** (halt/resume/step); **abstract GPR → regfile** |
-| Verification | **42** directed asm + pipeline debug-step + 43 cocotb + 4 formal + **RISCOF ACT 95/95 (CI)** + final gated **10k-seed lock-step co-sim** |
+| Verification | **42** directed asm + pipeline throughput/debug-step + 43 cocotb + 4 formal + **RISCOF ACT 95/95 (CI)** + final gated **10k-seed lock-step co-sim** |
 | Physical | Yosys synth + **Sky130 HD STA** (WNS -199.946 ns, Fmax 4.55 MHz, CI) + PPA datasheet |
 | Collateral | **Apache-2.0**, Integration Guide, Programmer's Reference, PPA datasheet |
 
@@ -72,7 +72,7 @@ For a 32-bit embedded core, the bar is set by two camps. Targets below are the r
 | **SiFive E21 / E2 series** | SiFive | RV32IMC | ~2.3–3.0 | 3-stage | Closest analog to our target point |
 | **Andes N25F / D25F** | Andes | RV32IMAC(F) | ~3.5+ | 5-stage | High-end embedded RISC-V IP |
 | **Cortex-M23 / M33** | Arm | ARMv8-M | ~2.5 / 4.0+ | 2/3-stage | TrustZone security bar |
-| **sisRvCore (today)** | — | RV32IMAC | not yet measured | 3-stage | current implementation |
+| **sisRvCore (today)** | — | RV32IMAC | not yet measured | IF/ID/EX-MEM + WB | current implementation |
 
 ¹ Representative published figures; exact numbers vary by config/compiler. Use as
 order-of-magnitude, not contractual.
@@ -195,8 +195,8 @@ If you do nothing else, these are the ordered, non-negotiable steps from "MVP" t
    credibility.*
 3. **Real interrupt subsystem:** CLINT (timer+software) + PLIC/CLIC with multiple
    prioritized sources. *Without this it cannot be dropped into an SoC.*
-4. **Pipeline to ~1 CPI** (the planned M6 3-stage). *Closes the 5–8× performance gap —
-   the headline competitive number.*
+4. **Pipeline CPI tuning.** M6 now has independent IF/ID/EX-MEM/WB occupancy; next
+   performance work is benchmark-driven fetch/bus tuning before publishing CoreMark.
 5. **Debug (RISC-V DM + JTAG) and the C extension.** *Debug is mandatory for any
    customer bring-up; C is expected by every toolchain/RTOS and buys ~25–30% code size.*
 
@@ -238,7 +238,7 @@ top-to-bottom by risk-adjusted value.
 ### Phase C — Performance (the headline number)
 **Goal:** publish CPI, CoreMark, and Dhrystone numbers for the completed M6 pipeline.
 
-- 3-stage F / D / EX+M+WB pipeline is implemented; continue with benchmark bring-up
+- IF/ID/EX-MEM pipeline with independent WB/retire is implemented; continue with benchmark bring-up
   and any CPI-driven tuning.
 - Add the **C extension** (compressed) — interacts with fetch/PC alignment, so do it
   with the pipeline rework.
@@ -285,7 +285,7 @@ Ship criteria — all must be true to make the claim:
 - [x] Base M-mode trap model covers misalign + access fault.
 - [x] Standard interrupt subsystem (CLINT + PLIC/CLIC), multiple prioritized sources.
 - [x] RISC-V Debug Module + JTAG (halt/resume/step subset); GDB/OpenOCD path documented.
-- [x] RV32IMC at minimum with M6 3-stage pipeline implemented; benchmark numbers still open.
+- [x] RV32IMC at minimum with M6 in-order pipeline implemented; benchmark numbers still open.
 - [x] STA reported on a named PDK with a PPA datasheet; timing closure and GDS DRC/LVS remain M8 work.
 - [x] OSI license, PRM + integration guide, versioned release collateral started.
 
@@ -293,18 +293,17 @@ Ship criteria — all must be true to make the claim:
 
 ## 8. Suggested near-term sequence (next 3 milestones)
 
-The lowest-risk, highest-credibility path that doesn't require the pipeline rewrite first:
+The lowest-risk, highest-credibility path for the next product push:
 
 1. **RISCOF + Spike co-sim in CI** → exposes real bugs, earns the "RISC-V" label.
 2. **Privileged correctness pack** (misalign trap, `rsp_err` access faults, ID/counter
    CSRs, WFI legal no-op) → base RTL slice complete; still needs RISCOF/ISS sign-off.
 3. **CLINT + PLIC** → makes the core actually integrable into an SoC.
 
-After those three, the 3-stage pipeline (existing M6) becomes the marquee performance
-milestone, followed by debug and physical sign-off.
+M6 is now implemented, so the next marquee performance milestone is measured
+CoreMark/Dhrystone plus any fetch/bus tuning needed to make the published CPI credible.
 
-> Rationale: items 1–3 are small, high-value RTL/verification efforts that make every
-> later claim defensible. Doing the pipeline *before* compliance risks optimizing a core
-> whose correctness contract isn't yet pinned down.
+> Rationale: these are high-value verification and productization efforts that make
+> benchmark and integration claims defensible.
 </content>
 </invoke>

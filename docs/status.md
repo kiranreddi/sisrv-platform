@@ -7,7 +7,7 @@
 The sisrv-platform project implements a fully functional RV32IMAC RISC-V processor core
 with M-mode CSRs, trap handling, **CLINT/PLIC interrupts**, **RISC-V Debug subset**,
 GPIO, UART, and an AXI4-Lite master bridge.
-The core is verified through **42** directed assembly tests, one pipeline debug-step Verilator test, 43 cocotb randomized unit tests,
+The core is verified through **42** directed assembly regression tests, pipeline throughput/debug-step Verilator tests, 43 cocotb randomized unit tests,
 4 formal proofs, **RISCOF rv32imac_zicsr ACT suite** (**95/95** filtered tests in CI; 72
 upstream tests excluded for PMP/A/privilege outside the RV32IMCZicsr profile), and
 **10k-seed retired-instruction Spike lock-step co-sim** as a final gated CI lane.
@@ -55,7 +55,7 @@ upstream tests excluded for PMP/A/privilege outside the RV32IMCZicsr profile), a
 | `sisDecode.sv` | ✅ Done | All RV32I/RV32M instruction types decoded |
 | `sisMemFabric.sv` | ✅ Done | Address decoder: ROM/RAM/MMIO routing |
 
-**Test coverage** (42 directed tests, all passing):
+**Test coverage** (42 directed regression tests plus pipeline throughput/debug tests, all passing):
 
 | Test | Instructions Covered |
 |------|---------------------|
@@ -151,7 +151,7 @@ x0 always 0 ✅, PC word-aligned ✅, correct sign/zero extension ✅
 | AXI-Lite GPIO support | ✅ Done | `tb/models/sisAxiLiteSlave.sv` models DATA/DIR/IN/SET/CLR |
 | AXI-Lite UART support | ✅ Done | `tb/models/sisAxiLiteSlave.sv` models TXDATA/RXDATA/STATUS/CTRL/BAUDDIV |
 | AXI-Lite PLIC/CLINT support | ✅ Done | Inline PLIC + CLINT in `sisAxiLiteSlave.sv` (42/42 regress-axil) |
-| AXI-Lite system regression | ✅ Done | `make regress-axil` runs all 42 assembly tests through the AXI path |
+| AXI-Lite system regression | ✅ Done | `make regress-axil` runs all 42 regression assembly tests through the AXI path |
 | cocotb bridge tests | ✅ Done | 11 tests: reset, R/W, errors, stalls, 100-txn random stress |
 | Formal AXI-Lite bridge | Optional | Bounded VALID stability, mutual exclusion, data stability (`make formal-axil`) |
 
@@ -204,12 +204,12 @@ timer interrupt tests run with the AXI slave timer model ✅, CI covers `make re
 
 | Deliverable | Status | Notes |
 |-------------|--------|-------|
-| IF/ID/EX-MEM-WB pipeline | ✅ Done | `sisRvCore` now has independent fetch, decode, and execute/memory/writeback pipeline state |
+| IF/ID/EX-MEM + WB pipeline | ✅ Done | `sisRvCore` now has independent fetch, decode, execute/memory, and WB/retire pipeline state |
 | Corebus owner arbitration | ✅ Done | One outstanding request preserved; data memory wins over instruction fetch |
-| Hazard controls | ✅ Done | WB bypass/forwarding, load-use stall, branch/jump flush, trap/interrupt/mret flush |
+| Hazard controls | ✅ Done | EX/WB bypass/forwarding, load-use stall, branch/jump flush, trap/interrupt/mret flush |
 | Interface preservation | ✅ Done | Corebus, AXI bridge contract, CSR/trap, interrupt, debug, compressed fetch, and DPI retire-log interfaces retained |
 | Local validation | ✅ Done | `make lint`, `make regress`, `make regress-axil`, `make regress-axil-stall`, `make pipeline-debug` |
-| Directed pipeline tests | ✅ Done | forwarding, load-use, branch/jump flush, trap flush, interrupt flush, debug halt/single-step |
+| Directed pipeline tests | ✅ Done | forwarding, load-use, branch/jump flush, trap flush, interrupt flush, throughput guard, debug halt/single-step |
 
 ---
 
@@ -259,8 +259,9 @@ Planned:
 | Verilator version | 5.038 |
 | Lint status | ✅ Clean (Wall, no warnings) |
 | Compiler | riscv64-linux-gnu-gcc 13.3 |
-| Assembly test suite | 42 tests |
+| Assembly regression suite | 42 tests |
 | Assembly regression | 42/42 passing through corebus, AXI-Lite, and stalled AXI-Lite paths |
+| Pipeline throughput guard | `make pipeline-throughput` passing on the direct corebus path |
 | cocotb unit tests | 43 tests (3 ALU + 4 RegFile + 11 Decode + 14 CSR + 11 AXI-Lite) |
 | cocotb status | 43/43 passing |
 | Formal proofs/checks | Required: ALU (all 10 ops), RegFile (x0=0), Decode (fields + legality). Optional: AXI-Lite bounded safety (`make formal-axil`) |
@@ -274,7 +275,7 @@ Planned:
 
 ### RTL (synthesizable)
 - `rtl/sisPlatformTop.sv` — Top-level platform integration (USE_AXIL param switch)
-- `rtl/core/sisRvCore.sv` — RV32IMC 3-stage pipelined CPU core (with interrupt support)
+- `rtl/core/sisRvCore.sv` — RV32IMC in-order pipelined CPU core (with interrupt support)
 - `rtl/core/sisAlu.sv` — Arithmetic/Logic Unit
 - `rtl/core/sisDecode.sv` — Instruction decoder
 - `rtl/core/sisRegFile.sv` — 32-entry register file
@@ -315,7 +316,7 @@ Planned:
 ### Software
 - `sw/bsp/crt0.S` — C runtime startup
 - `sw/bsp/link.ld` — Linker script
-- `sw/tests/asm/test_*.S` — 42 assembly test programs
+- `sw/tests/asm/test_*.S` — 42 regression assembly programs plus direct-corebus pipeline throughput guard
 
 ### Build & CI
 - `Makefile` — Build, lint, sim, regression, cocotb, formal, synth targets

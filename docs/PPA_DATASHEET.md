@@ -47,8 +47,8 @@ Exit gate: GDS DRC/LVS clean or documented deltas per milestone M8.
 
 | Metric | Current status |
 |--------|----------------|
-| Microarchitecture | 3-stage in-order pipeline (`IF`, `ID`, `EX/MEM/WB`) |
-| Directed pipeline smoke | forwarding 85 cycles; load-use 97; branch/jump flush 84; trap flush 77; interrupt flush 112; debug single-step 34 |
+| Microarchitecture | In-order IF/ID/EX-MEM pipeline with independent WB/retire slot |
+| Directed pipeline smoke | forwarding 61 cycles; load-use 73; branch/jump flush 65; trap flush 59; interrupt flush 83; throughput guard 95; debug single-step 37 |
 | CoreMark/MHz | Not yet measured |
 
 M6 completes the RTL pipeline conversion. A CoreMark/Dhrystone harness and CPI report

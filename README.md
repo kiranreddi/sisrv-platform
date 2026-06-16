@@ -11,7 +11,7 @@
 
 **ASIC-first RV32IMAC SoC platform for compact embedded RISC-V systems.**
 
-`sisrv-platform` is an open RTL platform built around a complete RV32IMAC multi-cycle
+`sisrv-platform` is an open RTL platform built around a complete RV32IMAC pipelined
 core with machine-mode CSRs, precise traps, CLINT/PLIC interrupts, RISC-V Debug
 subset, GPIO, UART, ROM/RAM, a simple internal corebus, and an optional AXI4-Lite
 bridge.
@@ -40,13 +40,13 @@ keeping the implementation readable and open.
 
 | Area | Current capability |
 |---|---|
-| Core | RV32IMAC, 32 registers, 3-stage in-order pipeline |
+| Core | RV32IMAC, 32 registers, in-order IF/ID/EX-MEM pipeline with independent WB/retire |
 | Privilege | Machine mode, core CSRs, trap entry/return, counters, WFI legal no-op |
 | Platform | ROM, RAM, tohost, CLINT, PLIC, GPIO, UART |
 | Interrupts | CLINT (MSIP/MTIP/MTIME), PLIC (8 prioritized sources), GPIO→PLIC mux |
 | Debug | RISC-V DM 0.13 subset + JTAG DTM; halt/resume/step, abstract GPR wired to regfile while halted |
 | Bus | Internal corebus plus optional AXI4-Lite bridge path |
-| Verification | 42 assembly tests, pipeline debug-step test, 43 cocotb tests, formal proofs, RISCOF ACT **95/95** + gated 10k lock-step co-sim |
+| Verification | 42 assembly regression tests, pipeline throughput/debug-step tests, 43 cocotb tests, formal proofs, RISCOF ACT **95/95** + gated 10k lock-step co-sim |
 | Implementation | Synthesizable SystemVerilog, Verilator simulation, Yosys + Sky130 STA |
 | Product gap | PMP, benchmarked CoreMark/Dhrystone, physical GDS signoff |
 
@@ -118,7 +118,7 @@ analysis and product-grade roadmap.
 | M3 - AXI4-Lite master bridge | Complete |
 | M4 - Timer interrupt | Complete |
 | M5 - RV32M multiply/divide | Complete: 33/33 asm tests pass |
-| M6 - 3-stage pipeline | Complete: IF/ID/EX-MEM-WB pipeline |
+| M6 - 3-stage pipeline | Complete: independent IF, ID, EX/MEM, and WB/retire occupancy |
 | M7 - Yosys synthesis | Complete |
 | M8 - OpenROAD hardening | Planned |
 
@@ -163,6 +163,7 @@ make sim                      # Run basic PASS test
 make regress                  # Run 42-test corebus regression
 make regress-axil             # Run 42-test AXI4-Lite regression
 make pipeline-debug           # Run M6 debug halt/single-step retirement check
+make pipeline-throughput      # Run M6 direct-corebus ALU throughput guard
 make cocotb                   # Run 43 cocotb tests
 make formal                   # Run required formal proofs
 make formal-axil              # Optional AXI4-Lite bounded formal safety check
@@ -247,8 +248,8 @@ Unsupported classes remain PMP, S/U modes, and A/F/D.
 ### CPU Core
 
 - ISA: RV32IMAC (`rv32imac_zicsr`).
-- Microarchitecture: 3-stage in-order pipeline (`IF`, `ID`, `EX/MEM/WB`) with a
-  single-outstanding corebus owner for instruction fetch vs data memory.
+- Microarchitecture: in-order IF/ID/EX-MEM pipeline with an independent WB/retire
+  slot and a single-outstanding corebus owner for instruction fetch vs data memory.
 - Privilege: M-mode CSRs including `mstatus`, `misa`, `mtvec`, `mepc`, `mcause`,
   `mtval`, `mscratch`, `mie`, `mip`, `mcycle`, and `minstret`.
 - Traps: ECALL, EBREAK, illegal instruction, misaligned access, access fault, MRET.
@@ -288,7 +289,7 @@ The workflow runs on every push/PR to `main`.
 | Job | What it proves |
 |---|---|
 | Lint | RTL parses and passes Verilator lint |
-| Regression | 42 assembly tests through corebus and AXI-Lite paths, plus M6 debug-step check |
+| Regression | 42 assembly tests through corebus and AXI-Lite paths, plus M6 debug-step/throughput checks |
 | cocotb | 43 directed/randomized unit tests |
 | Formal | Required ALU, RegFile, Decode proofs; optional AXI safety |
 | Synth | Yosys synthesis of core + AXI bridge (PPA stat artifact) |
