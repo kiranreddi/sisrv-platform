@@ -41,6 +41,12 @@ trap_handler:
     csrr t0, mcause
     li   t1, 7
     bne  t0, t1, fail
+    # Confirm the RAM store (entry1, R-only) faulted — not the fail-path
+    # MMIO store, which would also trap with cause 7 in U-mode and mask a
+    # broken priority selection.
+    csrr t0, mtval
+    li   t1, RAM_BASE
+    bne  t0, t1, fail
     j    pass
 
 pass:

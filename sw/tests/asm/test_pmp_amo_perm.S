@@ -39,6 +39,11 @@ trap_handler:
     csrr t0, mcause
     li   t2, 7
     bne  t0, t2, fail
+    # Confirm the RAM AMO faulted — not the fail-path MMIO store, which also
+    # traps with cause 7 in U-mode and would mask a missing AMO permission deny.
+    csrr t0, mtval
+    li   t2, RAM_BASE
+    bne  t0, t2, fail
     j    pass
 
 pass:

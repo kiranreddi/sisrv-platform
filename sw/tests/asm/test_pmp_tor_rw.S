@@ -40,6 +40,11 @@ trap_handler:
     csrr t0, mcause
     li   t1, 7
     bne  t0, t1, fail
+    # Confirm the RAM store faulted — not the fail-path MMIO store, which
+    # also traps with cause 7 in U-mode and would mask a missing deny.
+    csrr t0, mtval
+    li   t1, RAM_BASE
+    bne  t0, t1, fail
     j    pass
 
 pass:
