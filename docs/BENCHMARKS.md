@@ -1,7 +1,7 @@
 # Benchmarks — CoreMark and Dhrystone
 
-**Date:** 2026-06-16
-**Git commit:** `e1782b49ad3d31776eefef4d078f39e6c515bdd3`
+**Date:** 2026-06-17
+**Git commit:** `e76492047fd8b9d59ab7519fa35ff9bc15a72277`
 **Simulator:** Verilator `build/sim_sisPlatformTop`, direct corebus ROM/RAM path
 **Toolchain:** `riscv64-elf-gcc (GCC) 16.1.0`
 **Compiler flags:** `-O2 -nostdlib -nostartfiles -ffreestanding -static -fno-pic -fno-pie -no-pie -fno-builtin`
@@ -25,6 +25,52 @@ official benchmark submissions.
 
 CoreMark/MHz is computed as `iterations * 1,000,000 / cycles`.
 Dhrystone DMIPS/MHz is computed as `iterations * 1,000,000 / cycles / 1757`.
+
+## Analysis: the C extension currently *costs* throughput
+
+The `rv32im` configuration is faster than `rv32imc` on both benchmarks:
+
+| Metric | `rv32imc` | `rv32im` | Δ (im vs imc) |
+|---|---:|---:|---:|
+| CoreMark/MHz | 1.264 | 1.502 | **+18.8%** |
+| Dhrystone DMIPS/MHz | 0.400 | 0.468 | **+17.0%** |
+| Dhrystone CPI | 2.804 | 2.396 | **+0.41 with C** |
+| Dhrystone cycles/iter | 1,422 | 1,215 | **+17% with C** |
+| Dhrystone retired instr/iter | 507.01 | 507.01 | **identical** |
+
+The C extension does its job on **code density** (16-bit encodings → smaller `.text`),
+but on this microarchitecture it buys *zero* dynamic-instruction reduction for Dhrystone
+(identical 507 retired instructions/iteration) while adding ~17% cycles. The entire delta
+is **CPI**, i.e. front-end fetch overhead.
+
+### Root cause: a stateless, single-word fetch front end
+
+The IF stage (`rtl/core/sisRvCore.sv`, FSM `IF_REQ → IF_WAIT → IF_SECOND_REQ →
+IF_SECOND_WAIT`) issues one **word-aligned** bus fetch at a time and keeps no fetch buffer
+across instructions. With compressed code that creates two extra costs that `rv32im`
+(all-aligned, all 32-bit) never pays:
+
+1. **Word re-fetch for the second halfword.** When a 32-bit word holds two 16-bit
+   instructions, the lower one retires with `fetch_pc += 2` and the **next instruction
+   re-requests the same word** to read its upper half — a redundant bus round-trip for a
+   word the core already had (`IF_WAIT` lower/upper-half handling). Two compressed
+   instructions in one word therefore cost two fetches, erasing the density benefit at the
+   bus.
+2. **Straddle double-fetch for unaligned 32-bit instructions.** Because C breaks 4-byte
+   alignment, a 32-bit instruction can cross a word boundary. The front end then saves the
+   low half (`fetch_upper_hold`) and takes a **second sequential word fetch**
+   (`IF_SECOND_REQ`/`IF_SECOND_WAIT`) before it can issue — a 2× fetch latency for that one
+   instruction. `rv32im` never straddles, so it never pays this.
+
+### Fix direction (M9 front-end rework)
+
+Both costs disappear with a small **fetch buffer** (1–2 words) that retains the last fetched
+word and its address: the second compressed instruction in a word is served with no bus
+access, and the low half of a straddling 32-bit instruction is already resident. That lets
+the core keep the code-density win *and* recover the ~17–19% throughput, and is the natural
+scope for an M9 fetch/decode-buffer milestone. Until then, **`rv32im` is the faster
+configuration** and the more favorable number to lead with when comparing against
+E2 / Cortex-M0+–M3-class cores; `rv32imc` remains the right pick when code size dominates.
 
 ## Reproducibility
 

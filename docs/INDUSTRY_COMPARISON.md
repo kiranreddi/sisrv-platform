@@ -32,9 +32,11 @@ is three things commercial cores treat as table stakes:
    **10k-seed retired-instruction** Spike lock-step co-sim is restored as the
    final gated CI lane.
 3. **Productization rigor.** Sky130 HD STA in CI: WNS **-199.946 ns**, TNS **-10929.076 ns**,
-   Fmax **4.55 MHz**; internal `rv32imc_zicsr -O2` performance is **1.264
-   CoreMark/MHz** and **0.400 Dhrystone DMIPS/MHz** after the direct-corebus
-   Harvard instruction/data split.
+   Fmax **4.55 MHz**; internal `-O2` performance after the direct-corebus Harvard
+   instruction/data split is **1.502 CoreMark/MHz** / **0.468 DMIPS/MHz** on
+   `rv32im_zicsr` and **1.264** / **0.400** on `rv32imc_zicsr` (the C extension
+   currently costs ~17% throughput on this stateless single-word fetch front end —
+   see [`BENCHMARKS.md`](BENCHMARKS.md)).
 
 The good news: the codebase is structured so each of these is an incremental milestone,
 not a rewrite. The plan in §6 takes us from "MVP core" to "product-grade soft IP" in a
@@ -48,7 +50,7 @@ defined sequence with hard exit gates.
 |---|---|
 | ISA | RV32I + M + **C** (`rv32imac_zicsr`), M-mode only |
 | Microarchitecture | In-order IF/ID/EX-MEM pipeline with independent WB/retire; single outstanding transaction per I/D corebus port |
-| Performance | Internal direct-corebus Verilator: 1.264 CoreMark/MHz, 0.400 Dhrystone DMIPS/MHz on `rv32imc_zicsr -O2` |
+| Performance | Internal direct-corebus Verilator, `-O2`: `rv32im_zicsr` 1.502 CoreMark/MHz, 0.468 DMIPS/MHz; `rv32imc_zicsr` 1.264, 0.400 (C costs ~17% throughput here) |
 | Privilege | **M + U**; no S-mode; PMP enforced |
 | Traps | Illegal instr, ECALL, EBREAK, MRET; misaligned load/store/control-flow traps; instruction/load/store access faults |
 | Interrupts | **CLINT** (MSIP/MTIP/MTIME at 0x0200_0000) + **PLIC** (8 sources at 0x0C00_0000) |
@@ -76,7 +78,7 @@ For a 32-bit embedded core, the bar is set by two camps. Targets below are the r
 | **SiFive E21 / E2 series** | SiFive | RV32IMC | ~2.3–3.0 | 3-stage | Closest analog to our target point |
 | **Andes N25F / D25F** | Andes | RV32IMAC(F) | ~3.5+ | 5-stage | High-end embedded RISC-V IP |
 | **Cortex-M23 / M33** | Arm | ARMv8-M | ~2.5 / 4.0+ | 2/3-stage | TrustZone security bar |
-| **sisRvCore (today)** | — | RV32IMAC | 1.264 internal, not certified | IF/ID/EX-MEM + WB, Harvard I/D corebus | current implementation |
+| **sisRvCore (today)** | — | RV32IMAC | 1.50 (`rv32im`) / 1.26 (`rv32imc`) internal, not certified | IF/ID/EX-MEM + WB, Harvard I/D corebus | current implementation |
 
 ¹ Representative published figures; exact numbers vary by config/compiler. Use as
 order-of-magnitude, not contractual.
@@ -245,7 +247,13 @@ top-to-bottom by risk-adjusted value.
 **Goal:** use the measured CPI, CoreMark, and Dhrystone baselines to drive tuning.
 
 - IF/ID/EX-MEM pipeline with independent WB/retire is implemented; benchmark bring-up
-  reports 1.264 CoreMark/MHz and 0.400 Dhrystone DMIPS/MHz for `rv32imc_zicsr -O2`.
+  reports 1.502 CoreMark/MHz and 0.468 DMIPS/MHz for `rv32im_zicsr -O2`, and 1.264 /
+  0.400 for `rv32imc_zicsr -O2`.
+- The C extension currently costs ~17% throughput (Dhrystone CPI 2.80 vs 2.40) because the
+  stateless single-word fetch front end re-fetches a word for its second compressed halfword
+  and double-fetches boundary-straddling 32-bit instructions. An **M9 fetch-buffer rework**
+  (1–2 word buffer retaining the last fetched word) recovers this while keeping the density
+  win — see [`BENCHMARKS.md`](BENCHMARKS.md).
 - A bounded dual-slot/MEM-hold experiment passed directed regression but measured worse
   on the current one-cycle RAM path, so it was not retained. M9 should only land with
   a memory/WB structure that improves benchmark CPI.
