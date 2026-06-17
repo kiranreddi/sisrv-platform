@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/kiranreddi/sisrv-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/kiranreddi/sisrv-platform/actions/workflows/ci.yml)
 ![ISA](https://img.shields.io/badge/ISA-RV32IMAC-blue)
-![ASM](https://img.shields.io/badge/asm-43%2F43%20passing-brightgreen)
+![ASM](https://img.shields.io/badge/asm-45%2F45%20passing-brightgreen)
 ![cocotb](https://img.shields.io/badge/cocotb-43%20tests-brightgreen)
 ![formal](https://img.shields.io/badge/formal-4%20proof%20sets-brightgreen)
 ![synth](https://img.shields.io/badge/synthesis-Yosys-informational)
@@ -46,7 +46,7 @@ keeping the implementation readable and open.
 | Interrupts | CLINT (MSIP/MTIP/MTIME), PLIC (8 prioritized sources), GPIO→PLIC mux |
 | Debug | RISC-V DM 0.13 subset + JTAG DTM; halt/resume/step, abstract GPR wired to regfile while halted |
 | Bus | Internal corebus plus optional AXI4-Lite bridge path |
-| Verification | 43 assembly regression tests, pipeline throughput/debug-step tests, 43 cocotb tests, formal proofs, RISCOF ACT **95/95** + gated 10k lock-step co-sim |
+| Verification | 45 assembly regression tests, pipeline throughput/debug-step tests, 43 cocotb tests, formal proofs, RISCOF ACT **95/95** + gated 10k lock-step co-sim |
 | Implementation | Synthesizable SystemVerilog, Verilator simulation, Yosys + Sky130 STA |
 | Benchmarks | Internal Verilator direct-corebus: **1.264 CoreMark/MHz**, **0.400 Dhrystone DMIPS/MHz** on `rv32imc_zicsr -O2` |
 | Product gap | PMP, certified benchmark submission, physical GDS signoff |
@@ -86,7 +86,7 @@ stateDiagram-v2
 flowchart TB
   RTL["RTL"] --> Lint["Verilator lint"]
   RTL --> Sim["Verilator platform sim"]
-  Sim --> ASM["43 directed asm tests\ncorebus + AXI4-Lite"]
+  Sim --> ASM["45 directed asm tests\ncorebus + AXI4-Lite"]
   RTL --> Cocotb["43 cocotb unit tests\nALU, regfile, decode, CSR, AXI"]
   RTL --> Formal["Formal proofs\nALU, regfile, decode, AXI safety"]
   RTL --> Synth["Yosys synthesis"]
@@ -161,8 +161,8 @@ make lint                     # Verilator lint
 make build/sim_sisPlatformTop # Build simulation binary
 make sw                       # Build assembly test hex files
 make sim                      # Run basic PASS test
-make regress                  # Run 43-test corebus regression
-make regress-axil             # Run 43-test AXI4-Lite regression
+make regress                  # Run 45-test corebus regression
+make regress-axil             # Run 45-test AXI4-Lite regression
 make pipeline-debug           # Run M6 debug halt/single-step retirement check
 make pipeline-throughput      # Run M6 direct-corebus ALU throughput guard
 make benchmark-smoke          # Build/run short CoreMark + Dhrystone benchmark smoke
@@ -193,7 +193,7 @@ $ make regress
   ...
   PASS: test_uart
   PASS: test_x0
-=== Results: 43/43 passed, 0 failed ===
+=== Results: 45/45 passed, 0 failed ===
 ```
 
 ## Verification
@@ -293,7 +293,7 @@ The workflow runs on every push/PR to `main`.
 | Job | What it proves |
 |---|---|
 | Lint | RTL parses and passes Verilator lint |
-| Regression | 43 assembly tests through corebus and AXI-Lite paths, plus M6 debug-step/throughput checks |
+| Regression | 45 assembly tests through corebus and AXI-Lite paths, plus M6 debug-step/throughput checks |
 | cocotb | 43 directed/randomized unit tests |
 | Formal | Required ALU, RegFile, Decode proofs; optional AXI safety |
 | Synth | Yosys synthesis of core + AXI bridge (PPA stat artifact) |

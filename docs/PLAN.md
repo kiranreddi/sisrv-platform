@@ -189,8 +189,8 @@ Key principles:
 ### Current progress
 - ✅ Replaced the single global core FSM with independent IF, ID, EX/MEM, and
   WB/retire pipeline state.
-- ✅ Added a single-outstanding corebus owner for instruction fetch vs data memory;
-  data memory has priority.
+- ✅ Added direct-corebus Harvard instruction/data ports with one outstanding request
+  per port; AXI compatibility muxes them back to a single outstanding bridge request.
 - ✅ Added EX/WB bypass/forwarding, load-use stalls, branch/jump flush,
   trap/interrupt/mret flush from retirement, and debug single-step retirement
   gating.
@@ -210,10 +210,13 @@ Key principles:
   - precise retirement from WB
 
 ### Exit criteria
-- 42-test directed regression passes through direct corebus and AXI-Lite paths.
+- 45-test directed regression passes through direct corebus and AXI-Lite paths.
 - Pipeline-directed forwarding, load-use, branch/jump flush, trap flush,
   interrupt flush, throughput, and debug halt/single-step tests pass.
-- CPI/CoreMark benchmarking remains a follow-on product metric, not an M6 RTL gate.
+- CoreMark/Dhrystone benchmarking is now brought up as a post-M6 product metric:
+  internal direct-corebus `rv32imc_zicsr -O2` measures 1.264 CoreMark/MHz and
+  0.400 Dhrystone DMIPS/MHz after the direct-corebus Harvard I/D split.
+  Certification and deeper CPI tuning remain separate work.
 
 ---
 

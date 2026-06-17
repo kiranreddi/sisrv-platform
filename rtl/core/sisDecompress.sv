@@ -78,7 +78,7 @@ module sisDecompress (
           3'b010:
             expanded = {c0_ls_uimm, rs1p, 3'b010, rdp, 7'b0000011};
           3'b110:
-            expanded = {c0_ls_uimm[7:1], rs2p, rs1p, 3'b010, c0_ls_uimm[4:0], 7'b0100011};
+            expanded = {5'b00000, c0_ls_uimm[6:5], rs2p, rs1p, 3'b010, c0_ls_uimm[4:0], 7'b0100011};
           default: legal = 1'b0;
         endcase
       end
@@ -168,7 +168,7 @@ module sisDecompress (
             end
           end
           3'b110:
-            expanded = {swsp_uimm[7:5], c_instr[6:2], 5'd2, 3'b010, swsp_uimm[4:0], 7'b0100011};
+            expanded = {4'b0000, swsp_uimm[7:5], c_instr[6:2], 5'd2, 3'b010, swsp_uimm[4:0], 7'b0100011};
           default: legal = 1'b0;
         endcase
       end

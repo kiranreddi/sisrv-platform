@@ -55,6 +55,8 @@ bit 2 for step mode, and bit 0 for `dmactive`.
 
 ## Performance
 
-The core is an in-order IF/ID/EX-MEM pipeline with an independent WB/retire slot.
-Benchmark CPI/CoreMark data is tracked in
-[PPA_DATASHEET.md](PPA_DATASHEET.md).
+The core is an in-order IF/ID/EX-MEM pipeline with an independent WB/retire slot
+and direct-corebus Harvard instruction/data path.
+Internal direct-corebus Verilator measurements on `rv32imc_zicsr -O2`: **1.264
+CoreMark/MHz**, **0.400 Dhrystone DMIPS/MHz**, Dhrystone **CPI 2.804**. See
+[BENCHMARKS.md](BENCHMARKS.md) for conditions, raw excerpts, and caveats.

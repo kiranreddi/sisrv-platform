@@ -26,16 +26,20 @@ module sisPipelineDebugTb #(
   localparam logic [31:0] TOHOST_ADDR = 32'h1000_0000;
   localparam int ROM_WORDS = 4096;
 
-  logic        req_valid;
-  logic        req_ready;
-  logic [31:0] req_addr;
-  logic        req_we;
-  logic [31:0] req_wdata;
-  logic [3:0]  req_wstrb;
-  logic        rsp_valid;
-  logic        rsp_ready;
-  logic [31:0] rsp_rdata;
-  logic        rsp_err;
+  logic        i_req_valid, i_req_ready;
+  logic [31:0] i_req_addr;
+  logic        i_rsp_valid, i_rsp_ready;
+  logic [31:0] i_rsp_rdata;
+  logic        i_rsp_err;
+
+  logic        d_req_valid, d_req_ready;
+  logic [31:0] d_req_addr;
+  logic        d_req_we;
+  logic [31:0] d_req_wdata;
+  logic [3:0]  d_req_wstrb;
+  logic        d_rsp_valid, d_rsp_ready;
+  logic [31:0] d_rsp_rdata;
+  logic        d_rsp_err;
 
   logic [31:0] rom [0:ROM_WORDS-1];
 
@@ -62,54 +66,75 @@ module sisPipelineDebugTb #(
     .ext_msip       (1'b0),
     .ext_mtip       (1'b0),
     .ext_meip       (1'b0),
-    .req_valid      (req_valid),
-    .req_ready      (req_ready),
-    .req_addr       (req_addr),
-    .req_we         (req_we),
-    .req_wdata      (req_wdata),
-    .req_wstrb      (req_wstrb),
-    .rsp_valid      (rsp_valid),
-    .rsp_ready      (rsp_ready),
-    .rsp_rdata      (rsp_rdata),
-    .rsp_err        (rsp_err)
+    .i_req_valid    (i_req_valid),
+    .i_req_ready    (i_req_ready),
+    .i_req_addr     (i_req_addr),
+    .i_rsp_valid    (i_rsp_valid),
+    .i_rsp_ready    (i_rsp_ready),
+    .i_rsp_rdata    (i_rsp_rdata),
+    .i_rsp_err      (i_rsp_err),
+    .d_req_valid    (d_req_valid),
+    .d_req_ready    (d_req_ready),
+    .d_req_addr     (d_req_addr),
+    .d_req_we       (d_req_we),
+    .d_req_wdata    (d_req_wdata),
+    .d_req_wstrb    (d_req_wstrb),
+    .d_rsp_valid    (d_rsp_valid),
+    .d_rsp_ready    (d_rsp_ready),
+    .d_rsp_rdata    (d_rsp_rdata),
+    .d_rsp_err      (d_rsp_err)
   );
 
-  wire rom_sel = (req_addr < (ROM_WORDS * 4));
-  wire tohost_sel = (req_addr == TOHOST_ADDR);
+  wire i_rom_sel = (i_req_addr < (ROM_WORDS * 4));
+  wire d_rom_sel = (d_req_addr < (ROM_WORDS * 4));
+  wire tohost_sel = (d_req_addr == TOHOST_ADDR);
 
-  assign req_ready = !rsp_valid || rsp_ready;
+  assign i_req_ready = !i_rsp_valid || i_rsp_ready;
+  assign d_req_ready = !d_rsp_valid || d_rsp_ready;
 
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
-      rsp_valid   <= 1'b0;
-      rsp_rdata   <= 32'h0;
-      rsp_err     <= 1'b0;
+      i_rsp_valid <= 1'b0;
+      i_rsp_rdata <= 32'h0;
+      i_rsp_err   <= 1'b0;
+      d_rsp_valid <= 1'b0;
+      d_rsp_rdata <= 32'h0;
+      d_rsp_err   <= 1'b0;
       tohost_pass <= 1'b0;
       tohost_fail <= 1'b0;
       tohost_code <= 32'h0;
     end else begin
-      if (rsp_valid && rsp_ready) begin
-        rsp_valid <= 1'b0;
+      if (i_rsp_valid && i_rsp_ready) begin
+        i_rsp_valid <= 1'b0;
+      end
+      if (d_rsp_valid && d_rsp_ready) begin
+        d_rsp_valid <= 1'b0;
       end
 
-      if (req_valid && req_ready) begin
-        rsp_valid <= 1'b1;
-        rsp_rdata <= 32'h0;
-        rsp_err   <= 1'b0;
+      if (i_req_valid && i_req_ready) begin
+        i_rsp_valid <= 1'b1;
+        i_rsp_rdata <= i_rom_sel ? rom[i_req_addr[13:2]] : 32'h0;
+        i_rsp_err   <= !i_rom_sel;
+      end
 
-        if (req_we && tohost_sel) begin
-          tohost_code <= req_wdata;
-          tohost_pass <= (req_wdata != 32'h0);
-          tohost_fail <= (req_wdata == 32'h0);
-        end else if (!req_we && rom_sel) begin
-          rsp_rdata <= rom[req_addr[13:2]];
-        end else if (!req_we) begin
-          rsp_err <= 1'b1;
+      if (d_req_valid && d_req_ready) begin
+        d_rsp_valid <= 1'b1;
+        d_rsp_rdata <= 32'h0;
+        d_rsp_err   <= 1'b0;
+
+        if (d_req_we && tohost_sel) begin
+          tohost_code <= d_req_wdata;
+          tohost_pass <= (d_req_wdata != 32'h0);
+          tohost_fail <= (d_req_wdata == 32'h0);
+        end else if (!d_req_we && d_rom_sel) begin
+          d_rsp_rdata <= rom[d_req_addr[13:2]];
+        end else if (!d_req_we) begin
+          d_rsp_err <= 1'b1;
         end
       end
     end
   end
 
-  wire unused_req_wstrb = |req_wstrb;
+  wire unused_d_req_wstrb = |d_req_wstrb;
 
 endmodule

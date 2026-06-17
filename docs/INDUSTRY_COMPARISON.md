@@ -17,7 +17,7 @@ licensable / product-grade RISC-V core.
 
 `sisRvCore` today is a **correct, well-verified RV32IMAC teaching/MVP platform**: an
 in-order IF/ID/EX-MEM pipeline with independent WB/retire and direct-corebus Harvard I/D path, M-mode only, with clean RTL,
-real formal proofs, cocotb unit tests, a 43-test directed regression plus pipeline throughput guard, an AXI4-Lite bridge, CLINT/PLIC, debug/JTAG, C extension,
+real formal proofs, cocotb unit tests, a 45-test directed regression plus pipeline throughput guard, an AXI4-Lite bridge, CLINT/PLIC, debug/JTAG, C extension,
 and a Yosys synthesis path. That is a genuinely strong *foundation* — better verified
 than many hobby cores.
 
