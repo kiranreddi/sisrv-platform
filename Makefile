@@ -83,6 +83,18 @@ $(BUILD)/tests/test_atomic%.elf: sw/tests/asm/test_atomic%.S sw/bsp/link.ld
 	@mkdir -p $(BUILD)/tests
 	$(RV_GCC) -march=rv32imac_zicsr -mabi=$(RV_ABI) -nostdlib -nostartfiles -ffreestanding -static -fno-pic -fno-pie -no-pie -O2 -Wl,--build-id=none -T sw/bsp/link.ld -o $@ $<
 
+$(BUILD)/tests/test_umode%.elf: sw/tests/asm/test_umode%.S sw/bsp/link.ld
+	@mkdir -p $(BUILD)/tests
+	$(RV_GCC) -march=rv32imac_zicsr -mabi=$(RV_ABI) -nostdlib -nostartfiles -ffreestanding -static -fno-pic -fno-pie -no-pie -O2 -Wl,--build-id=none -T sw/bsp/link.ld -o $@ $<
+
+$(BUILD)/tests/test_pmp%.elf: sw/tests/asm/test_pmp%.S sw/bsp/link.ld
+	@mkdir -p $(BUILD)/tests
+	$(RV_GCC) -march=rv32imac_zicsr -mabi=$(RV_ABI) -nostdlib -nostartfiles -ffreestanding -static -fno-pic -fno-pie -no-pie -O2 -Wl,--build-id=none -T sw/bsp/link.ld -o $@ $<
+
+$(BUILD)/tests/test_mcounteren.elf: sw/tests/asm/test_mcounteren.S sw/bsp/link.ld
+	@mkdir -p $(BUILD)/tests
+	$(RV_GCC) -march=rv32imac_zicsr -mabi=$(RV_ABI) -nostdlib -nostartfiles -ffreestanding -static -fno-pic -fno-pie -no-pie -O2 -Wl,--build-id=none -T sw/bsp/link.ld -o $@ $<
+
 $(BUILD)/tests/%.elf: sw/tests/asm/%.S sw/bsp/link.ld
 	@mkdir -p $(BUILD)/tests
 	$(RV_GCC) $(RV_CFLAGS) -T sw/bsp/link.ld -o $@ $<
@@ -195,6 +207,8 @@ cocotb:
 	@cd tb/cocotb && rm -rf sim_build results.xml && $(MAKE) -f Makefile.csr SIM=verilator
 	@echo "=== Running cocotb AXI-Lite bridge tests ==="
 	@cd tb/cocotb && rm -rf sim_build results.xml && $(MAKE) -f Makefile.axil SIM=verilator
+	@echo "=== Running cocotb PMP tests ==="
+	@cd tb/cocotb && rm -rf sim_build results.xml && $(MAKE) -f Makefile.pmp SIM=verilator
 	@echo "=== cocotb tests PASSED ==="
 
 # Formal verification (requires SymbiYosys + yosys + z3)

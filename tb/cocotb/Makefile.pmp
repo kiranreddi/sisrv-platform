@@ -1,0 +1,10 @@
+# cocotb Makefile for sisPmp tests
+TOPLEVEL_LANG = verilog
+VERILOG_SOURCES = $(shell pwd)/../../rtl/core/sisPmp.sv
+TOPLEVEL = sisPmp
+MODULE = test_pmp
+SIM ?= verilator
+
+EXTRA_ARGS += --timing
+
+include $(shell cocotb-config --makefiles)/Makefile.sim

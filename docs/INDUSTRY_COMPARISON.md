@@ -49,11 +49,12 @@ defined sequence with hard exit gates.
 | ISA | RV32I + M + **C** (`rv32imac_zicsr`), M-mode only |
 | Microarchitecture | In-order IF/ID/EX-MEM pipeline with independent WB/retire; single outstanding transaction per I/D corebus port |
 | Performance | Internal direct-corebus Verilator: 1.264 CoreMark/MHz, 0.400 Dhrystone DMIPS/MHz on `rv32imc_zicsr -O2` |
-| Privilege | M-mode only; no U/S mode; no PMP |
+| Privilege | **M + U**; no S-mode; PMP enforced |
 | Traps | Illegal instr, ECALL, EBREAK, MRET; misaligned load/store/control-flow traps; instruction/load/store access faults |
 | Interrupts | **CLINT** (MSIP/MTIP/MTIME at 0x0200_0000) + **PLIC** (8 sources at 0x0C00_0000) |
 | CSRs | mstatus, misa (**A**/**C**), mtvec (direct + vectored MODE=1), mepc, mcause, mtval, mscratch, mie, mip, ID CSRs, mcycle/minstret/mcountinhibit. WFI legal no-op. |
-| Memory | Aligned-only assumed; no MPU/PMP; no cache; tightly-coupled ROM/RAM |
+| Privilege | **M + U**; `mstatus` MPP/MPRV/TW; ECALL cause by mode; `mcounteren` |
+| Memory | Aligned-only assumed; **8-entry PMP**; no cache; tightly-coupled ROM/RAM |
 | Bus | Internal corebus + AXI4-Lite **master** bridge (single outstanding, no bursts) |
 | Debug | **DM 0.13 subset + JTAG DTM** (halt/resume/step); **abstract GPR → regfile** |
 | Verification | **45** directed asm + pipeline throughput/debug-step + 43 cocotb + 4 formal + **RISCOF ACT 95/95 (CI)** + final gated **10k-seed lock-step co-sim** |
@@ -117,8 +118,8 @@ Legend: ✅ have · 🟡 partial · ❌ missing · **P0** = required for any pro
 | Misaligned load/store trap (or HW support) | mandatory behavior | ✅ | precise mcause/mtval covered by `test_trap_faults` | **P0** |
 | Instruction/load/store **access fault** on bus error | mandatory | ✅ | `rsp_err` routes to precise access-fault traps | **P0** |
 | Instruction-address-misaligned trap | mandatory | ✅ | non-C RV32 control-flow target misalignment covered | **P0** |
-| U-mode (user) | common (M33, E2, RTOS isolation) | ❌ | needed for any privilege separation | P1 |
-| PMP (physical memory protection) | standard for secure MCU | ❌ | sandboxing, secure boot | P1 |
+| U-mode (user) | common (M33, E2, RTOS isolation) | ✅ | M+U, ECALL/trap/CSR priv enforcement | — |
+| PMP (physical memory protection) | standard for secure MCU | ✅ | 8-entry matcher, I/D gates | — |
 | TrustZone-class / Zk crypto | M33 / secure parts | ❌ | security-tier differentiator | P2 |
 | Vectored `mtvec` (MODE=1) | common | ✅ | BASE+cause×4 dispatch; `test_vectored_mtvec` | P1 |
 

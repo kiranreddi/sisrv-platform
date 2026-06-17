@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
-"""Filter RISCOF test_list.yaml to the sisrv Phase-A ACT profile.
+"""Filter RISCOF test_list.yaml to the sisrv ACT profile (RV32IMACZicsr M+U, 8 PMP).
 
-Excludes architectural tests outside the advertised RV32IMCZicsr M-mode scope:
-  - PMP (not implemented; documented P1)
-  - A extension / atomics (not implemented; documented P1)
-  - Privilege / misaligned traps (no trap handler; documented P1)
+Includes privilege and PMP tests matching our configuration. Excludes S-mode,
+virtual-memory PMP, and other out-of-scope suites.
 """
 
 from __future__ import annotations
@@ -16,10 +14,11 @@ from collections import Counter
 import yaml
 
 EXCLUDE_PATH_PARTS = (
-    "/pmp/",
-    "/A/",
     "/vm_pmp/",
-    "/privilege/",
+    "/pmps/",
+    "/pmpzicbo/",
+    "/vm_sv",
+    "/vm_",
 )
 
 
@@ -54,7 +53,7 @@ def main() -> int:
 
     print(
         f"ACT filter: kept {len(kept)} tests, excluded {len(data) - len(kept)} "
-        f"(PMP/A/privilege outside RV32IMCZicsr profile)",
+        f"(S-mode/vm_pmp/out-of-scope)",
         file=sys.stderr,
     )
     return 0

@@ -66,7 +66,7 @@ def write_elf(prefix: str, words: list[int], out_dir: Path) -> Path:
     gcc = prefix + "gcc"
     cmd = [
         gcc,
-        "-march=rv32im_zicsr",
+        "-march=rv32imac_zicsr",
         "-mabi=ilp32",
         "-Wl,-melf32lriscv",
         "-nostdlib",
@@ -133,7 +133,9 @@ def spike_program_commits(text: str) -> list[tuple[int, int]]:
 def run_spike(elf: Path, log_path: Path) -> list[tuple[int, int]]:
     cmd = [
         "spike",
-        "--isa=rv32im_zicsr",
+        "--isa=rv32imac_zicsr",
+        "--priv=mu",
+        "--pmpregions=8",
         "-m0x80000000:0x100000",
         "-l",
         str(elf),

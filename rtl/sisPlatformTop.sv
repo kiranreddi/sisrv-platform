@@ -161,7 +161,9 @@ module sisPlatformTop #(
   sisRvCore #(
     .RESET_VECTOR(RESET_VECTOR),
     .ENABLE_A    (1'b1),
-    .ENABLE_C    (1'b1)
+    .ENABLE_C    (1'b1),
+    .ENABLE_U    (1'b1),
+    .PMP_ENTRIES (8)
   ) u_core (
     .clk            (clk),
     .rst_n          (rst_n),

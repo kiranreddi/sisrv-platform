@@ -1,6 +1,12 @@
 hart_ids: [0]
 hart0:
-  ISA: RV32IMCZicsr
+  ISA: RV32IMACZicsr
   physical_addr_sz: 32
   User_Spec_Version: "2.3"
   supported_xlen: [32]
+  User:
+    implemented: true
+  Machine:
+    implemented: true
+  pmp_granularity: 0
+  pmp_regions: 8

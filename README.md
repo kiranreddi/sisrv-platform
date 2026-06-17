@@ -34,7 +34,8 @@ keeping the implementation readable and open.
 **Not yet claimed**
 
 - Not a certified or licensable commercial RISC-V IP product.
-- No PMP, cache, certified benchmark submission, or physical GDS signoff yet.
+- **U-mode + PMP**: 8-region physical memory protection, M+U privilege, 70 asm regress tests.
+- No cache, certified benchmark submission, or physical GDS signoff yet.
 
 ## Product Snapshot
 
@@ -49,7 +50,7 @@ keeping the implementation readable and open.
 | Verification | 45 assembly regression tests, pipeline throughput/debug-step tests, 43 cocotb tests, formal proofs, RISCOF ACT **95/95** + gated 10k lock-step co-sim |
 | Implementation | Synthesizable SystemVerilog, Verilator simulation, Yosys + Sky130 STA |
 | Benchmarks | Internal Verilator direct-corebus: **1.264 CoreMark/MHz**, **0.400 Dhrystone DMIPS/MHz** on `rv32imc_zicsr -O2` |
-| Product gap | PMP, certified benchmark submission, physical GDS signoff |
+| Product gap | Certified benchmark submission, physical GDS signoff |
 
 ## Architecture At A Glance
 
