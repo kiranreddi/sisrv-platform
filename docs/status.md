@@ -1,13 +1,13 @@
 # Implementation Status
 
-**Last updated**: 2026-06-15 (M6 closure — latest short CI run [#27565469770](https://github.com/kiranreddi/sisrv-platform/actions/runs/27565469770))
+**Last updated**: 2026-06-16 (benchmark bring-up after M6 closure)
 
 ## Summary
 
 The sisrv-platform project implements a fully functional RV32IMAC RISC-V processor core
 with M-mode CSRs, trap handling, **CLINT/PLIC interrupts**, **RISC-V Debug subset**,
 GPIO, UART, and an AXI4-Lite master bridge.
-The core is verified through **42** directed assembly regression tests, pipeline throughput/debug-step Verilator tests, 43 cocotb randomized unit tests,
+The core is verified through **43** directed assembly regression tests, pipeline throughput/debug-step Verilator tests, 43 cocotb randomized unit tests,
 4 formal proofs, **RISCOF rv32imac_zicsr ACT suite** (**95/95** filtered tests in CI; 72
 upstream tests excluded for PMP/A/privilege outside the RV32IMCZicsr profile), and
 **10k-seed retired-instruction Spike lock-step co-sim** as a final gated CI lane.
@@ -20,6 +20,7 @@ upstream tests excluded for PMP/A/privilege outside the RV32IMCZicsr profile), a
 | C extension | ✅ Complete | `sisDecompress.sv`, `ENABLE_C`, `test_compressed`, **27/27 C ACT tests** |
 | Debug / JTAG | ✅ Complete | `sisDm.sv`, `sisJtagDtm.sv`, halt/resume/step, abstract GPR → regfile |
 | Product docs | ✅ Complete | `LICENSE`, Integration Guide, PRM, PPA datasheet |
+| Benchmarks | ✅ Internal | CoreMark/Dhrystone direct-corebus report in `docs/BENCHMARKS.md` |
 | PPA / STA | ✅ Sky130 HD | CI WNS **-199.946 ns**, TNS **-10929.076 ns**, Fmax **4.55 MHz** ([run](https://github.com/kiranreddi/sisrv-platform/actions/runs/27565469770)) |
 | RISCOF / co-sim | ✅ Gated | **95/95** ACT green in latest short CI; **10k-seed** lock-step restored as final gated CI job |
 
@@ -55,7 +56,7 @@ upstream tests excluded for PMP/A/privilege outside the RV32IMCZicsr profile), a
 | `sisDecode.sv` | ✅ Done | All RV32I/RV32M instruction types decoded |
 | `sisMemFabric.sv` | ✅ Done | Address decoder: ROM/RAM/MMIO routing |
 
-**Test coverage** (42 directed regression tests plus pipeline throughput/debug tests, all passing):
+**Test coverage** (43 directed regression tests plus pipeline throughput/debug tests, all passing):
 
 | Test | Instructions Covered |
 |------|---------------------|
@@ -110,7 +111,7 @@ x0 always 0 ✅, PC word-aligned ✅, correct sign/zero extension ✅
 **Interrupt semantics (documented decisions)**:
 - `mstatus.MIE` (bit 3): Global machine interrupt enable
 - `mstatus.MPIE` (bit 7): Previous MIE saved on trap entry, restored on MRET
-- `mtvec`: **Direct mode only** (MODE=0, no vectored mode)
+- `mtvec`: **Direct (MODE=0) and vectored (MODE=1)** — interrupt cause N → BASE+N×4
 - Trap priority: synchronous exceptions checked first, then asynchronous interrupts between instructions
 
 **Exit criteria**: Trap tests pass ✅, mcause/mepc match expected ✅, no regressions ✅
@@ -150,8 +151,8 @@ x0 always 0 ✅, PC word-aligned ✅, correct sign/zero extension ✅
 | AXI-Lite timer support | ✅ Done | `tb/models/sisAxiLiteSlave.sv` models MTIME/MTIMECMP and MTIP |
 | AXI-Lite GPIO support | ✅ Done | `tb/models/sisAxiLiteSlave.sv` models DATA/DIR/IN/SET/CLR |
 | AXI-Lite UART support | ✅ Done | `tb/models/sisAxiLiteSlave.sv` models TXDATA/RXDATA/STATUS/CTRL/BAUDDIV |
-| AXI-Lite PLIC/CLINT support | ✅ Done | Inline PLIC + CLINT in `sisAxiLiteSlave.sv` (42/42 regress-axil) |
-| AXI-Lite system regression | ✅ Done | `make regress-axil` runs all 42 regression assembly tests through the AXI path |
+| AXI-Lite PLIC/CLINT support | ✅ Done | Inline PLIC + CLINT in `sisAxiLiteSlave.sv` (43/43 regress-axil) |
+| AXI-Lite system regression | ✅ Done | `make regress-axil` runs all 43 regression assembly tests through the AXI path |
 | cocotb bridge tests | ✅ Done | 11 tests: reset, R/W, errors, stalls, 100-txn random stress |
 | Formal AXI-Lite bridge | Optional | Bounded VALID stability, mutual exclusion, data stability (`make formal-axil`) |
 
@@ -204,12 +205,27 @@ timer interrupt tests run with the AXI slave timer model ✅, CI covers `make re
 
 | Deliverable | Status | Notes |
 |-------------|--------|-------|
-| IF/ID/EX-MEM + WB pipeline | ✅ Done | `sisRvCore` now has independent fetch, decode, execute/memory, and WB/retire pipeline state |
-| Corebus owner arbitration | ✅ Done | One outstanding request preserved; data memory wins over instruction fetch |
+| IF/ID/EX-MEM + WB pipeline | ✅ Done | `sisRvCore` now has independent fetch, decode, execute/memory, WB/retire state, and direct-corebus Harvard I/D ports |
+| Corebus owner arbitration | ✅ Done | One outstanding request per I/D port preserved; AXI compatibility path muxes them back to one outstanding request |
 | Hazard controls | ✅ Done | EX/WB bypass/forwarding, load-use stall, branch/jump flush, trap/interrupt/mret flush |
 | Interface preservation | ✅ Done | Corebus, AXI bridge contract, CSR/trap, interrupt, debug, compressed fetch, and DPI retire-log interfaces retained |
 | Local validation | ✅ Done | `make lint`, `make regress`, `make regress-axil`, `make regress-axil-stall`, `make pipeline-debug` |
 | Directed pipeline tests | ✅ Done | forwarding, load-use, branch/jump flush, trap flush, interrupt flush, throughput guard, debug halt/single-step |
+
+---
+
+### ✅ Post-M6 benchmark bring-up
+**Status: COMPLETE**
+
+| Deliverable | Status | Notes |
+|-------------|--------|-------|
+| CoreMark port | ✅ Done | EEMBC CoreMark `v1.01` vendored under `third_party/coremark`; project port in `sw/bench/coremark` |
+| Dhrystone port | ✅ Done | Dhrystone C 2.1 vendored under `third_party/dhrystone`; project wrapper in `sw/bench/dhrystone` |
+| Bare-metal BSP | ✅ Done | UART output, tohost pass/fail, 64-bit `mcycle`/`minstret`, minimal libc |
+| Startup `.data` copy | ✅ Done | `crt0.S` copies initialized data from ROM LMA to RAM before `main` |
+| Benchmark targets | ✅ Done | `make benchmark-coremark`, `make benchmark-dhrystone`, `make benchmark`, `make benchmark-smoke` |
+| Headline result | ✅ Measured | `rv32imc_zicsr -O2`: 1.264 CoreMark/MHz, 0.400 Dhrystone DMIPS/MHz, Dhrystone CPI 2.804 |
+| Determinism | ✅ Done | Two consecutive local publish runs matched cycle/iteration counts exactly |
 
 ---
 
@@ -241,6 +257,20 @@ timer interrupt tests run with the AXI slave timer model ✅, CI covers `make re
 
 ---
 
+### ✅ Post-M6 ISA completions — Vectored mtvec + A extension
+**Status: COMPLETE**
+
+| Deliverable | Status | Notes |
+|-------------|--------|-------|
+| Vectored `mtvec` (MODE=1) | ✅ Done | BASE+cause×4 dispatch; exceptions always go to BASE; `test_vectored_mtvec` |
+| A extension — LR.W/SC.W | ✅ Done | Single-hart reservation model; `lr_reservation_valid/addr`; cleared on any trap/interrupt |
+| A extension — full AMO set | ✅ Done | AMOSWAP/ADD/XOR/AND/OR/MIN/MAX/MINU/MAXU; two-phase read-modify-write via `EX_AMO_STORE_REQ/WAIT` states |
+| misa.A + misa reporting | ✅ Done | `sisCsr.sv` MISA_VALUE includes A extension; `test_machine_counters` updated |
+| mepc 2-byte alignment | ✅ Fixed | `mepc` masked to `0xFFFFFFFE` (not `0xFFFFFFFC`) with C extension; required for MRET to compressed-instruction return addresses |
+| Regression | ✅ 45/45 | All tests pass including new `test_atomics` |
+
+---
+
 ### 🔲 Milestone 8 — OpenROAD hardening
 **Status: NOT STARTED**
 
@@ -259,9 +289,11 @@ Planned:
 | Verilator version | 5.038 |
 | Lint status | ✅ Clean (Wall, no warnings) |
 | Compiler | riscv64-linux-gnu-gcc 13.3 |
-| Assembly regression suite | 42 tests |
-| Assembly regression | 42/42 passing through corebus, AXI-Lite, and stalled AXI-Lite paths |
+| Assembly regression suite | 43 tests |
+| Assembly regression | 43/43 passing through corebus, AXI-Lite, and stalled AXI-Lite paths |
 | Pipeline throughput guard | `make pipeline-throughput` passing on the direct corebus path |
+| Benchmark smoke | `make benchmark-smoke` builds/runs reduced CoreMark + Dhrystone validation |
+| Publish benchmark | `make benchmark` generates `build/bench/summary.json` and logs |
 | cocotb unit tests | 43 tests (3 ALU + 4 RegFile + 11 Decode + 14 CSR + 11 AXI-Lite) |
 | cocotb status | 43/43 passing |
 | Formal proofs/checks | Required: ALU (all 10 ops), RegFile (x0=0), Decode (fields + legality). Optional: AXI-Lite bounded safety (`make formal-axil`) |
@@ -316,7 +348,7 @@ Planned:
 ### Software
 - `sw/bsp/crt0.S` — C runtime startup
 - `sw/bsp/link.ld` — Linker script
-- `sw/tests/asm/test_*.S` — 42 regression assembly programs plus direct-corebus pipeline throughput guard
+- `sw/tests/asm/test_*.S` — 43 regression assembly programs plus direct-corebus pipeline throughput guard
 
 ### Build & CI
 - `Makefile` — Build, lint, sim, regression, cocotb, formal, synth targets

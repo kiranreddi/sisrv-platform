@@ -35,15 +35,29 @@ module sisPlatformTop #(
 );
 
   // ---------------------------------------------------------------
-  // Core <-> Fabric corebus signals
+  // Core instruction/data corebus signals
   // ---------------------------------------------------------------
+  logic        core_i_req_valid, core_i_req_ready;
+  logic [31:0] core_i_req_addr;
+  logic        core_i_rsp_valid, core_i_rsp_ready;
+  logic [31:0] core_i_rsp_rdata;
+  logic        core_i_rsp_err;
+
+  logic        core_d_req_valid, core_d_req_ready;
+  logic [31:0] core_d_req_addr;
+  logic        core_d_req_we;
+  logic [31:0] core_d_req_wdata;
+  logic [3:0]  core_d_req_wstrb;
+  logic        core_d_rsp_valid, core_d_rsp_ready;
+  logic [31:0] core_d_rsp_rdata;
+  logic        core_d_rsp_err;
+
   logic        core_req_valid;
   logic        core_req_ready;
   logic [31:0] core_req_addr;
   logic        core_req_we;
   logic [31:0] core_req_wdata;
   logic [3:0]  core_req_wstrb;
-
   logic        core_rsp_valid;
   logic        core_rsp_ready;
   logic [31:0] core_rsp_rdata;
@@ -60,6 +74,12 @@ module sisPlatformTop #(
   logic        rom_rsp_valid, rom_rsp_ready;
   logic [31:0] rom_rsp_rdata;
   logic        rom_rsp_err;
+
+  logic        irom_req_valid, irom_req_ready;
+  logic [31:0] irom_req_addr;
+  logic        irom_rsp_valid, irom_rsp_ready;
+  logic [31:0] irom_rsp_rdata;
+  logic        irom_rsp_err;
 
   // ---------------------------------------------------------------
   // Fabric <-> RAM
@@ -140,6 +160,7 @@ module sisPlatformTop #(
   logic [31:0] abs_wdata, abs_rdata;
   sisRvCore #(
     .RESET_VECTOR(RESET_VECTOR),
+    .ENABLE_A    (1'b1),
     .ENABLE_C    (1'b1)
   ) u_core (
     .clk            (clk),
@@ -157,16 +178,23 @@ module sisPlatformTop #(
     .ext_msip       (msip_wire),
     .ext_mtip       (mtip_wire),
     .ext_meip       (meip_wire),
-    .req_valid (core_req_valid),
-    .req_ready (core_req_ready),
-    .req_addr  (core_req_addr),
-    .req_we    (core_req_we),
-    .req_wdata (core_req_wdata),
-    .req_wstrb (core_req_wstrb),
-    .rsp_valid (core_rsp_valid),
-    .rsp_ready (core_rsp_ready),
-    .rsp_rdata (core_rsp_rdata),
-    .rsp_err   (core_rsp_err)
+    .i_req_valid(core_i_req_valid),
+    .i_req_ready(core_i_req_ready),
+    .i_req_addr (core_i_req_addr),
+    .i_rsp_valid(core_i_rsp_valid),
+    .i_rsp_ready(core_i_rsp_ready),
+    .i_rsp_rdata(core_i_rsp_rdata),
+    .i_rsp_err  (core_i_rsp_err),
+    .d_req_valid(core_d_req_valid),
+    .d_req_ready(core_d_req_ready),
+    .d_req_addr (core_d_req_addr),
+    .d_req_we   (core_d_req_we),
+    .d_req_wdata(core_d_req_wdata),
+    .d_req_wstrb(core_d_req_wstrb),
+    .d_rsp_valid(core_d_rsp_valid),
+    .d_rsp_ready(core_d_rsp_ready),
+    .d_rsp_rdata(core_d_rsp_rdata),
+    .d_rsp_err  (core_d_rsp_err)
   );
 
   // ---------------------------------------------------------------
@@ -289,22 +317,23 @@ module sisPlatformTop #(
       assign tohost_rsp_ready = mmio_rsp_ready && (mmio_sel_r == 2'd0);
 
       // ---------------------------------------------------------------
-      // Direct corebus routing (default)
+      // Direct data corebus routing (default). Instruction fetch has a
+      // dedicated ROM port below so data traffic cannot block fetch.
       // ---------------------------------------------------------------
       sisMemFabric u_fabric (
         .clk         (clk),
         .rst_n       (rst_n),
 
-        .m_req_valid (core_req_valid),
-        .m_req_ready (core_req_ready),
-        .m_req_addr  (core_req_addr),
-        .m_req_we    (core_req_we),
-        .m_req_wdata (core_req_wdata),
-        .m_req_wstrb (core_req_wstrb),
-        .m_rsp_valid (core_rsp_valid),
-        .m_rsp_ready (core_rsp_ready),
-        .m_rsp_rdata (core_rsp_rdata),
-        .m_rsp_err   (core_rsp_err),
+        .m_req_valid (core_d_req_valid),
+        .m_req_ready (core_d_req_ready),
+        .m_req_addr  (core_d_req_addr),
+        .m_req_we    (core_d_req_we),
+        .m_req_wdata (core_d_req_wdata),
+        .m_req_wstrb (core_d_req_wstrb),
+        .m_rsp_valid (core_d_rsp_valid),
+        .m_rsp_ready (core_d_rsp_ready),
+        .m_rsp_rdata (core_d_rsp_rdata),
+        .m_rsp_err   (core_d_rsp_err),
 
         .s0_req_valid(rom_req_valid),
         .s0_req_ready(rom_req_ready),
@@ -363,7 +392,49 @@ module sisPlatformTop #(
       );
 
       // ---------------------------------------------------------------
-      // ROM (corebus path)
+      // Instruction ROM (corebus path)
+      // ---------------------------------------------------------------
+      logic irom_bad_pending;
+      wire  irom_sel = ~|core_i_req_addr[31:21];
+
+      assign irom_req_valid   = core_i_req_valid && irom_sel;
+      assign irom_req_addr    = core_i_req_addr;
+      assign core_i_req_ready = irom_sel ? irom_req_ready : !irom_bad_pending;
+
+      always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+          irom_bad_pending <= 1'b0;
+        end else begin
+          if (core_i_req_valid && core_i_req_ready && !irom_sel)
+            irom_bad_pending <= 1'b1;
+          else if (core_i_rsp_valid && core_i_rsp_ready && irom_bad_pending)
+            irom_bad_pending <= 1'b0;
+        end
+      end
+
+      assign core_i_rsp_valid = irom_bad_pending || irom_rsp_valid;
+      assign core_i_rsp_rdata = irom_bad_pending ? 32'hDEAD_BEEF : irom_rsp_rdata;
+      assign core_i_rsp_err   = irom_bad_pending ? 1'b1 : irom_rsp_err;
+      assign irom_rsp_ready   = core_i_rsp_ready && !irom_bad_pending;
+
+      sisRom #(
+        .DEPTH_WORDS(524288),
+        .INIT_FILE  (ROM_INIT_FILE)
+      ) u_irom (
+        .clk       (clk),
+        .rst_n     (rst_n),
+        .req_valid (irom_req_valid),
+        .req_ready (irom_req_ready),
+        .req_addr  (irom_req_addr),
+        .req_we    (1'b0),
+        .rsp_valid (irom_rsp_valid),
+        .rsp_ready (irom_rsp_ready),
+        .rsp_rdata (irom_rsp_rdata),
+        .rsp_err   (irom_rsp_err)
+      );
+
+      // ---------------------------------------------------------------
+      // Data ROM (corebus path)
       // ---------------------------------------------------------------
       sisRom #(
         .DEPTH_WORDS(524288),
@@ -472,7 +543,7 @@ module sisPlatformTop #(
 
     end else begin : gen_axilite
       // ---------------------------------------------------------------
-      // AXI4-Lite path: core -> bridge -> AXI-Lite slave model
+      // AXI4-Lite path: core I/D ports -> compatibility mux -> bridge -> AXI-Lite slave model
       // ---------------------------------------------------------------
 
       // AXI4-Lite signals between bridge and slave
@@ -490,6 +561,49 @@ module sisPlatformTop #(
       logic        axi_rvalid, axi_rready;
       logic [31:0] axi_rdata;
       logic [1:0]  axi_rresp;
+
+      typedef enum logic [1:0] {
+        AXI_ARB_NONE = 2'd0,
+        AXI_ARB_I    = 2'd1,
+        AXI_ARB_D    = 2'd2
+      } axi_arb_owner_t;
+
+      axi_arb_owner_t axi_arb_owner;
+      logic           axi_arb_pending;
+
+      assign core_req_valid = !axi_arb_pending && (core_d_req_valid || core_i_req_valid);
+      assign core_req_addr  = core_d_req_valid ? core_d_req_addr : core_i_req_addr;
+      assign core_req_we    = core_d_req_valid ? core_d_req_we : 1'b0;
+      assign core_req_wdata = core_d_req_valid ? core_d_req_wdata : 32'h0;
+      assign core_req_wstrb = core_d_req_valid ? core_d_req_wstrb : 4'h0;
+
+      assign core_d_req_ready = !axi_arb_pending && core_d_req_valid && core_req_ready;
+      assign core_i_req_ready = !axi_arb_pending && !core_d_req_valid && core_i_req_valid && core_req_ready;
+
+      always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+          axi_arb_owner   <= AXI_ARB_NONE;
+          axi_arb_pending <= 1'b0;
+        end else begin
+          if (core_req_valid && core_req_ready) begin
+            axi_arb_owner   <= core_d_req_valid ? AXI_ARB_D : AXI_ARB_I;
+            axi_arb_pending <= 1'b1;
+          end else if (core_rsp_valid && core_rsp_ready) begin
+            axi_arb_owner   <= AXI_ARB_NONE;
+            axi_arb_pending <= 1'b0;
+          end
+        end
+      end
+
+      assign core_rsp_ready   = (axi_arb_owner == AXI_ARB_D) ? core_d_rsp_ready :
+                                (axi_arb_owner == AXI_ARB_I) ? core_i_rsp_ready :
+                                                               1'b0;
+      assign core_d_rsp_valid = (axi_arb_owner == AXI_ARB_D) && core_rsp_valid;
+      assign core_i_rsp_valid = (axi_arb_owner == AXI_ARB_I) && core_rsp_valid;
+      assign core_d_rsp_rdata = core_rsp_rdata;
+      assign core_i_rsp_rdata = core_rsp_rdata;
+      assign core_d_rsp_err   = (axi_arb_owner == AXI_ARB_D) && core_rsp_err;
+      assign core_i_rsp_err   = (axi_arb_owner == AXI_ARB_I) && core_rsp_err;
 
       sisAxiLiteM u_axil_bridge (
         .clk       (clk),
@@ -573,6 +687,9 @@ module sisPlatformTop #(
       assign ram_req_valid    = 1'b0;
       assign rom_rsp_ready    = 1'b0;
       assign ram_rsp_ready    = 1'b0;
+      assign irom_req_valid   = 1'b0;
+      assign irom_req_addr    = 32'h0;
+      assign irom_rsp_ready   = 1'b0;
       // CLINT/PLIC/MMIO not used on direct corebus in AXI path
       assign clint_req_valid  = 1'b0;
       assign clint_req_addr   = 32'h0;

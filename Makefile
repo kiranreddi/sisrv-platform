@@ -35,6 +35,7 @@ ASM_TESTS := $(filter-out $(PIPELINE_THROUGHPUT_TEST),$(wildcard sw/tests/asm/*.
 ASM_HEXES := $(patsubst sw/tests/asm/%.S,$(BUILD)/tests/%.hex,$(ASM_TESTS))
 
 .PHONY: sim lint clean wave regress regress-axil regress-axil-stall pipeline-debug pipeline-throughput sw all tests cocotb formal formal-axil synth sta sta-sky130 cosim-lockstep \
+        benchmark benchmark-coremark benchmark-dhrystone benchmark-smoke \
         riscof-check-tools riscof-smoke riscof-act riscof-rv32i riscof-rv32im
 
 
@@ -73,13 +74,18 @@ wave:
 	@echo "Open waves with: gtkwave build/wave.fst"
 
 # Build a single assembly test: .S -> .elf -> .bin -> .hex
+# Specific arch rules must come BEFORE the generic %.elf rule (Make 3.81 first-match).
+$(BUILD)/tests/test_compressed%.elf: sw/tests/asm/test_compressed%.S sw/bsp/link.ld
+	@mkdir -p $(BUILD)/tests
+	$(RV_GCC) -march=rv32imc_zicsr -mabi=$(RV_ABI) -nostdlib -nostartfiles -ffreestanding -static -fno-pic -fno-pie -no-pie -O2 -Wl,--build-id=none -T sw/bsp/link.ld -o $@ $<
+
+$(BUILD)/tests/test_atomic%.elf: sw/tests/asm/test_atomic%.S sw/bsp/link.ld
+	@mkdir -p $(BUILD)/tests
+	$(RV_GCC) -march=rv32imac_zicsr -mabi=$(RV_ABI) -nostdlib -nostartfiles -ffreestanding -static -fno-pic -fno-pie -no-pie -O2 -Wl,--build-id=none -T sw/bsp/link.ld -o $@ $<
+
 $(BUILD)/tests/%.elf: sw/tests/asm/%.S sw/bsp/link.ld
 	@mkdir -p $(BUILD)/tests
 	$(RV_GCC) $(RV_CFLAGS) -T sw/bsp/link.ld -o $@ $<
-
-$(BUILD)/tests/test_compressed.elf: sw/tests/asm/test_compressed.S sw/bsp/link.ld
-	@mkdir -p $(BUILD)/tests
-	$(RV_GCC) -march=rv32imc_zicsr -mabi=$(RV_ABI) -nostdlib -nostartfiles -ffreestanding -static -fno-pic -fno-pie -no-pie -O2 -Wl,--build-id=none -T sw/bsp/link.ld -o $@ $<
 
 $(BUILD)/tests/%.bin: $(BUILD)/tests/%.elf
 	$(RV_OBJCOPY) -O binary $< $@
@@ -158,6 +164,21 @@ pipeline-throughput: $(SIM) $(BUILD)/tests/test_pipeline_throughput.hex
 	@touch ram.hex
 	@cp $(BUILD)/tests/test_pipeline_throughput.hex rom.hex
 	@$(SIM) && rm -f rom.hex ram.hex || (rm -f rom.hex ram.hex; exit 1)
+
+BENCH_ISAS ?= rv32imc_zicsr rv32im_zicsr
+BENCH_TIMEOUT ?= 60000000
+
+benchmark-coremark: $(SIM)
+	python3 scripts/run_benchmarks.py --benchmark coremark --sim $(SIM) --rv-prefix $(RV_PREFIX) --isas "$(BENCH_ISAS)" --timeout-cycles $(BENCH_TIMEOUT)
+
+benchmark-dhrystone: $(SIM)
+	python3 scripts/run_benchmarks.py --benchmark dhrystone --sim $(SIM) --rv-prefix $(RV_PREFIX) --isas "$(BENCH_ISAS)" --timeout-cycles $(BENCH_TIMEOUT)
+
+benchmark: $(SIM)
+	python3 scripts/run_benchmarks.py --benchmark all --sim $(SIM) --rv-prefix $(RV_PREFIX) --isas "$(BENCH_ISAS)" --timeout-cycles $(BENCH_TIMEOUT)
+
+benchmark-smoke: $(SIM)
+	python3 scripts/run_benchmarks.py --benchmark all --sim $(SIM) --rv-prefix $(RV_PREFIX) --isas "rv32imc_zicsr" --timeout-cycles 1000000 --smoke
 
 clean:
 	rm -rf $(BUILD) obj_dir obj_dir_pipeline_debug rom.hex ram.hex

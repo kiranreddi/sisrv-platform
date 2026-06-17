@@ -3,7 +3,8 @@
 
 module sisDecode #(
     parameter bit ENABLE_M = 1'b1,
-    parameter bit ENABLE_C = 1'b1
+    parameter bit ENABLE_C = 1'b1,
+    parameter bit ENABLE_A = 1'b1
 )(
     input  logic [31:0] instr,
 
@@ -37,6 +38,12 @@ module sisDecode #(
     output logic        is_system,
     output logic        is_fence,
 
+    // Atomic instruction decode (RV32A)
+    output logic        is_atomic,
+    output logic [4:0]  atomic_funct5,
+    output logic        aq,
+    output logic        rl,
+
     // Decoded control
     output logic        is_legal
 );
@@ -53,6 +60,7 @@ module sisDecode #(
   localparam logic [6:0] OP_ALU_REG = 7'b0110011;
   localparam logic [6:0] OP_FENCE   = 7'b0001111;
   localparam logic [6:0] OP_SYSTEM  = 7'b1110011;
+  localparam logic [6:0] OP_AMO     = 7'b0101111;
 
   // Extract fields
   assign opcode = instr[6:0];
@@ -61,6 +69,11 @@ module sisDecode #(
   assign rs1    = instr[19:15];
   assign rs2    = instr[24:20];
   assign funct7 = instr[31:25];
+
+  // Atomic-specific fields
+  assign atomic_funct5 = instr[31:27];
+  assign aq            = instr[26];
+  assign rl            = instr[25];
 
   // Immediate generation
   assign imm_i = {{20{instr[31]}}, instr[31:20]};
@@ -81,12 +94,14 @@ module sisDecode #(
   assign is_alu_reg = (opcode == OP_ALU_REG);
   assign is_system  = (opcode == OP_SYSTEM);
   assign is_fence   = (opcode == OP_FENCE);
+  assign is_atomic  = (opcode == OP_AMO);
 
   // RV32I/RV32M encoding legality (opcode + funct3/funct7/system/fence fields)
   logic legal_lui, legal_auipc, legal_jal, legal_jalr;
   logic legal_branch, legal_load, legal_store;
   logic legal_alu_imm, legal_alu_reg;
   logic legal_system, legal_fence;
+  logic legal_atomic;
 
   assign legal_lui   = is_lui;
   assign legal_auipc = is_auipc;
@@ -141,9 +156,26 @@ module sisDecode #(
 
   assign legal_fence = is_fence && (funct3 == 3'b000);
 
+  // RV32A atomics: opcode=OP_AMO, funct3=010 (word), funct5 selects operation.
+  // aq/rl bits (instr[26:25]) are ordering hints — accepted for any funct5 below.
+  // LR.W rs2!=0: spec UNDEF; silently accepted at decode (single-hart, never occurs in practice).
+  assign legal_atomic = ENABLE_A && is_atomic && (funct3 == 3'b010) && (
+      (atomic_funct5 == 5'b00010) ||  // LR.W
+      (atomic_funct5 == 5'b00011) ||  // SC.W
+      (atomic_funct5 == 5'b00001) ||  // AMOSWAP.W
+      (atomic_funct5 == 5'b00000) ||  // AMOADD.W
+      (atomic_funct5 == 5'b00100) ||  // AMOXOR.W
+      (atomic_funct5 == 5'b01100) ||  // AMOAND.W
+      (atomic_funct5 == 5'b01000) ||  // AMOOR.W
+      (atomic_funct5 == 5'b10000) ||  // AMOMIN.W
+      (atomic_funct5 == 5'b10100) ||  // AMOMAX.W
+      (atomic_funct5 == 5'b11000) ||  // AMOMINU.W
+      (atomic_funct5 == 5'b11100)     // AMOMAXU.W
+  );
+
   assign is_legal = legal_lui | legal_auipc | legal_jal | legal_jalr |
                     legal_branch | legal_load | legal_store |
                     legal_alu_imm | legal_alu_reg |
-                    legal_system | legal_fence;
+                    legal_system | legal_fence | legal_atomic;
 
 endmodule
