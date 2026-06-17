@@ -11,8 +11,6 @@ read -define SYNTHESIS
 read -sv rtl/core/sisAlu.sv
 read -sv rtl/core/sisDecode.sv
 read -sv rtl/core/sisRegFile.sv
-read -sv rtl/core/sisCsr.sv
-read -sv rtl/core/sisPmp.sv
 read -sv rtl/core/sisDecompress.sv
 read -sv rtl/core/sisRvCore.sv
 read -sv rtl/bus/sisMemFabric.sv
