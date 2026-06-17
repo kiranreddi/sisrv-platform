@@ -16,22 +16,25 @@ licensable / product-grade RISC-V core.
 ## 1. Executive summary
 
 `sisRvCore` today is a **correct, well-verified RV32IMAC teaching/MVP platform**: an
-in-order IF/ID/EX-MEM pipeline with independent WB/retire, M-mode only, with clean RTL,
-real formal proofs, cocotb unit tests, a 42-test directed regression plus pipeline throughput guard, an AXI4-Lite bridge, CLINT/PLIC, debug/JTAG, C extension,
+in-order IF/ID/EX-MEM pipeline with independent WB/retire and direct-corebus Harvard I/D path, M-mode only, with clean RTL,
+real formal proofs, cocotb unit tests, a 43-test directed regression plus pipeline throughput guard, an AXI4-Lite bridge, CLINT/PLIC, debug/JTAG, C extension,
 and a Yosys synthesis path. That is a genuinely strong *foundation* — better verified
 than many hobby cores.
 
 It is **not yet an industry-standard product**. The gap is not the ISA subset alone — it
 is three things commercial cores treat as table stakes:
 
-1. **Performance data.** The M6 pipeline is implemented, but CoreMark/Dhrystone and
-   benchmark CPI are not published yet. Commercial embedded cores publish those numbers.
+1. **Performance data.** The M6 pipeline now has internal direct-corebus
+   CoreMark/Dhrystone measurements. They are useful engineering data, but not certified
+   benchmark submissions.
 2. **Compliance sign-off.** RISCOF **rv32imac_zicsr** ACT suite (**95/95** filtered tests;
    72 upstream PMP/A/privilege tests excluded) is green in CI, and the
    **10k-seed retired-instruction** Spike lock-step co-sim is restored as the
    final gated CI lane.
 3. **Productization rigor.** Sky130 HD STA in CI: WNS **-199.946 ns**, TNS **-10929.076 ns**,
-   Fmax **4.55 MHz**; competitive CoreMark/MHz evidence is still open.
+   Fmax **4.55 MHz**; internal `rv32imc_zicsr -O2` performance is **1.264
+   CoreMark/MHz** and **0.400 Dhrystone DMIPS/MHz** after the direct-corebus
+   Harvard instruction/data split.
 
 The good news: the codebase is structured so each of these is an incremental milestone,
 not a rewrite. The plan in §6 takes us from "MVP core" to "product-grade soft IP" in a
@@ -44,16 +47,16 @@ defined sequence with hard exit gates.
 | Dimension | Current state |
 |---|---|
 | ISA | RV32I + M + **C** (`rv32imac_zicsr`), M-mode only |
-| Microarchitecture | In-order IF/ID/EX-MEM pipeline with independent WB/retire; single outstanding bus txn |
-| Performance | Pipelined RTL complete; CoreMark/Dhrystone not yet measured |
+| Microarchitecture | In-order IF/ID/EX-MEM pipeline with independent WB/retire; single outstanding transaction per I/D corebus port |
+| Performance | Internal direct-corebus Verilator: 1.264 CoreMark/MHz, 0.400 Dhrystone DMIPS/MHz on `rv32imc_zicsr -O2` |
 | Privilege | M-mode only; no U/S mode; no PMP |
 | Traps | Illegal instr, ECALL, EBREAK, MRET; misaligned load/store/control-flow traps; instruction/load/store access faults |
 | Interrupts | **CLINT** (MSIP/MTIP/MTIME at 0x0200_0000) + **PLIC** (8 sources at 0x0C00_0000) |
-| CSRs | mstatus, misa (**C**), mtvec (direct only), mepc, mcause, mtval, mscratch, mie, mip, ID CSRs, mcycle/minstret/mcountinhibit. WFI legal no-op. |
+| CSRs | mstatus, misa (**A**/**C**), mtvec (direct + vectored MODE=1), mepc, mcause, mtval, mscratch, mie, mip, ID CSRs, mcycle/minstret/mcountinhibit. WFI legal no-op. |
 | Memory | Aligned-only assumed; no MPU/PMP; no cache; tightly-coupled ROM/RAM |
 | Bus | Internal corebus + AXI4-Lite **master** bridge (single outstanding, no bursts) |
 | Debug | **DM 0.13 subset + JTAG DTM** (halt/resume/step); **abstract GPR → regfile** |
-| Verification | **42** directed asm + pipeline throughput/debug-step + 43 cocotb + 4 formal + **RISCOF ACT 95/95 (CI)** + final gated **10k-seed lock-step co-sim** |
+| Verification | **45** directed asm + pipeline throughput/debug-step + 43 cocotb + 4 formal + **RISCOF ACT 95/95 (CI)** + final gated **10k-seed lock-step co-sim** |
 | Physical | Yosys synth + **Sky130 HD STA** (WNS -199.946 ns, Fmax 4.55 MHz, CI) + PPA datasheet |
 | Collateral | **Apache-2.0**, Integration Guide, Programmer's Reference, PPA datasheet |
 
@@ -72,12 +75,13 @@ For a 32-bit embedded core, the bar is set by two camps. Targets below are the r
 | **SiFive E21 / E2 series** | SiFive | RV32IMC | ~2.3–3.0 | 3-stage | Closest analog to our target point |
 | **Andes N25F / D25F** | Andes | RV32IMAC(F) | ~3.5+ | 5-stage | High-end embedded RISC-V IP |
 | **Cortex-M23 / M33** | Arm | ARMv8-M | ~2.5 / 4.0+ | 2/3-stage | TrustZone security bar |
-| **sisRvCore (today)** | — | RV32IMAC | not yet measured | IF/ID/EX-MEM + WB | current implementation |
+| **sisRvCore (today)** | — | RV32IMAC | 1.264 internal, not certified | IF/ID/EX-MEM + WB, Harvard I/D corebus | current implementation |
 
 ¹ Representative published figures; exact numbers vary by config/compiler. Use as
 order-of-magnitude, not contractual.
-² CoreMark and Dhrystone are still open product benchmarks; do not claim an
-industry-comparable score until those runs exist.
+² sisRvCore numbers are internal, cycle-normalized Verilator direct-corebus
+measurements, not certified EEMBC submissions. Conditions: `riscv64-elf-gcc 16.1.0`,
+`-O2`, ROM 64 KiB, RAM 256 KiB, direct corebus memory path.
 
 **Takeaway:** The realistic product target is the **SiFive E2 / Cortex-M0+–M3 class**:
 a small, pipelined, RV32IMC core with debug, standard interrupts, and compliance
@@ -98,7 +102,7 @@ Legend: ✅ have · 🟡 partial · ❌ missing · **P0** = required for any pro
 | RV32I base | yes | ✅ | — | — |
 | M (mul/div) | yes | ✅ | — | — |
 | **C (compressed)** | near-universal (code density) | ✅ | `sisDecompress.sv`, `test_compressed`, misa.C | **P0** |
-| A (atomics) | yes for any multi-tasking/SMP | ❌ | needed for RTOS locks, lock-free | P1 |
+| A (atomics) | yes for any multi-tasking/SMP | ✅ | LR/SC + full AMO, single-hart reservation model; `test_atomics` | P1 |
 | Zicsr / Zifencei | yes | 🟡 | Zicsr ✅; Zifencei FENCE.I is NOP | P1 |
 | F/D (float) | optional (M4F/E2F) | ❌ | only if DSP/FP target | P2 |
 | B (bitmanip) / Zb* | increasingly common | ❌ | perf differentiator | P2 |
@@ -116,7 +120,7 @@ Legend: ✅ have · 🟡 partial · ❌ missing · **P0** = required for any pro
 | U-mode (user) | common (M33, E2, RTOS isolation) | ❌ | needed for any privilege separation | P1 |
 | PMP (physical memory protection) | standard for secure MCU | ❌ | sandboxing, secure boot | P1 |
 | TrustZone-class / Zk crypto | M33 / secure parts | ❌ | security-tier differentiator | P2 |
-| Vectored `mtvec` (MODE=1) | common | ❌ (direct only) | low-latency IRQ dispatch | P1 |
+| Vectored `mtvec` (MODE=1) | common | ✅ | BASE+cause×4 dispatch; `test_vectored_mtvec` | P1 |
 
 ### 4.3 Interrupts & system integration
 
@@ -132,7 +136,7 @@ Legend: ✅ have · 🟡 partial · ❌ missing · **P0** = required for any pro
 | Feature | Industry standard | Us | Gap | Pri |
 |---|---|---|---|---|
 | AXI4 / AHB-Lite **full** master (bursts, ID, outstanding) | yes | 🟡 | AXI4-**Lite** only, 1 outstanding, no bursts | P1 |
-| I/D split or unified cache | E3/M7-class | ❌ | perf for non-TCM memory | P2 |
+| I/D split or unified cache | E3/M7-class | 🟡 | direct-corebus Harvard ROM/data split implemented; cache/fill path still future work | P2 |
 | Tightly-coupled memory (TCM/ITIM/DTIM) | E2/M-class | 🟡 | have ROM/RAM but no formal TCM interface/wait-state model | P1 |
 | Bus error → precise trap | yes | ✅ | `rsp_err` routes to instruction/load/store access-fault traps | **P0** |
 
@@ -195,8 +199,9 @@ If you do nothing else, these are the ordered, non-negotiable steps from "MVP" t
    credibility.*
 3. **Real interrupt subsystem:** CLINT (timer+software) + PLIC/CLIC with multiple
    prioritized sources. *Without this it cannot be dropped into an SoC.*
-4. **Pipeline CPI tuning.** M6 now has independent IF/ID/EX-MEM/WB occupancy; next
-   performance work is benchmark-driven fetch/bus tuning before publishing CoreMark.
+4. **Pipeline CPI tuning.** M6 now has measured benchmark baselines and a direct-corebus
+   Harvard I/D split; next performance work is true memory/WB overlap, cache/fill
+   tuning, and certified-report discipline.
 5. **Debug (RISC-V DM + JTAG) and the C extension.** *Debug is mandatory for any
    customer bring-up; C is expected by every toolchain/RTOS and buys ~25–30% code size.*
 
@@ -230,22 +235,26 @@ top-to-bottom by risk-adjusted value.
 
 - CLINT: `mtime`/`mtimecmp` (spec layout) + `msip` software interrupt.
 - PLIC (or CLIC) with N prioritized external IRQ sources; wire `meip`.
-- Vectored `mtvec` (MODE=1) option.
+- Vectored `mtvec` (MODE=1): **done** — BASE+cause×4 dispatch, `test_vectored_mtvec`.
 - Promote AXI4-Lite → AHB-Lite **or** full AXI4 master (bursts) — pick per target market.
 - **Exit gate:** multi-source prioritized IRQ test; software-interrupt test; AXI/AHB
   protocol-compliance (formal/VIP) clean.
 
 ### Phase C — Performance (the headline number)
-**Goal:** publish CPI, CoreMark, and Dhrystone numbers for the completed M6 pipeline.
+**Goal:** use the measured CPI, CoreMark, and Dhrystone baselines to drive tuning.
 
-- IF/ID/EX-MEM pipeline with independent WB/retire is implemented; continue with benchmark bring-up
-  and any CPI-driven tuning.
+- IF/ID/EX-MEM pipeline with independent WB/retire is implemented; benchmark bring-up
+  reports 1.264 CoreMark/MHz and 0.400 Dhrystone DMIPS/MHz for `rv32imc_zicsr -O2`.
+- A bounded dual-slot/MEM-hold experiment passed directed regression but measured worse
+  on the current one-cycle RAM path, so it was not retained. M9 should only land with
+  a memory/WB structure that improves benchmark CPI.
 - Add the **C extension** (compressed) — interacts with fetch/PC alignment, so do it
   with the pipeline rework.
-- Add **A extension** (LR/SC + AMO) if targeting RTOS/multi-core.
-- Bring up CoreMark + Dhrystone; measure CPI on a benchmark.
-- **Exit gate:** full directed + RISCOF + co-sim still green; CoreMark/MHz ≥ target
-  (aim E2-class, ~2.5–3.0); CPI report in CI.
+- **A extension** (LR/SC + AMO): **done** — single-hart reservation model, full AMO set, `test_atomics`.
+- Continue benchmark-driven CPI tuning; keep benchmark smoke in CI and publish full
+  local results from `make benchmark`.
+- **Exit gate:** full directed + RISCOF + co-sim still green; CoreMark/MHz improves
+  toward E2-class (~2.5–3.0); CPI report remains reproducible.
 
 ### Phase D — Debug & security
 **Goal:** Customer can bring up firmware; optional security tier.
@@ -285,7 +294,7 @@ Ship criteria — all must be true to make the claim:
 - [x] Base M-mode trap model covers misalign + access fault.
 - [x] Standard interrupt subsystem (CLINT + PLIC/CLIC), multiple prioritized sources.
 - [x] RISC-V Debug Module + JTAG (halt/resume/step subset); GDB/OpenOCD path documented.
-- [x] RV32IMC at minimum with M6 in-order pipeline implemented; benchmark numbers still open.
+- [x] RV32IMC at minimum with M6 in-order pipeline implemented; internal benchmark numbers published in `docs/BENCHMARKS.md`.
 - [x] STA reported on a named PDK with a PPA datasheet; timing closure and GDS DRC/LVS remain M8 work.
 - [x] OSI license, PRM + integration guide, versioned release collateral started.
 
@@ -300,8 +309,9 @@ The lowest-risk, highest-credibility path for the next product push:
    CSRs, WFI legal no-op) → base RTL slice complete; still needs RISCOF/ISS sign-off.
 3. **CLINT + PLIC** → makes the core actually integrable into an SoC.
 
-M6 is now implemented, so the next marquee performance milestone is measured
-CoreMark/Dhrystone plus any fetch/bus tuning needed to make the published CPI credible.
+M6 is now implemented and internally benchmarked. The next marquee performance
+milestone is CPI/fetch/bus tuning plus a disciplined path toward certified reporting
+if public benchmark claims become a release goal.
 
 > Rationale: these are high-value verification and productization efforts that make
 > benchmark and integration claims defensible.

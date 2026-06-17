@@ -7,10 +7,11 @@
 //   - mstatus.MPIE (bit 7): Previous MIE (saved on trap entry, restored on MRET)
 //   - mie (bit 7): MTIE — Machine timer interrupt enable
 //   - mip (bit 7): MTIP — Machine timer interrupt pending (read-only from external)
-//   - mtvec: Direct mode only (MODE=0, no vectored mode)
+//   - mtvec: MODE=0 (direct) and MODE=1 (vectored) supported; bits[1:0] stored as-written
 //   - Trap priority: external interrupts checked between instructions
 
 module sisCsr #(
+    parameter bit ENABLE_A = 1'b1,
     parameter bit ENABLE_C = 1'b1
 )(
     input  logic        clk,
@@ -78,7 +79,9 @@ module sisCsr #(
   logic [63:0] minstret;
 
   localparam logic [31:0] MISA_BASE  = 32'h4000_1100;
-  localparam logic [31:0] MISA_VALUE = ENABLE_C ? (MISA_BASE | 32'h0000_0004) : MISA_BASE;
+  localparam logic [31:0] MISA_VALUE = MISA_BASE
+      | (ENABLE_A ? 32'h0000_0001 : 32'h0)
+      | (ENABLE_C ? 32'h0000_0004 : 32'h0);
 
   // mstatus bits
   // bit 3: MIE (machine interrupt enable)
@@ -163,7 +166,7 @@ module sisCsr #(
           CSR_MTVEC:    mtvec    <= csr_new_val;
           CSR_MCOUNTINHIBIT: mcountinhibit <= csr_new_val;
           CSR_MSCRATCH: mscratch <= csr_new_val;
-          CSR_MEPC:     mepc     <= csr_new_val & 32'hFFFF_FFFC; // word-aligned
+          CSR_MEPC:     mepc     <= csr_new_val & (ENABLE_C ? 32'hFFFF_FFFE : 32'hFFFF_FFFC);
           CSR_MCAUSE:   mcause   <= csr_new_val;
           CSR_MTVAL:    mtval    <= csr_new_val;
           CSR_MCYCLE:   mcycle[31:0] <= csr_new_val;

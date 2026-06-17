@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/kiranreddi/sisrv-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/kiranreddi/sisrv-platform/actions/workflows/ci.yml)
 ![ISA](https://img.shields.io/badge/ISA-RV32IMAC-blue)
-![ASM](https://img.shields.io/badge/asm-42%2F42%20passing-brightgreen)
+![ASM](https://img.shields.io/badge/asm-43%2F43%20passing-brightgreen)
 ![cocotb](https://img.shields.io/badge/cocotb-43%20tests-brightgreen)
 ![formal](https://img.shields.io/badge/formal-4%20proof%20sets-brightgreen)
 ![synth](https://img.shields.io/badge/synthesis-Yosys-informational)
@@ -34,21 +34,22 @@ keeping the implementation readable and open.
 **Not yet claimed**
 
 - Not a certified or licensable commercial RISC-V IP product.
-- No PMP, cache, benchmarked CoreMark/Dhrystone number, or physical GDS signoff yet.
+- No PMP, cache, certified benchmark submission, or physical GDS signoff yet.
 
 ## Product Snapshot
 
 | Area | Current capability |
 |---|---|
-| Core | RV32IMAC, 32 registers, in-order IF/ID/EX-MEM pipeline with independent WB/retire |
+| Core | RV32IMAC, 32 registers, in-order IF/ID/EX-MEM pipeline with independent WB/retire and direct-corebus Harvard I/D path |
 | Privilege | Machine mode, core CSRs, trap entry/return, counters, WFI legal no-op |
 | Platform | ROM, RAM, tohost, CLINT, PLIC, GPIO, UART |
 | Interrupts | CLINT (MSIP/MTIP/MTIME), PLIC (8 prioritized sources), GPIO→PLIC mux |
 | Debug | RISC-V DM 0.13 subset + JTAG DTM; halt/resume/step, abstract GPR wired to regfile while halted |
 | Bus | Internal corebus plus optional AXI4-Lite bridge path |
-| Verification | 42 assembly regression tests, pipeline throughput/debug-step tests, 43 cocotb tests, formal proofs, RISCOF ACT **95/95** + gated 10k lock-step co-sim |
+| Verification | 43 assembly regression tests, pipeline throughput/debug-step tests, 43 cocotb tests, formal proofs, RISCOF ACT **95/95** + gated 10k lock-step co-sim |
 | Implementation | Synthesizable SystemVerilog, Verilator simulation, Yosys + Sky130 STA |
-| Product gap | PMP, benchmarked CoreMark/Dhrystone, physical GDS signoff |
+| Benchmarks | Internal Verilator direct-corebus: **1.264 CoreMark/MHz**, **0.400 Dhrystone DMIPS/MHz** on `rv32imc_zicsr -O2` |
+| Product gap | PMP, certified benchmark submission, physical GDS signoff |
 
 ## Architecture At A Glance
 
@@ -85,7 +86,7 @@ stateDiagram-v2
 flowchart TB
   RTL["RTL"] --> Lint["Verilator lint"]
   RTL --> Sim["Verilator platform sim"]
-  Sim --> ASM["42 directed asm tests\ncorebus + AXI4-Lite"]
+  Sim --> ASM["43 directed asm tests\ncorebus + AXI4-Lite"]
   RTL --> Cocotb["43 cocotb unit tests\nALU, regfile, decode, CSR, AXI"]
   RTL --> Formal["Formal proofs\nALU, regfile, decode, AXI safety"]
   RTL --> Synth["Yosys synthesis"]
@@ -100,7 +101,7 @@ is still productizing. The table below is intentionally conservative.
 | Product/core | Public positioning | Typical class | Where sisrv-platform stands |
 |---|---|---|---|
 | [SiFive Essential E Series](https://www.sifive.com/cores/essential-e-series) | Configurable 32-bit embedded RISC-V cores with commercial collateral and performance claims | MCU/embedded IP | Similar embedded target, but sisrv lacks commercial debug/security/PPA collateral |
-| [AndesCore N22](https://www.andestech.com/en/products-solutions/andescore-processors/) | Compact low-power 32-bit RISC-V CPU IP with published CoreMark/DMIPS class metrics | Low-power MCU IP | sisrv has an open platform/verification stack, but no benchmark/PPA signoff yet |
+| [AndesCore N22](https://www.andestech.com/en/products-solutions/andescore-processors/) | Compact low-power 32-bit RISC-V CPU IP with published CoreMark/DMIPS class metrics | Low-power MCU IP | sisrv now has internal direct-corebus benchmark data, but no certified benchmark/PPA signoff yet |
 | [Codasip L31](https://codasip.com/press-release/2022/08/31/codasip-joins-intel-pathfinder-for-risc-v-program/) | 32-bit embedded RISC-V core with pipeline/configuration options and product tooling | Configurable embedded IP | sisrv is simpler and open, with AXI4-Lite/platform focus; configurability is early |
 | sisrv-platform | Open ASIC-first RV32IMAC platform with verification and synthesis path | Productizing open MCU-class platform | Strong learning/prototyping base; not yet a commercial IP replacement |
 
@@ -160,10 +161,12 @@ make lint                     # Verilator lint
 make build/sim_sisPlatformTop # Build simulation binary
 make sw                       # Build assembly test hex files
 make sim                      # Run basic PASS test
-make regress                  # Run 42-test corebus regression
-make regress-axil             # Run 42-test AXI4-Lite regression
+make regress                  # Run 43-test corebus regression
+make regress-axil             # Run 43-test AXI4-Lite regression
 make pipeline-debug           # Run M6 debug halt/single-step retirement check
 make pipeline-throughput      # Run M6 direct-corebus ALU throughput guard
+make benchmark-smoke          # Build/run short CoreMark + Dhrystone benchmark smoke
+make benchmark                # Publish-length internal CoreMark + Dhrystone run
 make cocotb                   # Run 43 cocotb tests
 make formal                   # Run required formal proofs
 make formal-axil              # Optional AXI4-Lite bounded formal safety check
@@ -190,7 +193,7 @@ $ make regress
   ...
   PASS: test_uart
   PASS: test_x0
-=== Results: 42/42 passed, 0 failed ===
+=== Results: 43/43 passed, 0 failed ===
 ```
 
 ## Verification
@@ -249,10 +252,11 @@ Unsupported classes remain PMP, S/U modes, and A/F/D.
 
 - ISA: RV32IMAC (`rv32imac_zicsr`).
 - Microarchitecture: in-order IF/ID/EX-MEM pipeline with an independent WB/retire
-  slot and a single-outstanding corebus owner for instruction fetch vs data memory.
-- Privilege: M-mode CSRs including `mstatus`, `misa`, `mtvec`, `mepc`, `mcause`,
-  `mtval`, `mscratch`, `mie`, `mip`, `mcycle`, and `minstret`.
+  slot and direct-corebus Harvard instruction/data path.
+- Privilege: M-mode CSRs including `mstatus`, `misa` (A/C/I/M), `mtvec` (direct + vectored MODE=1),
+  `mepc`, `mcause`, `mtval`, `mscratch`, `mie`, `mip`, `mcycle`, and `minstret`.
 - Traps: ECALL, EBREAK, illegal instruction, misaligned access, access fault, MRET.
+- Atomics: LR.W/SC.W + full AMO set (AMOSWAP/ADD/XOR/AND/OR/MIN/MAX/MINU/MAXU); single-hart reservation model.
 - Interrupts: CLINT at `0x0200_0000`, PLIC (8 sources) at `0x0C00_0000`.
 - Debug: RISC-V Debug 0.13 subset + JTAG DTM (halt/resume/step); abstract GPR access.
 
@@ -279,7 +283,7 @@ Unsupported classes remain PMP, S/U modes, and A/F/D.
 
 | Priority | Work item | Why it matters |
 |---|---|---|
-| P1 | Benchmarking: CoreMark/MHz, CPI, area/timing reports | Needed for competitor comparison |
+| P1 | Benchmark-driven CPI tuning and certified-report pathway | Internal direct-corebus numbers exist; tuning/certification are separate work |
 | P1 | PMP and U-mode (if Linux-class target) | Required by some embedded/Linux integrations |
 
 ## CI Pipeline
@@ -289,10 +293,11 @@ The workflow runs on every push/PR to `main`.
 | Job | What it proves |
 |---|---|
 | Lint | RTL parses and passes Verilator lint |
-| Regression | 42 assembly tests through corebus and AXI-Lite paths, plus M6 debug-step/throughput checks |
+| Regression | 43 assembly tests through corebus and AXI-Lite paths, plus M6 debug-step/throughput checks |
 | cocotb | 43 directed/randomized unit tests |
 | Formal | Required ALU, RegFile, Decode proofs; optional AXI safety |
 | Synth | Yosys synthesis of core + AXI bridge (PPA stat artifact) |
+| Benchmark smoke | Reduced CoreMark + Dhrystone build/run validation |
 | RISCOF + co-sim | RISCOF ACT (**95/95** filtered) + final gated 10k-seed retired-instruction lock-step |
 
 All jobs above are required and gate merges.
@@ -315,6 +320,7 @@ docs/           Architecture, verification, roadmap, status
 ## Documentation
 
 - [`docs/INDUSTRY_COMPARISON.md`](docs/INDUSTRY_COMPARISON.md) - commercial benchmark and maturity plan.
+- [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md) - internal CoreMark/Dhrystone measurement report.
 - [`docs/PLAN.md`](docs/PLAN.md) - milestone plan and exit criteria.
 - [`docs/EXTENSION_ROADMAP.md`](docs/EXTENSION_ROADMAP.md) - extension order, use cases, acceptance checks.
 - [`docs/MEMORY_MAP.md`](docs/MEMORY_MAP.md) - address map.
