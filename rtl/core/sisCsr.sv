@@ -38,8 +38,8 @@ module sisCsr #(
     output logic        mstatus_mprv_o,
     output logic [1:0]  mstatus_mpp_o,
     output logic [2:0]  mcounteren_o,
-    output logic [PMP_ENTRIES-1:0][7:0]  pmpcfg_o,
-    output logic [PMP_ENTRIES-1:0][31:0] pmpaddr_o
+    output logic [PMP_ENTRIES*8-1:0]   pmpcfg_o,
+    output logic [PMP_ENTRIES*32-1:0] pmpaddr_o
 );
 
   localparam logic [1:0] PRIV_M = 2'b11;
@@ -97,18 +97,6 @@ module sisCsr #(
 
   wire [31:0] mip_effective = {mip[31:12], ext_meip, mip[10:8], ext_mtip, mip[6:4], ext_msip, mip[2:0]};
 
-  function automatic logic [11:0] pmpcfg_csr_addr(input int idx);
-    begin
-      pmpcfg_csr_addr = 12'h3A0 + (idx / 4) * 4;
-    end
-  endfunction
-
-  function automatic logic [11:0] pmpaddr_csr_addr(input int idx);
-    begin
-      pmpaddr_csr_addr = 12'h3B0 + idx * 4;
-    end
-  endfunction
-
   function automatic logic [7:0] warl_pmpcfg_byte(input logic [7:0] val);
     logic [1:0] a;
     begin
@@ -163,8 +151,8 @@ module sisCsr #(
     begin
       csr_is_pmpcfg = 1'b0;
       idx = 0;
-      if (addr >= 12'h3A0 && (addr < (12'h3A0 + PMP_ENTRIES))) begin
-        idx = addr - 12'h3A0;
+      if (addr >= 12'h3A0 && (addr < 12'(12'h3A0 + PMP_ENTRIES))) begin
+        idx = int'(addr - 12'h3A0);
         csr_is_pmpcfg = idx < PMP_ENTRIES;
       end
     end
@@ -174,8 +162,8 @@ module sisCsr #(
     begin
       csr_is_pmpaddr = 1'b0;
       idx = 0;
-      if (addr >= 12'h3B0 && addr <= 12'h3EF && ((addr - 12'h3B0) % 4 == 0)) begin
-        idx = (addr - 12'h3B0) / 4;
+      if (addr >= 12'h3B0 && addr <= 12'h3EF && ((int'(addr - 12'h3B0) % 4) == 0)) begin
+        idx = int'(addr - 12'h3B0) / 4;
         csr_is_pmpaddr = idx < PMP_ENTRIES;
       end
     end
@@ -316,8 +304,12 @@ module sisCsr #(
   assign mstatus_mprv_o = mstatus[17];
   assign mstatus_mpp_o = mstatus[12:11];
   assign mcounteren_o = mcounteren[2:0];
-  assign pmpcfg_o = pmpcfg;
-  assign pmpaddr_o = pmpaddr;
+  generate
+    for (genvar gi = 0; gi < PMP_ENTRIES; gi++) begin : g_pmp_out
+      assign pmpcfg_o[gi*8 +: 8]    = pmpcfg[gi];
+      assign pmpaddr_o[gi*32 +: 32] = pmpaddr[gi];
+    end
+  endgenerate
 
   wire meip_on = mstatus[3] && mie[11] && ext_meip;
   wire mtip_on = mstatus[3] && mie[7]  && ext_mtip;

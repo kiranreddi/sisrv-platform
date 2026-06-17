@@ -93,6 +93,7 @@ module decode_legal_wrapper (
     logic exp_legal_branch, exp_legal_load, exp_legal_store;
     logic exp_legal_alu_imm, exp_legal_alu_reg;
     logic exp_legal_system, exp_legal_fence;
+    logic exp_legal_atomic;
     logic exp_legal;
 
     assign exp_legal_lui   = is_lui;
@@ -147,10 +148,24 @@ module decode_legal_wrapper (
 
     assign exp_legal_fence = is_fence && (funct3 == 3'b000);
 
+    assign exp_legal_atomic = (opcode == 7'b0101111) && (funct3 == 3'b010) && (
+        (instr[31:27] == 5'b00010) ||
+        (instr[31:27] == 5'b00011) ||
+        (instr[31:27] == 5'b00001) ||
+        (instr[31:27] == 5'b00000) ||
+        (instr[31:27] == 5'b00100) ||
+        (instr[31:27] == 5'b01100) ||
+        (instr[31:27] == 5'b01000) ||
+        (instr[31:27] == 5'b10000) ||
+        (instr[31:27] == 5'b10100) ||
+        (instr[31:27] == 5'b11000) ||
+        (instr[31:27] == 5'b11100)
+    );
+
     assign exp_legal = exp_legal_lui | exp_legal_auipc | exp_legal_jal | exp_legal_jalr |
                        exp_legal_branch | exp_legal_load | exp_legal_store |
                        exp_legal_alu_imm | exp_legal_alu_reg |
-                       exp_legal_system | exp_legal_fence;
+                       exp_legal_system | exp_legal_fence | exp_legal_atomic;
 
     // Property 1: opcode field extraction
     always @(*) begin

@@ -19,8 +19,12 @@ def napot_mask(pa: int) -> int:
 
 
 def set_entry(dut, idx: int, cfg: int, addr: int) -> None:
-    dut.pmpcfg[idx].value = cfg & 0xFF
-    dut.pmpaddr[idx].value = addr & 0xFFFFFFFF
+    cfg_val = int(dut.pmpcfg.value)
+    addr_val = int(dut.pmpaddr.value)
+    cfg_val = (cfg_val & ~(0xFF << (idx * 8))) | ((cfg & 0xFF) << (idx * 8))
+    addr_val = (addr_val & ~(0xFFFFFFFF << (idx * 32))) | ((addr & 0xFFFFFFFF) << (idx * 32))
+    dut.pmpcfg.value = cfg_val
+    dut.pmpaddr.value = addr_val
 
 
 def clear_entries(dut, n: int = 8) -> None:

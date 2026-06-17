@@ -5,6 +5,6 @@ TOPLEVEL = sisCsr
 MODULE = test_csr
 SIM ?= verilator
 
-EXTRA_ARGS += --timing
+EXTRA_ARGS += --timing -Wno-WIDTHEXPAND -Wno-WIDTHTRUNC
 
 include $(shell cocotb-config --makefiles)/Makefile.sim
