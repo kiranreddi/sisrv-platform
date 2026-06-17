@@ -38,8 +38,8 @@ module sisCsr #(
     output logic        mstatus_mprv_o,
     output logic [1:0]  mstatus_mpp_o,
     output logic [2:0]  mcounteren_o,
-    output logic [PMP_ENTRIES*8-1:0]   pmpcfg_o,
-    output logic [PMP_ENTRIES*32-1:0] pmpaddr_o
+    output logic [PMP_ENTRIES-1:0][7:0]  pmpcfg_o,
+    output logic [PMP_ENTRIES-1:0][31:0] pmpaddr_o
 );
 
   localparam logic [1:0] PRIV_M = 2'b11;
@@ -304,12 +304,8 @@ module sisCsr #(
   assign mstatus_mprv_o = mstatus[17];
   assign mstatus_mpp_o = mstatus[12:11];
   assign mcounteren_o = mcounteren[2:0];
-  generate
-    for (genvar gi = 0; gi < PMP_ENTRIES; gi++) begin : g_pmp_out
-      assign pmpcfg_o[gi*8 +: 8]    = pmpcfg[gi];
-      assign pmpaddr_o[gi*32 +: 32] = pmpaddr[gi];
-    end
-  endgenerate
+  assign pmpcfg_o = pmpcfg;
+  assign pmpaddr_o = pmpaddr;
 
   wire meip_on = mstatus[3] && mie[11] && ext_meip;
   wire mtip_on = mstatus[3] && mie[7]  && ext_mtip;
