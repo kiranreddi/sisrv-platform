@@ -1,4 +1,4 @@
-/* Linker script for sisrv-platform bare-metal tests (RV32IM) */
+/* Linker script for sisrv-platform bare-metal tests and benchmarks */
 ENTRY(_start)
 
 MEMORY
@@ -14,18 +14,27 @@ SECTIONS
     *(.text*)
   } > ROM
 
-  .rodata : { *(.rodata*) } > ROM
+  .rodata : {
+    *(.rodata*)
+    *(.srodata*)
+    *(.eh_frame*)
+  } > ROM
 
-  .data : AT(ADDR(.rodata) + SIZEOF(.rodata)) {
+  .data : AT(ALIGN(ADDR(.rodata) + SIZEOF(.rodata), 4)) {
     _data_start = .;
+    *(.sdata*)
     *(.data*)
+    . = ALIGN(4);
     _data_end = .;
   } > RAM
+  _data_lma = LOADADDR(.data);
 
   .bss : {
     _bss_start = .;
+    *(.sbss*)
     *(.bss*)
     *(COMMON)
+    . = ALIGN(4);
     _bss_end = .;
   } > RAM
 

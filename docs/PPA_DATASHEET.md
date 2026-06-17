@@ -9,7 +9,7 @@
 | Parameter | Value |
 |-----------|-------|
 | ISA | RV32IMC + Zicsr |
-| Microarchitecture | Multi-cycle FSM (7 states) |
+| Microarchitecture | In-order IF/ID/EX-MEM pipeline with independent WB/retire slot and direct-corebus Harvard I/D path |
 | Bus | Corebus or AXI4-Lite |
 | Clock target | 50 MHz (20 ns) |
 
@@ -47,9 +47,11 @@ Exit gate: GDS DRC/LVS clean or documented deltas per milestone M8.
 
 | Metric | Current status |
 |--------|----------------|
-| Microarchitecture | In-order IF/ID/EX-MEM pipeline with independent WB/retire slot |
-| Directed pipeline smoke | forwarding 61 cycles; load-use 73; branch/jump flush 65; trap flush 59; interrupt flush 83; throughput guard 95; debug single-step 37 |
-| CoreMark/MHz | Not yet measured |
+| Microarchitecture | In-order IF/ID/EX-MEM pipeline with independent WB/retire slot and direct-corebus Harvard I/D path |
+| Directed pipeline smoke | forwarding 60 cycles; load-use 66; branch/jump flush 59; trap flush 55; interrupt flush 76; throughput guard 94; debug single-step 36 |
+| CoreMark/MHz | **1.264** (`rv32imc_zicsr -O2`, direct corebus, internal Verilator, not certified EEMBC) |
+| Dhrystone DMIPS/MHz | **0.400** (`rv32imc_zicsr -O2`, direct corebus, internal Verilator) |
+| Dhrystone CPI | **2.804** over 1,491 iterations |
 
-M6 completes the RTL pipeline conversion. A CoreMark/Dhrystone harness and CPI report
-remain the follow-on product benchmark work.
+See `docs/BENCHMARKS.md` for raw logs, validation status, compiler flags, and the
+`rv32im_zicsr -O2` comparison row.

@@ -7,7 +7,7 @@
 The sisrv-platform project implements a fully functional RV32IMAC RISC-V processor core
 with M-mode CSRs, trap handling, **CLINT/PLIC interrupts**, **RISC-V Debug subset**,
 GPIO, UART, and an AXI4-Lite master bridge.
-The core is verified through **43** directed assembly regression tests, pipeline throughput/debug-step Verilator tests, 43 cocotb randomized unit tests,
+The core is verified through **45** directed assembly regression tests, pipeline throughput/debug-step Verilator tests, 43 cocotb randomized unit tests,
 4 formal proofs, **RISCOF rv32imac_zicsr ACT suite** (**95/95** filtered tests in CI; 72
 upstream tests excluded for PMP/A/privilege outside the RV32IMCZicsr profile), and
 **10k-seed retired-instruction Spike lock-step co-sim** as a final gated CI lane.
@@ -56,7 +56,7 @@ upstream tests excluded for PMP/A/privilege outside the RV32IMCZicsr profile), a
 | `sisDecode.sv` | ✅ Done | All RV32I/RV32M instruction types decoded |
 | `sisMemFabric.sv` | ✅ Done | Address decoder: ROM/RAM/MMIO routing |
 
-**Test coverage** (43 directed regression tests plus pipeline throughput/debug tests, all passing):
+**Test coverage** (45 directed regression tests plus pipeline throughput/debug tests, all passing):
 
 | Test | Instructions Covered |
 |------|---------------------|
@@ -151,8 +151,8 @@ x0 always 0 ✅, PC word-aligned ✅, correct sign/zero extension ✅
 | AXI-Lite timer support | ✅ Done | `tb/models/sisAxiLiteSlave.sv` models MTIME/MTIMECMP and MTIP |
 | AXI-Lite GPIO support | ✅ Done | `tb/models/sisAxiLiteSlave.sv` models DATA/DIR/IN/SET/CLR |
 | AXI-Lite UART support | ✅ Done | `tb/models/sisAxiLiteSlave.sv` models TXDATA/RXDATA/STATUS/CTRL/BAUDDIV |
-| AXI-Lite PLIC/CLINT support | ✅ Done | Inline PLIC + CLINT in `sisAxiLiteSlave.sv` (43/43 regress-axil) |
-| AXI-Lite system regression | ✅ Done | `make regress-axil` runs all 43 regression assembly tests through the AXI path |
+| AXI-Lite PLIC/CLINT support | ✅ Done | Inline PLIC + CLINT in `sisAxiLiteSlave.sv` (45/45 regress-axil) |
+| AXI-Lite system regression | ✅ Done | `make regress-axil` runs all 45 regression assembly tests through the AXI path |
 | cocotb bridge tests | ✅ Done | 11 tests: reset, R/W, errors, stalls, 100-txn random stress |
 | Formal AXI-Lite bridge | Optional | Bounded VALID stability, mutual exclusion, data stability (`make formal-axil`) |
 
@@ -289,8 +289,8 @@ Planned:
 | Verilator version | 5.038 |
 | Lint status | ✅ Clean (Wall, no warnings) |
 | Compiler | riscv64-linux-gnu-gcc 13.3 |
-| Assembly regression suite | 43 tests |
-| Assembly regression | 43/43 passing through corebus, AXI-Lite, and stalled AXI-Lite paths |
+| Assembly regression suite | 45 tests |
+| Assembly regression | 45/45 passing through corebus, AXI-Lite, and stalled AXI-Lite paths |
 | Pipeline throughput guard | `make pipeline-throughput` passing on the direct corebus path |
 | Benchmark smoke | `make benchmark-smoke` builds/runs reduced CoreMark + Dhrystone validation |
 | Publish benchmark | `make benchmark` generates `build/bench/summary.json` and logs |
@@ -348,7 +348,7 @@ Planned:
 ### Software
 - `sw/bsp/crt0.S` — C runtime startup
 - `sw/bsp/link.ld` — Linker script
-- `sw/tests/asm/test_*.S` — 43 regression assembly programs plus direct-corebus pipeline throughput guard
+- `sw/tests/asm/test_*.S` — 45 regression assembly programs plus direct-corebus pipeline throughput guard
 
 ### Build & CI
 - `Makefile` — Build, lint, sim, regression, cocotb, formal, synth targets
