@@ -89,12 +89,17 @@ async def napot_decode_sizes(dut):
     set_harness_entry0(dut)
     base = 0x80000000
 
-    # 8-byte region (same encoding as test_pmp_napot_sizes.S)
+    # 8-byte region (t=0): pmpaddr = 0x20000000
     set_entry(dut, 0, 0x1F, 0x1FFF)  # asm harness entry 0
-    set_entry(dut, 1, 0x1B, 0x20000001)
+    set_entry(dut, 1, 0x1B, 0x20000000)
     await check_access(dut, base, PRIV_U, 1, 1, 0, 1)
     await check_access(dut, base + 4, PRIV_U, 1, 0, 0, 1)
     await check_access(dut, base + 8, PRIV_U, 1, 0, 0, 0)
+
+    # 16-byte region (t=1): pmpaddr = 0x20000001
+    set_entry(dut, 1, 0x1B, 0x20000001)
+    await check_access(dut, base + 8, PRIV_U, 1, 0, 0, 1)
+    await check_access(dut, base + 16, PRIV_U, 1, 0, 0, 0)
 
     clear_entries(dut)
     set_entry(dut, 0, 0x1F, 0x1FFF)

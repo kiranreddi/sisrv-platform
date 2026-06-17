@@ -1,4 +1,5 @@
 # test_pmp_napot_x.S — NAPOT RW without X: U fetch faults
+.include "pmp_csr.inc"
 .section .text.init
 .globl _start
 
@@ -9,16 +10,12 @@ _start:
     la   t0, trap_handler
     csrw mtvec, t0
 
-    li   t0, 0x1FFF
-    csrw pmpaddr0, t0
-    li   t0, 0x1F
-    csrw pmpcfg0, t0
+    PMP_HARNESS_ENTRY0
 
     # 4KB NAPOT at RAM: R|W, no X — pmpaddr = 0x200001FF (t=9)
     li   t0, 0x200001FF
     csrw pmpaddr1, t0
-    li   t0, 0x13
-    csrw pmpcfg1, t0
+    PMP_SET_CFG 1, 0x13, t1, t2
 
   # Write ret instruction to RAM (jalr x0, 0(x0) encoded as 0x00008067)
     li   t0, 0x00008067

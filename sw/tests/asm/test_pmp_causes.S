@@ -1,4 +1,5 @@
 # test_pmp_causes.S — fetch=1, load=5, store=7 with mtval=addr
+.include "pmp_csr.inc"
 .section .text.init
 .globl _start
 
@@ -12,14 +13,10 @@ _start:
     li   s10, 0
     li   s6, RAM_BASE
 
-    li   t0, 0x1FFF
-    csrw pmpaddr0, t0
-    li   t0, 0x1F
-    csrw pmpcfg0, t0
+    PMP_HARNESS_ENTRY0
     li   t0, 0x20007FFF
     csrw pmpaddr1, t0
-    li   t0, 0x13
-    csrw pmpcfg1, t0
+    PMP_SET_CFG 1, 0x13, t1, t2
     li   t0, 0x00008067
     sw   t0, 0(s6)
     la   t0, u_fetch
@@ -78,8 +75,7 @@ check_load:
     addi s10, s10, 1
     li   t0, 0x20007FFF
     csrw pmpaddr1, t0
-    li   t0, 0x19
-    csrw pmpcfg1, t0
+    PMP_SET_CFG 1, 0x19, t1, t2
     la   t0, u_store
     csrw mepc, t0
     csrr t1, mstatus

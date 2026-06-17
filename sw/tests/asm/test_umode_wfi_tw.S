@@ -1,4 +1,5 @@
 # test_umode_wfi_tw.S — WFI illegal in U when TW=1; legal NOP when TW=0
+.include "pmp_csr.inc"
 .section .text.init
 .globl _start
 
@@ -8,16 +9,12 @@ _start:
     la   t0, trap_handler
     csrw mtvec, t0
 
-    li   t0, 0x1FFF
-    csrw pmpaddr0, t0
-    li   t0, 0x1F
-    csrw pmpcfg0, t0
+    PMP_HARNESS_ENTRY0
 
     # NA4 R|W for pass/fail MMIO at 0x10000000
     li   t0, 0x04000000
     csrw pmpaddr7, t0
-    li   t0, 0x13
-    csrw pmpcfg7, t0
+    PMP_SET_CFG 7, 0x13, t1, t2
 
     li   s4, 0
 
