@@ -23,15 +23,29 @@ CFG_MASK_ALL = (1 << (PMP_ENTRIES * 8)) - 1
 ADDR_MASK_ALL = (1 << (PMP_ENTRIES * 32)) - 1
 
 
+def entry_cfg_shift(idx: int) -> int:
+    # Verilator packs [N:0][7:0] arrays with index 0 in the LSB byte.
+    return idx * 8
+
+
+def entry_addr_shift(idx: int) -> int:
+    return idx * 32
+
+
 def set_entry(dut, idx: int, cfg: int, addr: int) -> None:
     cfg_val = int(dut.pmpcfg.value) & CFG_MASK_ALL
     addr_val = int(dut.pmpaddr.value) & ADDR_MASK_ALL
-    cfg_byte_mask = 0xFF << (idx * 8)
-    addr_word_mask = ((1 << 32) - 1) << (idx * 32)
-    cfg_val = (cfg_val & ~cfg_byte_mask) | ((cfg & 0xFF) << (idx * 8))
-    addr_val = (addr_val & ~addr_word_mask) | ((addr & 0xFFFFFFFF) << (idx * 32))
+    cfg_shift = entry_cfg_shift(idx)
+    addr_shift = entry_addr_shift(idx)
+    cfg_byte_mask = 0xFF << cfg_shift
+    addr_word_mask = ((1 << 32) - 1) << addr_shift
+    cfg_val = (cfg_val & ~cfg_byte_mask) | ((cfg & 0xFF) << cfg_shift)
+    addr_val = (addr_val & ~addr_word_mask) | ((addr & 0xFFFFFFFF) << addr_shift)
     dut.pmpcfg.value = cfg_val
     dut.pmpaddr.value = addr_val
+    # Sanity: re-read packed bus and verify byte lane
+    got_cfg = (int(dut.pmpcfg.value) >> cfg_shift) & 0xFF
+    assert got_cfg == (cfg & 0xFF), f"pmpcfg[{idx}] write failed: got 0x{got_cfg:02x}"
 
 
 def clear_entries(dut, n: int = PMP_ENTRIES) -> None:
@@ -67,19 +81,21 @@ async def napot_decode_sizes(dut):
     clear_entries(dut)
     base = 0x80000000
 
-  # 8-byte region
-    set_entry(dut, 0, (A_NAPOT << 3) | 0x7, 0x20000001)
-    await check_access(dut, base, PRIV_U, 1, 1, 1, 1)
+    # 8-byte region (same encoding as test_pmp_napot_sizes.S)
+    set_entry(dut, 1, 0x1B, 0x20000001)
+    await check_access(dut, base, PRIV_U, 1, 1, 0, 1)
     await check_access(dut, base + 4, PRIV_U, 1, 0, 0, 1)
     await check_access(dut, base + 8, PRIV_U, 1, 0, 0, 0)
 
-  # 4KB region
-    set_entry(dut, 0, (A_NAPOT << 3) | 0x7, 0x200001FF)
+    clear_entries(dut)
+    # 4KB region
+    set_entry(dut, 1, 0x1F, 0x200001FF)
     await check_access(dut, base + 0x1000 - 4, PRIV_U, 0, 0, 1, 1)
     await check_access(dut, base + 0x1000, PRIV_U, 0, 0, 1, 0)
 
-  # whole-space NAPOT
-    set_entry(dut, 0, (A_NAPOT << 3) | 0x7, 0xFFFFFFFF)
+    clear_entries(dut)
+    # whole-space NAPOT
+    set_entry(dut, 0, 0x1F, 0xFFFFFFFF)
     await check_access(dut, 0x00000000, PRIV_U, 1, 1, 1, 1)
     await check_access(dut, 0xDEADBEEF, PRIV_U, 1, 1, 1, 1)
 
@@ -100,16 +116,16 @@ async def tor_boundaries(dut):
 @cocotb.test()
 async def na4_exact_word(dut):
     clear_entries(dut)
-    set_entry(dut, 0, (A_NA4 << 3) | 0x3, 0x20000000)
-    await check_access(dut, 0x80000000, PRIV_U, 1, 1, 0, 1)
+    set_entry(dut, 1, 0x11, 0x20000000)
+    await check_access(dut, 0x80000000, PRIV_U, 1, 0, 0, 1)
     await check_access(dut, 0x80000004, PRIV_U, 1, 0, 0, 0)
 
 
 @cocotb.test()
 async def lowest_index_priority(dut):
     clear_entries(dut)
-    set_entry(dut, 0, (A_NAPOT << 3) | 0x1, 0x20007FFF)
-    set_entry(dut, 1, (A_NAPOT << 3) | 0x3, 0x20007FFF)
+    set_entry(dut, 1, 0x19, 0x20007FFF)
+    set_entry(dut, 2, 0x1B, 0x20007FFF)
     await check_access(dut, 0x80000000, PRIV_U, 0, 1, 0, 0)
     await check_access(dut, 0x80000000, PRIV_M, 0, 1, 0, 1)
 
@@ -132,9 +148,15 @@ async def locked_enforcement_in_m(dut):
 @cocotb.test()
 async def perm_combinations(dut):
     clear_entries(dut)
-    set_entry(dut, 0, (A_NAPOT << 3) | 0x5, 0x20007FFF)
+    set_entry(dut, 0, 0x1D, 0x20007FFF)  # R|W|X NAPOT
     await check_access(dut, 0x80000000, PRIV_U, 1, 0, 0, 1)
     await check_access(dut, 0x80000000, PRIV_U, 0, 1, 0, 1)
-    await check_access(dut, 0x80000000, PRIV_U, 0, 0, 1, 0)
+    await check_access(dut, 0x80000000, PRIV_U, 0, 0, 1, 1)
     await check_access(dut, 0x80000000, PRIV_U, 1, 1, 0, 1)
     await check_access(dut, 0x80000000, PRIV_U, 1, 1, 1, 1)
+
+    clear_entries(dut)
+    set_entry(dut, 0, 0x15, 0x20007FFF)  # R|X only
+    await check_access(dut, 0x80000000, PRIV_U, 1, 0, 0, 1)
+    await check_access(dut, 0x80000000, PRIV_U, 0, 1, 0, 0)
+    await check_access(dut, 0x80000000, PRIV_U, 0, 0, 1, 1)

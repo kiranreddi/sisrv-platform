@@ -1,45 +1,40 @@
 # Yosys synthesis script for sisrv-platform
 # Run: yosys -s scripts/yosys_synth.tcl
-# Purpose: Validate synthesizability, check for latches, generate area report
 #
 # sisRvCore is excluded: CSR/PMP use SystemVerilog unpacked arrays that
-# Yosys 0.33 cannot parse. Submodules are synthesized individually instead.
-
-proc synth_module {top} {
-  hierarchy -top $top
-  proc
-  opt
-  check -assert
-  flatten
-  opt -full
-  synth -top $top -flatten
-  stat
-  write_verilog -noattr build/${top}_synth.v
-}
+# Yosys 0.33 cannot parse. Submodules are synthesized individually.
 
 read -define SYNTHESIS
 read -sv rtl/core/sisAlu.sv
-read -sv rtl/core/sisDecode.sv
-read -sv rtl/core/sisRegFile.sv
-read -sv rtl/core/sisDecompress.sv
-
-tee -o build/ppa_synth_report.txt echo "=== sisAlu ==="
-synth_module sisAlu
-
-design -reset
-read -define SYNTHESIS
-read -sv rtl/core/sisDecode.sv
-tee -a build/ppa_synth_report.txt echo "=== sisDecode ==="
-synth_module sisDecode
+hierarchy -top sisAlu
+proc; opt; check -assert; flatten; opt -full
+synth -top sisAlu -flatten
+tee -o build/ppa_synth_report.txt stat
+write_verilog -noattr build/sisAlu_synth.v
 
 design -reset
 read -define SYNTHESIS
+read -sv rtl/core/sisDecode.sv
+hierarchy -top sisDecode
+proc; opt; check -assert; flatten; opt -full
+synth -top sisDecode -flatten
+tee -a build/ppa_synth_report.txt stat
+write_verilog -noattr build/sisDecode_synth.v
+
+design -reset
+read -define SYNTHESIS
 read -sv rtl/core/sisRegFile.sv
-tee -a build/ppa_synth_report.txt echo "=== sisRegFile ==="
-synth_module sisRegFile
+hierarchy -top sisRegFile
+proc; opt; check -assert; flatten; opt -full
+synth -top sisRegFile -flatten
+tee -a build/ppa_synth_report.txt stat
+write_verilog -noattr build/sisRegFile_synth.v
 
 design -reset
 read -define SYNTHESIS
 read -sv rtl/bus/sisAxiLiteM.sv
-tee -a build/ppa_synth_report.txt echo "=== sisAxiLiteM ==="
-synth_module sisAxiLiteM
+hierarchy -top sisAxiLiteM
+proc; opt; check -assert; flatten; opt -full
+synth -top sisAxiLiteM -flatten
+tee -a build/ppa_synth_report.txt stat
+write_verilog -noattr build/sisAxiLiteM_synth.v
