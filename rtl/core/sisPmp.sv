@@ -21,13 +21,28 @@ module sisPmp #(
   localparam logic [1:0] PRIV_M = 2'b11;
   localparam logic [1:0] PRIV_U = 2'b00;
 
-  function automatic logic [31:0] napot_mask(input logic [31:0] pa);
-    logic [31:0] t;
+  function automatic logic [31:0] napot_size_bytes(input logic [31:0] pa);
+    int t;
     begin
-      if (pa == 32'hFFFF_FFFF)
-        napot_mask = 32'hFFFF_FFFF;
-      else
-        napot_mask = ~(pa ^ (pa + 32'd1));
+      if (pa == 32'hFFFF_FFFF) begin
+        napot_size_bytes = 32'hFFFF_FFFF;
+      end else if (pa[0] && !pa[1]) begin
+        napot_size_bytes = 32'd8;
+      end else begin
+        t = 0;
+        while (t < 32 && pa[t])
+          t = t + 1;
+        napot_size_bytes = 32'd8 << t;
+      end
+    end
+  endfunction
+
+  function automatic logic [31:0] napot_base_byte(input logic [31:0] pa);
+    logic [31:0] size_bytes;
+    begin
+      size_bytes = napot_size_bytes(pa);
+      // pmpaddr holds PA[31:2] with NAPOT size encoded in the low bits.
+      napot_base_byte = ((pa << 2) & ~(size_bytes - 1));
     end
   endfunction
 
@@ -40,7 +55,6 @@ module sisPmp #(
   );
     logic [29:0] aw;
     logic [1:0]  a;
-    logic [31:0] mask;
     begin
       aw = byte_addr[31:2];
       a  = cfg[4:3];
@@ -50,8 +64,12 @@ module sisPmp #(
         2'b01: entry_matches = (aw >= prev_addr[29:0]) && (aw < this_addr[29:0]);
         2'b10: entry_matches = (aw == this_addr[29:0]);
         2'b11: begin
-          mask = napot_mask(this_addr);
-          entry_matches = ((byte_addr[31:2] ^ this_addr[29:0]) & mask[29:0]) == 30'h0;
+          logic [31:0] base_byte;
+          logic [31:0] size_bytes;
+          base_byte  = napot_base_byte(this_addr);
+          size_bytes = napot_size_bytes(this_addr);
+          entry_matches = (byte_addr >= base_byte) &&
+                          (byte_addr < (base_byte + size_bytes));
         end
         default: entry_matches = 1'b0;
       endcase
