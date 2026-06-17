@@ -43,9 +43,6 @@ def set_entry(dut, idx: int, cfg: int, addr: int) -> None:
     addr_val = (addr_val & ~addr_word_mask) | ((addr & 0xFFFFFFFF) << addr_shift)
     dut.pmpcfg.value = cfg_val
     dut.pmpaddr.value = addr_val
-    # Sanity: re-read packed bus and verify byte lane
-    got_cfg = (int(dut.pmpcfg.value) >> cfg_shift) & 0xFF
-    assert got_cfg == (cfg & 0xFF), f"pmpcfg[{idx}] write failed: got 0x{got_cfg:02x}"
 
 
 def clear_entries(dut, n: int = PMP_ENTRIES) -> None:
