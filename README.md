@@ -49,7 +49,7 @@ keeping the implementation readable and open.
 | Bus | Internal corebus plus optional AXI4-Lite bridge path |
 | Verification | 45 assembly regression tests, pipeline throughput/debug-step tests, 43 cocotb tests, formal proofs, RISCOF ACT **95/95** + gated 10k lock-step co-sim |
 | Implementation | Synthesizable SystemVerilog, Verilator simulation, Yosys + Sky130 STA |
-| Benchmarks | Internal Verilator direct-corebus: **1.264 CoreMark/MHz**, **0.400 Dhrystone DMIPS/MHz** on `rv32imc_zicsr -O2` |
+| Benchmarks | Internal Verilator direct-corebus, `-O2`: `rv32im` **1.502 CoreMark/MHz** / **0.468 DMIPS/MHz**; `rv32imc` **1.264** / **0.400** (C trades ~17% throughput for code density — see [docs/BENCHMARKS.md](docs/BENCHMARKS.md)) |
 | Product gap | Certified benchmark submission, physical GDS signoff |
 
 ## Architecture At A Glance
