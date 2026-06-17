@@ -1,25 +1,23 @@
 # Yosys synthesis mapped to Sky130 HD standard cells.
-# Produces build/sisRvCore_sky130.v for OpenSTA
+# Produces build/sisRegFile_sky130.v for OpenSTA.
+#
+# Full sisRvCore is excluded: CSR/PMP use SystemVerilog unpacked arrays that
+# Yosys 0.33 cannot parse. Submodule STA smoke uses sisRegFile as top.
 # Liberty path substituted by Makefile via @LIBERTY_FILE@
 
 read -define SYNTHESIS
-read -sv rtl/core/sisAlu.sv
-read -sv rtl/core/sisDecode.sv
 read -sv rtl/core/sisRegFile.sv
-read -sv rtl/core/sisCsr.sv
-read -sv rtl/core/sisDecompress.sv
-read -sv rtl/core/sisRvCore.sv
 
-hierarchy -top sisRvCore
+hierarchy -top sisRegFile
 proc; opt; flatten; opt -full
 
-synth -top sisRvCore -flatten
+synth -top sisRegFile -flatten
 dfflibmap -liberty @LIBERTY_FILE@
 abc -liberty @LIBERTY_FILE@
 clean
 stat -liberty @LIBERTY_FILE@
 
 check
-hierarchy -top sisRvCore
-select -module sisRvCore
-write_verilog -noattr -noexpr -nohex -selected build/sisRvCore_sky130.v
+hierarchy -top sisRegFile
+select -module sisRegFile
+write_verilog -noattr -noexpr -nohex -selected build/sisRegFile_sky130.v
