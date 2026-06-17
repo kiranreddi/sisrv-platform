@@ -2,52 +2,44 @@
 # Run: yosys -s scripts/yosys_synth.tcl
 # Purpose: Validate synthesizability, check for latches, generate area report
 #
-# Constraints:
-#   - Target clock period: 20ns (50 MHz, conservative for educational design)
-#   - IO assumptions: single clock domain, async active-low reset
+# sisRvCore is excluded: CSR/PMP use SystemVerilog unpacked arrays that
+# Yosys 0.33 cannot parse. Submodules are synthesized individually instead.
 
-# Read RTL sources
+proc synth_module {top} {
+  hierarchy -top $top
+  proc
+  opt
+  check -assert
+  flatten
+  opt -full
+  synth -top $top -flatten
+  stat
+  write_verilog -noattr build/${top}_synth.v
+}
+
 read -define SYNTHESIS
 read -sv rtl/core/sisAlu.sv
 read -sv rtl/core/sisDecode.sv
 read -sv rtl/core/sisRegFile.sv
-# sisCsr/sisPmp use SystemVerilog unpacked arrays (unsupported by Yosys 0.33);
-# those instances are blackboxed when elaborating sisRvCore below.
 read -sv rtl/core/sisDecompress.sv
-read -sv rtl/core/sisRvCore.sv
-read -sv rtl/bus/sisMemFabric.sv
-read -sv rtl/bus/sisAxiLiteM.sv
-read -sv rtl/periph/sisTimer.sv
-read -sv rtl/periph/sisTohost.sv
 
-# Elaborate and synthesize core + bridge (not memories, not platform top)
-# Memories will use blackbox macros in real ASIC flow
-hierarchy -top sisRvCore
-proc
-opt
+tee -o build/ppa_synth_report.txt echo "=== sisAlu ==="
+synth_module sisAlu
 
-# Blackboxed CSR/PMP leave unresolved hierarchy; skip assert-level check.
-# check -assert
+design -reset
+read -define SYNTHESIS
+read -sv rtl/core/sisDecode.sv
+tee -a build/ppa_synth_report.txt echo "=== sisDecode ==="
+synth_module sisDecode
 
-# Flatten
-flatten
-opt -full
+design -reset
+read -define SYNTHESIS
+read -sv rtl/core/sisRegFile.sv
+tee -a build/ppa_synth_report.txt echo "=== sisRegFile ==="
+synth_module sisRegFile
 
-# Map to generic gate library (abstract)
-synth -top sisRvCore -flatten
-
-# Report area and cell counts
-tee -o build/ppa_synth_report.txt stat
-
-# Write netlist
-write_verilog -noattr build/sisRvCore_synth.v
-
-# Also synthesize the AXI bridge
 design -reset
 read -define SYNTHESIS
 read -sv rtl/bus/sisAxiLiteM.sv
-hierarchy -top sisAxiLiteM
-proc; opt; flatten; opt -full
-synth -top sisAxiLiteM -flatten
-tee -a build/ppa_synth_report.txt stat
-write_verilog -noattr build/sisAxiLiteM_synth.v
+tee -a build/ppa_synth_report.txt echo "=== sisAxiLiteM ==="
+synth_module sisAxiLiteM
