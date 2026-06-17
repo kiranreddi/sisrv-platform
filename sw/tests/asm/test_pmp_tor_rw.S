@@ -1,4 +1,5 @@
 # test_pmp_tor_rw.S — NAPOT R-only RAM: U load ok, U store faults
+.include "pmp_csr.inc"
 .section .text.init
 .globl _start
 
@@ -9,16 +10,12 @@ _start:
     la   t0, trap_handler
     csrw mtvec, t0
 
-    li   t0, 0x1FFF
-    csrw pmpaddr0, t0
-    li   t0, 0x1F
-    csrw pmpcfg0, t0
+    PMP_HARNESS_ENTRY0
 
     # NAPOT R-only over RAM (same encoding as test_pmp_amo_perm)
     li   t0, 0x20007FFF
     csrw pmpaddr1, t0
-    li   t0, 0x19
-    csrw pmpcfg1, t0
+    PMP_SET_CFG 1, 0x19, t1, t2
 
     li   t0, 0x55AA55AA
     li   s6, RAM_BASE

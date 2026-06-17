@@ -1,4 +1,5 @@
 # test_pmp_priority.S — lowest-index matching entry wins
+.include "pmp_csr.inc"
 .section .text.init
 .globl _start
 
@@ -9,22 +10,17 @@ _start:
     la   t0, trap_handler
     csrw mtvec, t0
 
-    li   t0, 0x1FFF
-    csrw pmpaddr0, t0
-    li   t0, 0x1F
-    csrw pmpcfg0, t0
+    PMP_HARNESS_ENTRY0
 
     # Entry 1: R-only NAPOT over RAM (deny store)
     li   t0, 0x20007FFF
     csrw pmpaddr1, t0
-    li   t0, 0x19
-    csrw pmpcfg1, t0
+    PMP_SET_CFG 1, 0x19, t1, t2
 
     # Entry 2: R|W NAPOT over same RAM (ignored — higher index)
     li   t0, 0x20007FFF
     csrw pmpaddr2, t0
-    li   t0, 0x1B
-    csrw pmpcfg2, t0
+    PMP_SET_CFG 2, 0x1B, t1, t2
 
     la   t0, u_store
     csrw mepc, t0

@@ -26,8 +26,6 @@ module sisPmp #(
     begin
       if (pa == 32'hFFFF_FFFF) begin
         napot_size_bytes = 32'hFFFF_FFFF;
-      end else if (pa[0] && !pa[1]) begin
-        napot_size_bytes = 32'd8;
       end else begin
         t = 0;
         while (t < 32 && pa[t])

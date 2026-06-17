@@ -1,4 +1,5 @@
 # test_pmp_tor_addr_lock.S — TOR+L on entry i+1 blocks pmpaddr[i] write
+.include "pmp_csr.inc"
 .section .text.init
 .globl _start
 
@@ -12,8 +13,7 @@ _start:
 
     li   t0, 0x20000400
     csrw pmpaddr1, t0
-    li   t0, 0x89
-    csrw pmpcfg1, t0
+    PMP_SET_CFG 1, 0x89, t1, t2
 
     li   t0, 0x20001000
     csrw pmpaddr0, t0

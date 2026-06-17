@@ -1,4 +1,5 @@
 # test_pmp_na4.S — NA4 single-word match in U-mode
+.include "pmp_csr.inc"
 .section .text.init
 .globl _start
 
@@ -9,16 +10,12 @@ _start:
     la   t0, trap_handler
     csrw mtvec, t0
 
-    li   t0, 0x1FFF
-    csrw pmpaddr0, t0
-    li   t0, 0x1F
-    csrw pmpcfg0, t0
+    PMP_HARNESS_ENTRY0
 
     # NA4 on RAM_BASE word only
     li   t0, 0x20000000
     csrw pmpaddr1, t0
-    li   t0, 0x11
-    csrw pmpcfg1, t0
+    PMP_SET_CFG 1, 0x11, t1, t2
 
     li   t0, 0xCAFEBABE
     li   s6, RAM_BASE

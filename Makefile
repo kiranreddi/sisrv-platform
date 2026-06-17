@@ -83,13 +83,13 @@ $(BUILD)/tests/test_atomic%.elf: sw/tests/asm/test_atomic%.S sw/bsp/link.ld
 	@mkdir -p $(BUILD)/tests
 	$(RV_GCC) -march=rv32imac_zicsr -mabi=$(RV_ABI) -nostdlib -nostartfiles -ffreestanding -static -fno-pic -fno-pie -no-pie -O2 -Wl,--build-id=none -T sw/bsp/link.ld -o $@ $<
 
-$(BUILD)/tests/test_umode%.elf: sw/tests/asm/test_umode%.S sw/bsp/link.ld
+$(BUILD)/tests/test_umode%.elf: sw/tests/asm/test_umode%.S sw/tests/asm/pmp_csr.inc sw/bsp/link.ld
 	@mkdir -p $(BUILD)/tests
-	$(RV_GCC) -march=rv32imac_zicsr -mabi=$(RV_ABI) -nostdlib -nostartfiles -ffreestanding -static -fno-pic -fno-pie -no-pie -O2 -Wl,--build-id=none -T sw/bsp/link.ld -o $@ $<
+	$(RV_GCC) -march=rv32imac_zicsr -mabi=$(RV_ABI) -nostdlib -nostartfiles -ffreestanding -static -fno-pic -fno-pie -no-pie -O2 -Wl,--build-id=none -I sw/tests/asm -T sw/bsp/link.ld -o $@ $<
 
-$(BUILD)/tests/test_pmp%.elf: sw/tests/asm/test_pmp%.S sw/bsp/link.ld
+$(BUILD)/tests/test_pmp%.elf: sw/tests/asm/test_pmp%.S sw/tests/asm/pmp_csr.inc sw/bsp/link.ld
 	@mkdir -p $(BUILD)/tests
-	$(RV_GCC) -march=rv32imac_zicsr -mabi=$(RV_ABI) -nostdlib -nostartfiles -ffreestanding -static -fno-pic -fno-pie -no-pie -O2 -Wl,--build-id=none -T sw/bsp/link.ld -o $@ $<
+	$(RV_GCC) -march=rv32imac_zicsr -mabi=$(RV_ABI) -nostdlib -nostartfiles -ffreestanding -static -fno-pic -fno-pie -no-pie -O2 -Wl,--build-id=none -I sw/tests/asm -T sw/bsp/link.ld -o $@ $<
 
 $(BUILD)/tests/test_mcounteren.elf: sw/tests/asm/test_mcounteren.S sw/bsp/link.ld
 	@mkdir -p $(BUILD)/tests

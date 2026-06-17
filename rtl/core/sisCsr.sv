@@ -147,13 +147,32 @@ module sisCsr #(
     end
   endfunction
 
-  function automatic logic csr_is_pmpcfg(input logic [11:0] addr, output int idx);
+  localparam int PMPCFG_CSRS = (PMP_ENTRIES + 3) / 4;
+
+  function automatic logic [31:0] pack_pmpcfg_csr(input int slot);
+    logic [31:0] cfg_word;
+    int          base;
+    int          j;
+    begin
+      cfg_word = 32'h0;
+      base     = slot * 4;
+      for (j = 0; j < 4; j = j + 1) begin
+        if ((base + j) < PMP_ENTRIES)
+          cfg_word[8*j +: 8] = pmpcfg[base + j];
+      end
+      pack_pmpcfg_csr = cfg_word;
+    end
+  endfunction
+
+  function automatic logic csr_is_pmpcfg(input logic [11:0] addr, output int slot);
+    int idx;
     begin
       csr_is_pmpcfg = 1'b0;
-      idx = 0;
-      if (addr >= 12'h3A0 && (addr < 12'(12'h3A0 + PMP_ENTRIES))) begin
+      slot = 0;
+      if (addr >= 12'h3A0 && (addr < 12'(12'h3A0 + PMPCFG_CSRS))) begin
         idx = int'(addr - 12'h3A0);
-        csr_is_pmpcfg = idx < PMP_ENTRIES;
+        slot = idx;
+        csr_is_pmpcfg = idx < PMPCFG_CSRS;
       end
     end
   endfunction
@@ -162,8 +181,8 @@ module sisCsr #(
     begin
       csr_is_pmpaddr = 1'b0;
       idx = 0;
-      if (addr >= 12'h3B0 && addr <= 12'h3EF && ((int'(addr - 12'h3B0) % 4) == 0)) begin
-        idx = int'(addr - 12'h3B0) / 4;
+      if (addr >= 12'h3B0 && (addr < 12'(12'h3B0 + PMP_ENTRIES))) begin
+        idx = int'(addr - 12'h3B0);
         csr_is_pmpaddr = idx < PMP_ENTRIES;
       end
     end
@@ -181,11 +200,11 @@ module sisCsr #(
 
   logic        is_pmpcfg;
   logic        is_pmpaddr;
-  int          pmp_cfg_idx;
+  int          pmp_cfg_slot;
   int          pmp_idx;
 
   always_comb begin
-    is_pmpcfg = csr_is_pmpcfg(csr_addr, pmp_cfg_idx);
+    is_pmpcfg = csr_is_pmpcfg(csr_addr, pmp_cfg_slot);
     is_pmpaddr = csr_is_pmpaddr(csr_addr, pmp_idx);
 
     case (csr_addr)
@@ -215,7 +234,7 @@ module sisCsr #(
       CSR_INSTRETH:  csr_rdata = minstret[63:32];
       default: begin
         if (is_pmpcfg)
-          csr_rdata = {24'h0, pmpcfg[pmp_cfg_idx]};
+          csr_rdata = pack_pmpcfg_csr(pmp_cfg_slot);
         else if (is_pmpaddr)
           csr_rdata = pmpaddr[pmp_idx];
         else
@@ -286,8 +305,12 @@ module sisCsr #(
           CSR_MINSTRETH: minstret[63:32] <= csr_new_val;
           default: begin
             if (is_pmpcfg) begin
-              if (!pmpcfg_locked(pmp_cfg_idx))
-                pmpcfg[pmp_cfg_idx] <= warl_pmpcfg_byte(csr_new_val[7:0]);
+              for (int pj = 0; pj < 4; pj = pj + 1) begin
+                int entry_idx;
+                entry_idx = pmp_cfg_slot * 4 + pj;
+                if (entry_idx < PMP_ENTRIES && !pmpcfg_locked(entry_idx))
+                  pmpcfg[entry_idx] <= warl_pmpcfg_byte(csr_new_val[8*pj +: 8]);
+              end
             end else if (is_pmpaddr && !pmpaddr_write_blocked(pmp_idx)) begin
               pmpaddr[pmp_idx] <= csr_new_val;
             end

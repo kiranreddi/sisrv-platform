@@ -1,4 +1,5 @@
 # test_pmp_napot_sizes.S — NAPOT 8B and 4KB boundary checks in U-mode
+.include "pmp_csr.inc"
 .section .text.init
 .globl _start
 
@@ -9,18 +10,14 @@ _start:
     la   t0, trap_handler
     csrw mtvec, t0
 
-    li   t0, 0x1FFF
-    csrw pmpaddr0, t0
-    li   t0, 0x1F
-    csrw pmpcfg0, t0
+    PMP_HARNESS_ENTRY0
 
     li   s9, 0
 
-    # 8-byte NAPOT R|W at RAM_BASE: pmpaddr = 0x20000001
-    li   t0, 0x20000001
+    # 8-byte NAPOT R|W at RAM_BASE: pmpaddr = 0x20000000 (t=0)
+    li   t0, 0x20000000
     csrw pmpaddr1, t0
-    li   t0, 0x1B
-    csrw pmpcfg1, t0
+    PMP_SET_CFG 1, 0x1B, t1, t2
 
     la   t0, u_8b
     csrw mepc, t0
@@ -61,8 +58,7 @@ after_8b:
     # 4KB NAPOT at RAM_BASE: pmpaddr = 0x200001FF
     li   t0, 0x200001FF
     csrw pmpaddr1, t0
-    li   t0, 0x1B
-    csrw pmpcfg1, t0
+    PMP_SET_CFG 1, 0x1B, t1, t2
     la   t0, u_4k
     csrw mepc, t0
     csrr t1, mstatus

@@ -3,6 +3,9 @@
 
 #define RVMODEL_BOOT
 
+#define RVMODEL_PMP_GRAIN 0
+#define RVMODEL_NUM_PMPS 8
+
 #define RVMODEL_DATA_BEGIN \
   .align 4; .global begin_signature; begin_signature:
 
