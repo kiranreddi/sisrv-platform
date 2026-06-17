@@ -5,6 +5,33 @@ hart0:
   User_Spec_Version: "2.3"
   supported_xlen: [32]
   pmp_granularity: 0
-  pmp:
-    implemented: true
-    pmp_entries: 8
+  pmpcfg0:
+    rv32:
+      accessible: true
+  pmpcfg1:
+    rv32:
+      accessible: true
+  pmpaddr0:
+    rv32:
+      accessible: true
+  pmpaddr1:
+    rv32:
+      accessible: true
+  pmpaddr2:
+    rv32:
+      accessible: true
+  pmpaddr3:
+    rv32:
+      accessible: true
+  pmpaddr4:
+    rv32:
+      accessible: true
+  pmpaddr5:
+    rv32:
+      accessible: true
+  pmpaddr6:
+    rv32:
+      accessible: true
+  pmpaddr7:
+    rv32:
+      accessible: true

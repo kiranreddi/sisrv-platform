@@ -1,11 +1,11 @@
-# OpenSTA timing analysis on Sky130-mapped sisRvCore netlist
+# OpenSTA timing analysis on Sky130-mapped sisRegFile netlist (STA smoke)
 # Paths substituted by Makefile: @LIBERTY_FILE@ @NETLIST_FILE@ @REPORT_FILE@
 
 read_liberty @LIBERTY_FILE@
 read_verilog @NETLIST_FILE@
 
 set linked 0
-foreach top {{\sisRvCore} sisRvCore} {
+foreach top {{\sisRegFile} sisRegFile} {
   if {!$linked} {
     if {![catch {link_design $top} err]} {
       if {![catch {current_design} _]} {
@@ -21,11 +21,11 @@ if {!$linked} {
   }
 }
 if {!$linked} {
-  puts stderr "link_design failed for sisRvCore"
+  puts stderr "link_design failed for sisRegFile"
   exit 1
 }
 
-read_sdc scripts/constraints_sisRvCore.sdc
+read_sdc scripts/constraints_sisRegFile.sdc
 check_setup
 
 set wns [worst_slack -max]
@@ -39,7 +39,7 @@ if {$ach > 0.001} {
 
 set report_fp [open @REPORT_FILE@ w]
 puts $report_fp "PDK: Sky130 HD (sky130_fd_sc_hd__tt_025C_1v80)"
-puts $report_fp "Top: sisRvCore"
+puts $report_fp "Top: sisRegFile (sisRvCore excluded — Yosys 0.33 SV array limit)"
 puts $report_fp "Clock target: 50 MHz (20 ns)"
 puts $report_fp [format "WNS (max): %.3f ns" $wns]
 puts $report_fp [format "TNS (max): %.3f ns" $tns]
