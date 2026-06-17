@@ -18,14 +18,25 @@ def napot_mask(pa: int) -> int:
     return ~(pa ^ (pa + 1)) & 0xFFFFFFFF
 
 
+PMP_ENTRIES = 8
+CFG_MASK_ALL = (1 << (PMP_ENTRIES * 8)) - 1
+ADDR_MASK_ALL = (1 << (PMP_ENTRIES * 32)) - 1
+
+
 def set_entry(dut, idx: int, cfg: int, addr: int) -> None:
-    dut.pmpcfg[idx].value = cfg & 0xFF
-    dut.pmpaddr[idx].value = addr & 0xFFFFFFFF
+    cfg_val = int(dut.pmpcfg.value) & CFG_MASK_ALL
+    addr_val = int(dut.pmpaddr.value) & ADDR_MASK_ALL
+    cfg_byte_mask = 0xFF << (idx * 8)
+    addr_word_mask = ((1 << 32) - 1) << (idx * 32)
+    cfg_val = (cfg_val & ~cfg_byte_mask) | ((cfg & 0xFF) << (idx * 8))
+    addr_val = (addr_val & ~addr_word_mask) | ((addr & 0xFFFFFFFF) << (idx * 32))
+    dut.pmpcfg.value = cfg_val
+    dut.pmpaddr.value = addr_val
 
 
-def clear_entries(dut, n: int = 8) -> None:
-    for i in range(n):
-        set_entry(dut, i, 0, 0)
+def clear_entries(dut, n: int = PMP_ENTRIES) -> None:
+    dut.pmpcfg.value = 0
+    dut.pmpaddr.value = 0
 
 
 async def check_access(
