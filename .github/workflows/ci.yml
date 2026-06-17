@@ -34,7 +34,7 @@ jobs:
         run: make lint
 
   regress:
-    name: Assembly Regression (45 tests + pipeline guards)
+    name: Assembly Regression (70 tests + pipeline guards)
     runs-on: ubuntu-latest
     needs: lint
     steps:
@@ -69,7 +69,7 @@ jobs:
         run: make pipeline-debug
 
   cocotb:
-    name: cocotb Tests (43 tests)
+    name: cocotb Tests (50 tests)
     runs-on: ubuntu-latest
     needs: lint
     steps:
