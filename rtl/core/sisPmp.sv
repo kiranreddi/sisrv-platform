@@ -6,8 +6,8 @@
 module sisPmp #(
     parameter int PMP_ENTRIES = 8
 )(
-    input  logic [PMP_ENTRIES*8-1:0]   pmpcfg,
-    input  logic [PMP_ENTRIES*32-1:0] pmpaddr,
+    input  logic [PMP_ENTRIES-1:0][7:0]  pmpcfg,
+    input  logic [PMP_ENTRIES-1:0][31:0] pmpaddr,
 
     input  logic [31:0] addr,
     input  logic [1:0]  priv,
@@ -20,16 +20,6 @@ module sisPmp #(
 
   localparam logic [1:0] PRIV_M = 2'b11;
   localparam logic [1:0] PRIV_U = 2'b00;
-
-  logic [PMP_ENTRIES-1:0][7:0]  pmpcfg_arr;
-  logic [PMP_ENTRIES-1:0][31:0] pmpaddr_arr;
-
-  generate
-    for (genvar gi = 0; gi < PMP_ENTRIES; gi++) begin : g_pmp_in
-      assign pmpcfg_arr[gi]  = pmpcfg[gi*8 +: 8];
-      assign pmpaddr_arr[gi] = pmpaddr[gi*32 +: 32];
-    end
-  endgenerate
 
   function automatic logic [31:0] napot_mask(input logic [31:0] pa);
     logic [31:0] t;
@@ -79,8 +69,8 @@ module sisPmp #(
   always_comb begin
     for (i = 0; i < PMP_ENTRIES; i = i + 1) begin
       logic [31:0] prev;
-      prev = (i == 0) ? 32'h0 : pmpaddr_arr[i-1];
-      match[i] = entry_matches(i, addr, pmpcfg_arr[i], pmpaddr_arr[i], prev);
+      prev = (i == 0) ? 32'h0 : pmpaddr[i-1];
+      match[i] = entry_matches(i, addr, pmpcfg[i], pmpaddr[i], prev);
     end
 
     any_match = 1'b0;
@@ -89,7 +79,7 @@ module sisPmp #(
     for (j = 0; j < PMP_ENTRIES; j = j + 1) begin
       if (match[j] && !any_match) begin
         any_match = 1'b1;
-        win_cfg   = pmpcfg_arr[j];
+        win_cfg   = pmpcfg[j];
       end
     end
 

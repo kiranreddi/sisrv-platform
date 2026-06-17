@@ -438,8 +438,8 @@ module sisRvCore #(
   logic        mstatus_mprv_o;
   logic [1:0]  mstatus_mpp_o;
   logic [2:0]  mcounteren_o;
-  logic [PMP_ENTRIES*8-1:0]   pmpcfg_bus;
-  logic [PMP_ENTRIES*32-1:0] pmpaddr_bus;
+  logic [PMP_ENTRIES-1:0][7:0]  pmpcfg_bus;
+  logic [PMP_ENTRIES-1:0][31:0] pmpaddr_bus;
 
   sisCsr #(
     .ENABLE_A     (ENABLE_A),
