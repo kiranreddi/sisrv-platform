@@ -157,10 +157,17 @@ jobs:
           verilator --version
 
       - name: Install RISC-V Toolchain
-        run: sudo apt-get install -y gcc-riscv64-linux-gnu
+        run: |
+          sudo apt-get install -y gcc-riscv64-linux-gnu || true
+          sudo apt-get install -y gcc-riscv64-unknown-elf binutils-riscv64-unknown-elf || true
 
       - name: Run reduced benchmark validation
-        run: make benchmark-smoke
+        run: |
+          if command -v riscv64-unknown-elf-gcc >/dev/null; then
+            make benchmark-smoke RV_PREFIX=riscv64-unknown-elf-
+          else
+            make benchmark-smoke
+          fi
 
   cosim-lockstep:
     name: 10k-seed Lock-step Co-sim
