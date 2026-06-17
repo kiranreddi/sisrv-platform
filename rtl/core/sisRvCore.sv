@@ -12,7 +12,9 @@ module sisRvCore #(
     parameter logic [31:0] RESET_VECTOR = 32'h0000_0000,
     parameter bit          ENABLE_A     = 1'b1,
     parameter bit          ENABLE_M     = 1'b1,
-    parameter bit          ENABLE_C     = 1'b1
+    parameter bit          ENABLE_C     = 1'b1,
+    parameter bit          ENABLE_U     = 1'b1,
+    parameter int          PMP_ENTRIES = 8
 )(
     input  logic        clk,
     input  logic        rst_n,
@@ -261,7 +263,19 @@ module sisRvCore #(
   logic [31:0] wb_pc_next;
   logic        wb_irq_pending;
   logic [31:0] wb_irq_cause;
+  logic [1:0]  ex_priv, wb_priv;
+  logic        ex_is_wfi;
+  logic        ex_priv_illegal;
+  logic        ex_legal_eff;
+  logic        ex_pmp_d_fault;
+  logic        ex_d_access_raw;
+  logic        ex_d_misaligned;
+  logic        pmp_d_allow;
+  logic        pmp_fetch_allow;
+  logic [31:0] fetch_pmp_addr;
 
+  localparam logic [1:0] PRIV_M = 2'b11;
+  localparam logic [1:0] PRIV_U = 2'b00;
   logic        halted;
   logic        step_active;
   assign dbg_halted = halted;
@@ -419,10 +433,19 @@ module sisRvCore #(
   logic [31:0] mepc_out;
   logic        irq_pending;
   logic [31:0] irq_cause;
+  logic [1:0]  priv_o;
+  logic        mstatus_tw_o;
+  logic        mstatus_mprv_o;
+  logic [1:0]  mstatus_mpp_o;
+  logic [2:0]  mcounteren_o;
+  logic [PMP_ENTRIES-1:0][7:0]  pmpcfg_bus;
+  logic [PMP_ENTRIES-1:0][31:0] pmpaddr_bus;
 
   sisCsr #(
-    .ENABLE_A (ENABLE_A),
-    .ENABLE_C (ENABLE_C)
+    .ENABLE_A     (ENABLE_A),
+    .ENABLE_C     (ENABLE_C),
+    .ENABLE_U     (ENABLE_U),
+    .PMP_ENTRIES  (PMP_ENTRIES)
   ) u_csr (
     .clk         (clk),
     .rst_n       (rst_n),
@@ -443,7 +466,59 @@ module sisRvCore #(
     .mtvec_out   (mtvec_out),
     .mepc_out    (mepc_out),
     .irq_pending (irq_pending),
-    .irq_cause   (irq_cause)
+    .irq_cause   (irq_cause),
+    .priv_o      (priv_o),
+    .mstatus_tw_o(mstatus_tw_o),
+    .mstatus_mprv_o(mstatus_mprv_o),
+    .mstatus_mpp_o(mstatus_mpp_o),
+    .mcounteren_o(mcounteren_o),
+    .pmpcfg_o    (pmpcfg_bus),
+    .pmpaddr_o   (pmpaddr_bus)
+  );
+
+  logic [1:0] d_pmp_priv;
+  always_comb begin
+    if (priv_o == PRIV_M) begin
+      if (mstatus_mprv_o)
+        d_pmp_priv = mstatus_mpp_o;
+      else
+        d_pmp_priv = PRIV_M;
+    end else begin
+      d_pmp_priv = priv_o;
+    end
+  end
+
+  assign fetch_pmp_addr = (if_state == IF_SECOND_WAIT) ? ({fetch_req_pc[31:2], 2'b00} + 32'd4) :
+                                                        {fetch_req_pc[31:2], 2'b00};
+
+  logic [31:0] pmp_d_addr;
+
+  assign pmp_d_addr = ((ex_state == EX_EXEC) && ex_valid) ? alu_result : ex_alu_result_reg;
+
+  sisPmp #(
+    .PMP_ENTRIES(PMP_ENTRIES)
+  ) u_pmp_d (
+    .pmpcfg  (pmpcfg_bus),
+    .pmpaddr (pmpaddr_bus),
+    .addr    (pmp_d_addr),
+    .priv    (d_pmp_priv),
+    .req_r   (ex_is_load || ex_is_lr || ex_is_amo_op),
+    .req_w   (ex_is_store || ex_is_sc || ex_is_amo_op),
+    .req_x   (1'b0),
+    .allow   (pmp_d_allow)
+  );
+
+  sisPmp #(
+    .PMP_ENTRIES(PMP_ENTRIES)
+  ) u_pmp_i (
+    .pmpcfg  (pmpcfg_bus),
+    .pmpaddr (pmpaddr_bus),
+    .addr    (fetch_pmp_addr),
+    .priv    (priv_o),
+    .req_r   (1'b0),
+    .req_w   (1'b0),
+    .req_x   (1'b1),
+    .allow   (pmp_fetch_allow)
   );
 
   // ---------------------------------------------------------------
@@ -486,9 +561,32 @@ module sisRvCore #(
   assign ex_is_ecall  = ex_is_system && (ex_funct3 == 3'b000) && (ex_instr[31:20] == 12'h000);
   assign ex_is_ebreak = ex_is_system && (ex_funct3 == 3'b000) && (ex_instr[31:20] == 12'h001);
   assign ex_is_mret   = ex_is_system && (ex_funct3 == 3'b000) && (ex_instr[31:20] == 12'h302);
+  assign ex_is_wfi    = ex_is_system && (ex_funct3 == 3'b000) && (ex_instr[31:20] == 12'h105);
   assign ex_is_csr_op = ex_is_system && (ex_funct3 != 3'b000);
   assign ex_dec_is_legal_eff = ENABLE_C ? (ex_is_legal && !ex_illegal_compressed) :
                                           (ex_is_legal && !ex_is_compressed);
+
+  wire [1:0] ex_csr_req_priv = ex_instr[29:28];
+  wire       ex_csr_writes = ex_is_csr_op &&
+                             ((ex_instr[31:30] == 2'b01) ||
+                              ((ex_rs1 != 5'd0) && (ex_instr[31:30] != 2'b01)));
+  wire       ex_csr_ro_viol = ex_is_csr_op && (ex_instr[31:30] == 2'b11) && ex_csr_writes;
+  wire       ex_csr_priv_viol = ENABLE_U && ex_is_csr_op &&
+                                ((ex_csr_req_priv == 2'b11 && ex_priv != PRIV_M) ||
+                                 (ex_csr_req_priv == 2'b01) ||
+                                 (ex_csr_req_priv == 2'b10));
+  wire [11:0] ex_csr_addr_f = ex_instr[31:20];
+  wire       ex_mcounteren_block = ENABLE_U && ex_is_csr_op && (ex_priv == PRIV_U) &&
+                                   ((((ex_csr_addr_f == 12'hC00) || (ex_csr_addr_f == 12'hC80)) &&
+                                     !mcounteren_o[0]) ||
+                                    (((ex_csr_addr_f == 12'hC02) || (ex_csr_addr_f == 12'hC82)) &&
+                                     !mcounteren_o[2]));
+
+  assign ex_priv_illegal = ENABLE_U &&
+                           ((ex_is_mret && (ex_priv != PRIV_M)) ||
+                            (ex_is_wfi && (ex_priv != PRIV_M) && mstatus_tw_o) ||
+                            ex_csr_priv_viol || ex_csr_ro_viol || ex_mcounteren_block);
+  assign ex_legal_eff = ex_dec_is_legal_eff && !ex_priv_illegal;
 
   always_comb begin
     ex_branch_taken = 1'b0;
@@ -520,7 +618,7 @@ module sisRvCore #(
     end
   end
 
-  assign ex_instr_addr_misaligned = ex_dec_is_legal_eff &&
+  assign ex_instr_addr_misaligned = ex_legal_eff &&
                                     (ex_is_jal || ex_is_jalr || (ex_is_branch && ex_branch_taken)) &&
                                     (ENABLE_C ? (ex_next_pc_target[0] != 1'b0) :
                                                 (ex_is_compressed ? (ex_next_pc_target[0] != 1'b0) :
@@ -549,9 +647,12 @@ module sisRvCore #(
   // Fires the cycle the AMO load completes; bus mux must switch to write in same cycle
   assign ex_amo_load_done = ex_is_amo_op && (ex_state == EX_MEM_WAIT) && data_rsp_fire;
 
-  assign ex_mem_access = !is_mem_misaligned(alu_result, ex_funct3) &&
-                         (ex_is_load || ex_is_store || ex_is_lr ||
-                          (ex_is_sc && ex_sc_succeeds) || ex_is_amo_op);
+  assign ex_d_access_raw = ex_is_load || ex_is_store || ex_is_lr ||
+                           (ex_is_sc && ex_sc_succeeds) || ex_is_amo_op;
+  assign ex_pmp_d_fault  = ex_d_access_raw &&
+                           !is_mem_misaligned(alu_result, ex_funct3) && !pmp_d_allow;
+  assign ex_mem_access   = ex_d_access_raw &&
+                           !is_mem_misaligned(alu_result, ex_funct3) && pmp_d_allow;
   assign ex_mem_requesting = ex_valid &&
                              (((ex_state == EX_EXEC) && ex_mem_access) ||
                               (ex_state == EX_MEM_REQ) ||
@@ -565,7 +666,8 @@ module sisRvCore #(
   assign ex_complete_alu_result     = ex_exec_to_wb ? (ex_is_m_op ? m_result : alu_result) : ex_alu_result_reg;
   assign ex_complete_mem_addr       = ex_exec_to_wb ? alu_result : ex_mem_addr_reg;
   assign ex_complete_mem_rdata      = ex_mem_to_wb ? d_rsp_rdata : ex_mem_rdata_reg;
-  assign ex_complete_mem_err        = ex_mem_to_wb       ? d_rsp_err :
+  assign ex_complete_mem_err        = (ex_exec_to_wb && ex_pmp_d_fault) ? 1'b1 :
+                                      ex_mem_to_wb       ? d_rsp_err :
                                       ex_amo_store_to_wb ? d_rsp_err : ex_mem_err;
   assign ex_complete_mem_misaligned = ex_exec_to_wb ?
                                       ((ex_is_load || ex_is_store || ex_is_atomic) &&
@@ -579,7 +681,7 @@ module sisRvCore #(
   always_comb begin
     ex_pc_next = ex_pc_sequential;
     if (ex_fetch_err || ex_complete_mem_err || ex_complete_mem_misaligned ||
-        ex_instr_addr_misaligned || !ex_dec_is_legal_eff) begin
+        ex_instr_addr_misaligned || !ex_legal_eff) begin
       ex_pc_next = mtvec_base;   // exceptions always go to BASE (spec: even in vectored mode)
     end else if (irq_pending && !ex_is_csr_op) begin
       ex_pc_next = mtvec_vectored ? mtvec_irq_vector : mtvec_base;
@@ -598,7 +700,7 @@ module sisRvCore #(
 
   assign ex_redirect = ex_to_wb_fire && !wb_single_step_stop &&
                        (ex_fetch_err || ex_complete_mem_err || ex_complete_mem_misaligned ||
-                        ex_instr_addr_misaligned || !ex_dec_is_legal_eff ||
+                        ex_instr_addr_misaligned || !ex_legal_eff ||
                         ex_is_jal || ex_is_jalr || (ex_is_branch && ex_branch_taken) ||
                         ex_is_ecall || ex_is_ebreak || ex_is_mret ||
                         (irq_pending && !ex_is_csr_op));
@@ -823,7 +925,7 @@ module sisRvCore #(
         instr_retire = 1'b0;
       end else if (wb_mem_err) begin
         trap_enter = 1'b1;
-        trap_cause = wb_is_store ? 32'd7 : 32'd5;
+        trap_cause = (wb_is_store || wb_is_amo_op || wb_is_sc) ? 32'd7 : 32'd5;
         trap_val   = wb_mem_addr;
         trap_epc   = wb_pc;
         instr_retire = 1'b0;
@@ -843,7 +945,7 @@ module sisRvCore #(
         csr_wen_w = 1'b1;
       end else if (wb_is_ecall) begin
         trap_enter = 1'b1;
-        trap_cause = 32'd11;
+        trap_cause = (wb_priv == PRIV_M) ? 32'd11 : 32'd8;
         trap_epc   = wb_pc;
         instr_retire = 1'b0;
       end else if (wb_is_ebreak) begin
@@ -1013,8 +1115,8 @@ module sisRvCore #(
           if_discard_rsp <= 1'b0;
           if_state       <= IF_REQ;
         end else if (if_state == IF_WAIT) begin
-          fetch_err_hold <= i_rsp_err;
-          if (i_rsp_err) begin
+          fetch_err_hold <= i_rsp_err || !pmp_fetch_allow;
+          if (i_rsp_err || !pmp_fetch_allow) begin
             if_id_valid         <= 1'b1;
             if_id_pc            <= fetch_req_pc;
             if_id_raw           <= 32'h0000_0013;
@@ -1030,7 +1132,7 @@ module sisRvCore #(
               if_id_raw           <= {16'h0, i_rsp_rdata[15:0]};
               if_id_len           <= 2'd2;
               if_id_is_compressed <= 1'b1;
-              if_id_fetch_err     <= 1'b0;
+              if_id_fetch_err     <= i_rsp_err || !pmp_fetch_allow;
               fetch_pc            <= fetch_req_pc + 32'd2;
             end else begin
               if_id_valid         <= 1'b1;
@@ -1038,7 +1140,7 @@ module sisRvCore #(
               if_id_raw           <= i_rsp_rdata;
               if_id_len           <= 2'd0;
               if_id_is_compressed <= 1'b0;
-              if_id_fetch_err     <= 1'b0;
+              if_id_fetch_err     <= i_rsp_err || !pmp_fetch_allow;
               fetch_pc            <= fetch_req_pc + 32'd4;
             end
             if_state <= IF_REQ;
@@ -1049,7 +1151,7 @@ module sisRvCore #(
               if_id_raw           <= {16'h0, i_rsp_rdata[31:16]};
               if_id_len           <= 2'd2;
               if_id_is_compressed <= 1'b1;
-              if_id_fetch_err     <= 1'b0;
+              if_id_fetch_err     <= i_rsp_err || !pmp_fetch_allow;
               fetch_pc            <= fetch_req_pc + 32'd2;
               if_state            <= IF_REQ;
             end else begin
@@ -1063,7 +1165,7 @@ module sisRvCore #(
           if_id_raw           <= {i_rsp_rdata[15:0], fetch_upper_hold};
           if_id_len           <= 2'd0;
           if_id_is_compressed <= 1'b0;
-          if_id_fetch_err     <= fetch_err_hold || i_rsp_err;
+          if_id_fetch_err     <= fetch_err_hold || i_rsp_err || !pmp_fetch_allow;
           fetch_pc            <= fetch_req_pc + 32'd4;
           fetch_upper_hold    <= 16'h0;
           fetch_err_hold      <= 1'b0;
@@ -1166,7 +1268,7 @@ module sisRvCore #(
         wb_mem_err              <= ex_complete_mem_err;
         wb_mem_misaligned       <= ex_complete_mem_misaligned;
         wb_instr_addr_misaligned <= ex_instr_addr_misaligned;
-        wb_dec_is_legal_eff     <= ex_dec_is_legal_eff;
+        wb_dec_is_legal_eff     <= ex_legal_eff;
         wb_is_ecall             <= ex_is_ecall;
         wb_is_ebreak            <= ex_is_ebreak;
         wb_is_mret              <= ex_is_mret;
@@ -1178,12 +1280,15 @@ module sisRvCore #(
         wb_pc_next              <= ex_pc_next;
         wb_irq_pending          <= irq_pending;
         wb_irq_cause            <= irq_cause;
+        wb_priv                 <= ex_priv;
       end
 
 	      if (ex_redirect) begin
 	        lr_reservation_valid <= 1'b0;  // spec: reservation cleared on any trap/interrupt
 	        fetch_pc         <= ex_pc_next;
 	        if_id_valid      <= 1'b0;
+	        ex_valid         <= 1'b0;
+	        ex_state         <= EX_EXEC;
 	        fetch_upper_hold <= 16'h0;
         fetch_err_hold   <= 1'b0;
         if (((if_state == IF_WAIT) || (if_state == IF_SECOND_WAIT)) && !if_rsp_fire) begin
@@ -1247,6 +1352,7 @@ module sisRvCore #(
         ex_atomic_funct5      <= dec_atomic_funct5;
         ex_aq                 <= dec_aq;
         ex_rl                 <= dec_rl;
+        ex_priv               <= priv_o;
         ex_rs1_val            <= id_rs1_val;
         ex_rs2_val            <= id_rs2_val;
         ex_alu_result_reg     <= 32'h0;

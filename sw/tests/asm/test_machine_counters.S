@@ -3,7 +3,7 @@
 .globl _start
 _start:
     csrr  x1, 0x301           # misa
-  li    x2, 0x40001105       # RV32, I + M + C + A
+  li    x2, 0x40101105       # RV32, I + M + C + A + U
     bne   x1, x2, fail
 
     csrr  x1, 0xF11           # mvendorid

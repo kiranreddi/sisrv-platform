@@ -1,16 +1,18 @@
 # Implementation Status
 
-**Last updated**: 2026-06-16 (benchmark bring-up after M6 closure)
+**Last updated**: 2026-06-16 (U-mode + PMP on benchmark-bringup)
 
 ## Summary
 
 The sisrv-platform project implements a fully functional RV32IMAC RISC-V processor core
 with M-mode CSRs, trap handling, **CLINT/PLIC interrupts**, **RISC-V Debug subset**,
 GPIO, UART, and an AXI4-Lite master bridge.
-The core is verified through **45** directed assembly regression tests, pipeline throughput/debug-step Verilator tests, 43 cocotb randomized unit tests,
-4 formal proofs, **RISCOF rv32imac_zicsr ACT suite** (**95/95** filtered tests in CI; 72
-upstream tests excluded for PMP/A/privilege outside the RV32IMCZicsr profile), and
+The core is verified through **70** directed assembly regression tests, pipeline throughput/debug-step Verilator tests, 43+ cocotb randomized unit tests (incl. PMP matcher lane),
+4 formal proofs, **RISCOF rv32imac_zicsr ACT suite** with privilege/PMP subset enabled (**95+** filtered tests in CI; Smepmp/S-mode/vm tests still excluded), and
 **10k-seed retired-instruction Spike lock-step co-sim** as a final gated CI lane.
+
+| P0 closure snapshot (2026-06-15) | see below |
+| U-mode + PMP (2026-06-16) | ✅ Complete | `ENABLE_U=1`, `PMP_ENTRIES=8`, `sisPmp.sv`, 25 new asm tests, cocotb PMP lane |
 
 ### P0 closure snapshot (2026-06-15)
 

@@ -2,35 +2,47 @@
 
 ## ISA
 
-**Advertised:** `RV32IMC_Zicsr` (M-mode only)
+**Advertised:** `RV32IMAC_Zicsr` (M-mode + U-mode)
 
 | Extension | Support |
 |-----------|---------|
 | RV32I | Full |
 | M | MUL/DIV/REM |
 | C | Compressed 16-bit instructions |
-| Zicsr | CSRs, ECALL, EBREAK, MRET, WFI (legal NOP) |
+| Zicsr | CSRs, ECALL, EBREAK, MRET, WFI (TW-gated in U) |
 | Zifencei | FENCE.I treated as NOP |
+| U | User mode with PMP (8 regions, G=0) |
 
 ## Privilege
 
-Machine mode only. `mtvec` direct mode (MODE=0).
+Machine mode (M) and user mode (U). No S-mode or MMU. Traps and interrupts always
+deliver to M-mode. `mret` transitions M↔U using `mstatus.MPP`.
 
 ## CSRs
 
 | CSR | Address | Access | Notes |
 |-----|---------|--------|-------|
-| mstatus | 0x300 | RW | MIE bit 3, MPIE bit 7 |
-| misa | 0x301 | RO | C+M+I set |
+| mstatus | 0x300 | RW | MIE(3), MPIE(7), MPP(12:11), MPRV(17), TW(21) |
+| misa | 0x301 | RO | I+M+A+C+U bits |
 | mie | 0x304 | RW | MSIE(3), MTIE(7), MEIE(11) |
-| mtvec | 0x305 | RW | Direct mode only |
+| mtvec | 0x305 | RW | Direct or vectored (MODE=1) |
+| mcounteren | 0x306 | RW | CY/TM/IR gates for U-mode `cycle`/`instret` |
 | mscratch | 0x340 | RW | |
 | mepc | 0x341 | RW | Word-aligned on write |
-| mcause | 0x342 | RW | |
+| mcause | 0x342 | RW | ECALL: 8 (U), 11 (M) |
 | mtval | 0x343 | RW | |
 | mip | 0x344 | RO | MSIP/MTIP/MEIP from CLINT/PLIC |
+| pmpcfg0–7 | 0x3A0–0x3A7 | RW | Per-entry cfg byte (TOR/NA4/NAPOT, R/W/X, L) |
+| pmpaddr0–7 | 0x3B0–0x3B7 | RW | Physical address [33:2] |
+| cycle/instret | 0xC00/0xC02 | RO shadows | Gated by `mcounteren` in U |
 | mcycle/minstret | 0xB00/0xB02 | RW | Zicntr |
 | ID CSRs | 0xF11–0xF15 | RO | Zero (configurable later) |
+
+## PMP
+
+Eight physical memory regions. Lowest matching entry wins. M-mode bypasses
+permission checks on unlocked entries; locked entries apply to M and U. Fetch
+checks X; load/LR checks R; store/SC/AMO checks W (AMO requires R+W).
 
 ## Traps
 
