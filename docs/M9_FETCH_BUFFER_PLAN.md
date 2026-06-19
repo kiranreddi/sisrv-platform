@@ -138,11 +138,51 @@ For a 32-bit instruction straddling words W → W+1:
 - **Single-outstanding bus invariant** is preserved — a hit issues *no* request, so there is
   never more than one outstanding fetch.
 
-### 3.6 Optional follow-on (not this milestone)
+### 3.6 Follow-on: pipelined / prefetch fetch (NOT YET ATTEMPTED — needs supervised review)
 
-A **2-word buffer with prefetch-ahead** (fetch W+1 while decoding W) would also remove the
-rare branch-into-offset-2 straddle cost and smooth back-to-back 32-bit fetches. Land the
-1-word buffer first, measure, then decide if prefetch is worth the timing cost.
+**Status:** designed, not implemented. The 1-word buffer (§3.1–3.5) is the landed milestone.
+This is the next lever; it is a larger microarchitectural change with **Fmax implications**, so
+it should be done with STA in the loop and a human review — not as a blind autonomous step.
+
+**Key finding (measured 2026-06-17).** The corebus slaves already support *accept-while-
+delivering*: `sisRom`/`sisRam` drive `req_ready = !pending || rsp_ready`, so a new request can
+be accepted the same cycle the previous response is consumed. The bus can therefore sustain
+**~1 word/cycle**. The current IF FSM does **not** exploit this — it runs `IF_REQ` (issue) →
+`IF_WAIT` (receive), i.e. **2 cycles per fetched word**. On the dense-compressed microbench
+(`test_fetch_buffer_throughput`) the 32-instruction block measures **49 cycles** today; the
+floor with overlapped 1-word/cycle fetch is ~33 — a **~20–30% headroom on fetch-bound code**,
+and it would lower base CPI for **both** `rv32im` and `rv32imc` (so the "rv32im byte-identical"
+invariant no longer applies — re-baseline both).
+
+**Design — 2-entry buffer + continuous prefetch:**
+- Two word slots (`current`, `next`) each with `{valid, word_addr, data, err}`.
+- Track `prefetch_word = <next sequential word not yet resident>`. Whenever the I-bus is free
+  (`i_req_ready`) and `prefetch_word` isn't already resident/in-flight, **issue it** — including
+  while `if_id` is occupied (decouple bus fetching from `if_id` acceptance, unlike today's
+  `if_req_active` gate). This is what hides fetch latency behind execute.
+- Demand serve checks both slots; on a sequential advance the prefetched `next` slot is already
+  a hit → no `IF_WAIT` bubble.
+- Single-outstanding is preserved (one request in flight); throughput rises because the FSM
+  issues the next request the cycle it consumes the current response.
+
+**Hard parts / why it needs care:**
+1. **Fmax** — driving `i_req_addr`/`i_req_valid` from a combinationally-computed prefetch
+   address adds a path into the bus; Sky130 Fmax is already ~4.55 MHz. Register the prefetch
+   address (prefetch is speculative, a 1-cycle-late address is fine) to keep the path short, and
+   **re-run `make sta-sky130`** before landing.
+2. **Redirect** — a redirect must drop both slots and any in-flight/just-issued prefetch
+   response (the existing `if_discard_rsp` mechanism, extended to the prefetch request).
+3. **PMP/privilege** — a prefetched word fetched under the old privilege must not be served
+   after a privilege-changing redirect; invalidate both slots on redirect (as the 1-word buffer
+   already does) so a hit is always same-privilege.
+4. **Straddle** — the high half of a boundary-straddling 32-bit instruction is the prefetched
+   `next` slot in the common case → assemble with no extra fetch.
+5. **Wrong-path prefetch waste** — prefetching past a branch fetches a word that's discarded;
+   acceptable (the bus would otherwise be idle), but don't let it stall a demand fetch.
+
+**Gate:** `make regress` (70) + `make fetch-throughput` (expect < ~40) + `make pipeline-debug`
++ both benchmarks (re-baseline `rv32im`; expect lower CPI) + **`make sta-sky130` Fmax not
+regressed** + `make cosim-lockstep` green. Revert if any of these don't hold.
 
 ---
 
