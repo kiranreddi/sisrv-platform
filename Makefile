@@ -30,11 +30,15 @@ CPP_SRCS := tb/verilator/main.cpp
 PIPELINE_DEBUG_CPP_SRCS := tb/verilator/pipeline_debug_main.cpp
 
 # Test sources
+# Cycle-count guard tests are corebus-only (AXI stalls perturb absolute cycles), so
+# they are excluded from the auto-discovered regression and run via dedicated targets.
 PIPELINE_THROUGHPUT_TEST := sw/tests/asm/test_pipeline_throughput.S
-ASM_TESTS := $(filter-out $(PIPELINE_THROUGHPUT_TEST),$(wildcard sw/tests/asm/*.S))
+FETCH_THROUGHPUT_TEST    := sw/tests/asm/test_fetch_buffer_throughput.S
+CYCLE_GUARD_TESTS        := $(PIPELINE_THROUGHPUT_TEST) $(FETCH_THROUGHPUT_TEST)
+ASM_TESTS := $(filter-out $(CYCLE_GUARD_TESTS),$(wildcard sw/tests/asm/*.S))
 ASM_HEXES := $(patsubst sw/tests/asm/%.S,$(BUILD)/tests/%.hex,$(ASM_TESTS))
 
-.PHONY: sim lint clean wave regress regress-axil regress-axil-stall pipeline-debug pipeline-throughput sw all tests cocotb formal formal-axil synth sta sta-sky130 cosim-lockstep \
+.PHONY: sim lint clean wave regress regress-axil regress-axil-stall pipeline-debug pipeline-throughput fetch-throughput sw all tests cocotb formal formal-axil synth sta sta-sky130 cosim-lockstep \
         benchmark benchmark-coremark benchmark-dhrystone benchmark-smoke \
         riscof-check-tools riscof-smoke riscof-act riscof-rv32i riscof-rv32im
 
@@ -92,6 +96,10 @@ $(BUILD)/tests/test_pmp%.elf: sw/tests/asm/test_pmp%.S sw/tests/asm/pmp_csr.inc 
 	$(RV_GCC) -march=rv32imac_zicsr -mabi=$(RV_ABI) -nostdlib -nostartfiles -ffreestanding -static -fno-pic -fno-pie -no-pie -O2 -Wl,--build-id=none -I sw/tests/asm -T sw/bsp/link.ld -o $@ $<
 
 $(BUILD)/tests/test_mcounteren.elf: sw/tests/asm/test_mcounteren.S sw/bsp/link.ld
+	@mkdir -p $(BUILD)/tests
+	$(RV_GCC) -march=rv32imac_zicsr -mabi=$(RV_ABI) -nostdlib -nostartfiles -ffreestanding -static -fno-pic -fno-pie -no-pie -O2 -Wl,--build-id=none -T sw/bsp/link.ld -o $@ $<
+
+$(BUILD)/tests/test_fetch_buffer%.elf: sw/tests/asm/test_fetch_buffer%.S sw/bsp/link.ld
 	@mkdir -p $(BUILD)/tests
 	$(RV_GCC) -march=rv32imac_zicsr -mabi=$(RV_ABI) -nostdlib -nostartfiles -ffreestanding -static -fno-pic -fno-pie -no-pie -O2 -Wl,--build-id=none -T sw/bsp/link.ld -o $@ $<
 
@@ -175,6 +183,13 @@ pipeline-debug: $(PIPELINE_DEBUG_SIM) $(BUILD)/tests/test_pipeline_debug_step.he
 pipeline-throughput: $(SIM) $(BUILD)/tests/test_pipeline_throughput.hex
 	@touch ram.hex
 	@cp $(BUILD)/tests/test_pipeline_throughput.hex rom.hex
+	@$(SIM) && rm -f rom.hex ram.hex || (rm -f rom.hex ram.hex; exit 1)
+
+# M9 fetch-buffer throughput guard (corebus only). Trips if the buffer regresses
+# back to per-halfword re-fetch on dense compressed code.
+fetch-throughput: $(SIM) $(BUILD)/tests/test_fetch_buffer_throughput.hex
+	@touch ram.hex
+	@cp $(BUILD)/tests/test_fetch_buffer_throughput.hex rom.hex
 	@$(SIM) && rm -f rom.hex ram.hex || (rm -f rom.hex ram.hex; exit 1)
 
 BENCH_ISAS ?= rv32imc_zicsr rv32im_zicsr

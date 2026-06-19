@@ -1,6 +1,9 @@
 # Implementation Plan — M9 Fetch Buffer (front-end CPI recovery)
 
-**Status:** Ready for implementation
+**Status:** ✅ 1-word buffer LANDED (commit `4feecf3`) — 2-word prefetch (§3.6) remains future work
+**Result:** `rv32imc` CoreMark 1.264 → **1.462 CoreMark/MHz** (+15.7%, ~84% of the gap to
+`rv32im` closed); Dhrystone CPI 2.804 → **2.497**; `rv32im` byte-identical (pure front-end win).
+Throughput guard `test_fetch_buffer_throughput` (49 cyc with buffer vs 65 without) wired into CI.
 **Target branch:** new branch off current line — keep isolated from feature work
 **Motivation:** [`BENCHMARKS.md`](BENCHMARKS.md) — the C extension currently *costs* ~17–19%
 throughput because the IF stage re-fetches words and double-fetches straddling
@@ -201,14 +204,14 @@ is `riscv64-elf-`).
 
 ## 6. Acceptance criteria
 
-- [ ] `make lint` clean; `make regress` green (existing + new fetch tests).
-- [ ] `rv32im` CoreMark/Dhrystone cycle counts **unchanged** vs current `build/bench/summary.json`.
-- [ ] `rv32imc` CoreMark/MHz and DMIPS/MHz **materially improved** (target: ≥80% of the gap
-      to `rv32im` closed by the 1-word buffer; record actuals in `BENCHMARKS.md`).
-- [ ] `make cosim-lockstep` (10k) green; `make riscof-act` green.
-- [ ] `make sta-sky130` — Fmax not regressed (or regression quantified and accepted).
-- [ ] `BENCHMARKS.md` updated with before/after and the buffer description; the "Analysis"
-      section's "Fix direction" paragraph moved to "done".
+- [x] `make lint` clean; `make regress` green (70/70 directed, incl. compressed/atomic/U-mode/PMP).
+- [x] `rv32im` CoreMark/Dhrystone cycle counts **unchanged** (byte-identical — verified).
+- [x] `rv32imc` CoreMark/MHz and DMIPS/MHz **materially improved** (CoreMark +15.7%, ~84% of
+      the gap closed; recorded in `BENCHMARKS.md`).
+- [x] Throughput guard `test_fetch_buffer_throughput` added + wired into CI (`make fetch-throughput`).
+- [ ] `make cosim-lockstep` (10k) green; `make riscof-act` green — **CI only** (spike/riscof not local).
+- [ ] `make sta-sky130` — Fmax not regressed — **CI only** (long run; pending CI).
+- [x] `BENCHMARKS.md` updated with before/after and the buffer description; "Analysis" reframed to "done".
 
 ---
 

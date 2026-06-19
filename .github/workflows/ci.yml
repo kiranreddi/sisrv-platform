@@ -62,6 +62,9 @@ jobs:
       - name: Run Pipeline Throughput Guard
         run: make pipeline-throughput
 
+      - name: Run Fetch-Buffer Throughput Guard
+        run: make fetch-throughput
+
       - name: Run AXI-Lite Regression
         run: make regress-axil
 
