@@ -34,9 +34,9 @@ is three things commercial cores treat as table stakes:
 3. **Productization rigor.** Sky130 HD STA in CI: WNS **-199.946 ns**, TNS **-10929.076 ns**,
    Fmax **4.55 MHz**; internal `-O2` performance after the direct-corebus Harvard
    instruction/data split is **1.502 CoreMark/MHz** / **0.468 DMIPS/MHz** on
-   `rv32im_zicsr` and **1.462** / **0.449** on `rv32imc_zicsr` (the M9 1-word fetch
-   buffer closed ~84% of the former C-extension gap — `rv32imc` is now within ~3% —
-   see [`BENCHMARKS.md`](BENCHMARKS.md)).
+   **1.522** / **0.478** on `rv32im_zicsr` and **1.530** / **0.475** on `rv32imc_zicsr`
+   (the M9 1-word fetch buffer + pipelined prefetch eliminated the former C-extension
+   fetch cost — `rv32imc` now slightly *exceeds* `rv32im` — see [`BENCHMARKS.md`](BENCHMARKS.md)).
 
 The good news: the codebase is structured so each of these is an incremental milestone,
 not a rewrite. The plan in §6 takes us from "MVP core" to "product-grade soft IP" in a
@@ -50,7 +50,7 @@ defined sequence with hard exit gates.
 |---|---|
 | ISA | RV32I + M + **C** (`rv32imac_zicsr`), M-mode only |
 | Microarchitecture | In-order IF/ID/EX-MEM pipeline with independent WB/retire; single outstanding transaction per I/D corebus port |
-| Performance | Internal direct-corebus Verilator, `-O2`: `rv32im_zicsr` 1.502 CoreMark/MHz, 0.468 DMIPS/MHz; `rv32imc_zicsr` 1.462, 0.449 (M9 fetch buffer — within ~3% of `rv32im`) |
+| Performance | Internal direct-corebus Verilator, `-O2`: `rv32imc_zicsr` 1.530 CoreMark/MHz, 0.475 DMIPS/MHz; `rv32im_zicsr` 1.522, 0.478 (M9 fetch buffer + pipelined prefetch) |
 | Privilege | **M + U**; no S-mode; PMP enforced |
 | Traps | Illegal instr, ECALL, EBREAK, MRET; misaligned load/store/control-flow traps; instruction/load/store access faults |
 | Interrupts | **CLINT** (MSIP/MTIP/MTIME at 0x0200_0000) + **PLIC** (8 sources at 0x0C00_0000) |
@@ -78,7 +78,7 @@ For a 32-bit embedded core, the bar is set by two camps. Targets below are the r
 | **SiFive E21 / E2 series** | SiFive | RV32IMC | ~2.3–3.0 | 3-stage | Closest analog to our target point |
 | **Andes N25F / D25F** | Andes | RV32IMAC(F) | ~3.5+ | 5-stage | High-end embedded RISC-V IP |
 | **Cortex-M23 / M33** | Arm | ARMv8-M | ~2.5 / 4.0+ | 2/3-stage | TrustZone security bar |
-| **sisRvCore (today)** | — | RV32IMAC | 1.50 (`rv32im`) / 1.46 (`rv32imc`) internal, not certified | IF/ID/EX-MEM + WB, Harvard I/D corebus | current implementation |
+| **sisRvCore (today)** | — | RV32IMAC | 1.53 (`rv32imc`) / 1.52 (`rv32im`) internal, not certified | IF/ID/EX-MEM + WB, Harvard I/D corebus | current implementation |
 
 ¹ Representative published figures; exact numbers vary by config/compiler. Use as
 order-of-magnitude, not contractual.
@@ -247,13 +247,14 @@ top-to-bottom by risk-adjusted value.
 **Goal:** use the measured CPI, CoreMark, and Dhrystone baselines to drive tuning.
 
 - IF/ID/EX-MEM pipeline with independent WB/retire is implemented; benchmark bring-up
-  reports 1.502 CoreMark/MHz and 0.468 DMIPS/MHz for `rv32im_zicsr -O2`, and 1.462 /
-  0.449 for `rv32imc_zicsr -O2`.
-- **M9 1-word fetch buffer landed:** it serves the second compressed halfword (and resident
-  straddle low halves) without a redundant bus fetch, closing ~84% of the former C-extension
-  gap (CoreMark 1.264 → 1.462; Dhrystone CPI 2.80 → 2.50). `rv32im` cycle counts are
-  byte-identical (pure front-end win). A 2-word prefetch buffer would close the rest — see
-  [`BENCHMARKS.md`](BENCHMARKS.md) and [`M9_FETCH_BUFFER_PLAN.md`](M9_FETCH_BUFFER_PLAN.md).
+  reports 1.530 CoreMark/MHz and 0.475 DMIPS/MHz for `rv32imc_zicsr -O2`, and 1.522 /
+  0.478 for `rv32im_zicsr -O2`.
+- **M9 front end landed (1-word fetch buffer + pipelined prefetch):** the buffer serves the
+  second compressed halfword without a redundant fetch; the prefetch streams the next word
+  ahead on idle I-bus cycles, hiding fetch latency behind execute for both ISAs. CoreMark
+  1.264 → 1.530 for `rv32imc` (now edging out `rv32im`); base CPI fell for both configs. The
+  former ~19% C-extension fetch penalty is eliminated. Fmax (Sky130) to be confirmed in CI STA
+  — see [`BENCHMARKS.md`](BENCHMARKS.md) and [`M9_FETCH_BUFFER_PLAN.md`](M9_FETCH_BUFFER_PLAN.md).
 - A bounded dual-slot/MEM-hold experiment passed directed regression but measured worse
   on the current one-cycle RAM path, so it was not retained. M9 should only land with
   a memory/WB structure that improves benchmark CPI.

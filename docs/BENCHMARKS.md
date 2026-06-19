@@ -16,59 +16,61 @@ official benchmark submissions.
 
 | Benchmark | ISA / flags | Iterations | Cycles | Instret | Score | Cycles/iter | Inst/iter | CPI | Validation |
 |---|---|---:|---:|---:|---:|---:|---:|---:|---|
-| CoreMark performance | `rv32imc_zicsr -O2` | 15 | 10,258,078 | n/a | **1.462 CoreMark/MHz** | 683,871.867 | n/a | n/a | PASS |
-| CoreMark validation | `rv32imc_zicsr -O2` | 15 | 10,264,469 | n/a | 1.461 CoreMark/MHz | 684,297.933 | n/a | n/a | PASS |
-| Dhrystone 2.1 | `rv32imc_zicsr -O2` | 1,648 | 2,086,448 | 835,551 | **0.449 DMIPS/MHz** | 1,266.048 | 507.009 | 2.497 | PASS |
-| CoreMark performance | `rv32im_zicsr -O2` | 16 | 10,655,909 | n/a | **1.502 CoreMark/MHz** | 665,994.313 | n/a | n/a | PASS |
-| CoreMark validation | `rv32im_zicsr -O2` | 16 | 10,675,445 | n/a | 1.499 CoreMark/MHz | 667,215.313 | n/a | n/a | PASS |
-| Dhrystone 2.1 | `rv32im_zicsr -O2` | 1,675 | 2,035,202 | 849,240 | **0.468 DMIPS/MHz** | 1,215.045 | 507.008 | 2.396 | PASS |
+| CoreMark performance | `rv32imc_zicsr -O2` | 16 | 10,457,567 | n/a | **1.530 CoreMark/MHz** | 653,597.938 | n/a | n/a | PASS |
+| CoreMark validation | `rv32imc_zicsr -O2` | 16 | 10,457,938 | n/a | 1.530 CoreMark/MHz | 653,621.125 | n/a | n/a | PASS |
+| Dhrystone 2.1 | `rv32imc_zicsr -O2` | 1,741 | 2,084,055 | 882,702 | **0.475 DMIPS/MHz** | 1,197.044 | 507.009 | 2.360 | PASS |
+| CoreMark performance | `rv32im_zicsr -O2` | 16 | 10,514,019 | n/a | **1.522 CoreMark/MHz** | 657,126.188 | n/a | n/a | PASS |
+| CoreMark validation | `rv32im_zicsr -O2` | 16 | 10,531,431 | n/a | 1.519 CoreMark/MHz | 658,214.438 | n/a | n/a | PASS |
+| Dhrystone 2.1 | `rv32im_zicsr -O2` | 1,712 | 2,035,645 | 867,999 | **0.478 DMIPS/MHz** | 1,189.044 | 507.008 | 2.345 | PASS |
 
 CoreMark/MHz is computed as `iterations * 1,000,000 / cycles`.
 Dhrystone DMIPS/MHz is computed as `iterations * 1,000,000 / cycles / 1757`.
 
-## Analysis: M9 fetch buffer — most of the C-extension cost recovered
+## Analysis: M9 front end — 1-word buffer + pipelined prefetch
 
-A **1-word instruction fetch buffer** (`rtl/core/sisRvCore.sv`, `fbuf_*`) was added to the IF
-stage. It retains the last fetched word so the second compressed halfword of a word — and the
-resident low half of a sequential straddling 32-bit instruction — are served with no bus
-round-trip. The effect on `rv32imc`:
+The IF stage gained two cooperating mechanisms (`rtl/core/sisRvCore.sv`):
+1. a **1-word fetch buffer** (`fbuf_*`) — serves the second compressed halfword of a word with
+   no bus round-trip;
+2. a **sequential prefetch slot** (`pf_*`) — fetches the next word ahead on otherwise-idle
+   I-bus cycles (the corebus slaves accept a new request the same cycle the previous response
+   is consumed), so back-to-back word fetches no longer each pay the `IF_REQ → IF_WAIT` round
+   trip. On a sequential advance the prefetched word is promoted into `fbuf` with no demand fetch.
 
-| Metric | `rv32imc` before | `rv32imc` after | `rv32im` (target) | Gap closed |
+Combined effect (vs. the pre-M9 baseline):
+
+| Metric | baseline | +1-word buf | +prefetch (now) | `rv32im` now |
 |---|---:|---:|---:|---:|
-| CoreMark/MHz | 1.264 | **1.462** | 1.502 | **~84%** |
-| Dhrystone DMIPS/MHz | 0.400 | **0.449** | 0.468 | **~72%** |
-| Dhrystone CPI | 2.804 | **2.497** | 2.396 | **~75%** |
-| Dhrystone cycles/iter | 1,422 | **1,266** | 1,215 | — |
+| `rv32imc` CoreMark/MHz | 1.264 | 1.462 | **1.530** | 1.522 |
+| `rv32imc` Dhrystone DMIPS/MHz | 0.400 | 0.449 | **0.475** | 0.478 |
+| `rv32imc` Dhrystone CPI | 2.804 | 2.497 | **2.360** | 2.345 |
 
-**`rv32im` is byte-identical before and after** (1.5015 CoreMark/MHz, 0.468 DMIPS/MHz, 1,215
-cycles/iter, same cycle counts) — the buffer is filled but never hit for all-aligned 32-bit
-code, so it is a pure front-end win with zero collateral change.
+**The prefetch lowers base CPI for *both* ISAs** (it hides fetch latency behind execute), so
+unlike the 1-word buffer it is not `rv32im`-neutral — `rv32im` CoreMark improved 1.502 → 1.522,
+CPI 2.396 → 2.345. Net result: **`rv32imc` (1.530) now slightly *exceeds* `rv32im` (1.522) on
+CoreMark** — the C extension went from a ~19% throughput *cost* (pre-M9) to a net win, because
+the density advantage is no longer paid for at the fetch bus. On the dense-compressed
+microbench (`test_fetch_buffer_throughput`) a 32-instruction block dropped **49 → 33 cycles**
+(~1.03 cycles/instruction; close to the 1-word/cycle fetch floor).
 
-### What the buffer removes
+### Correctness
 
-The IF FSM (`IF_REQ → IF_WAIT → IF_SECOND_REQ → IF_SECOND_WAIT`) previously issued one
-**word-aligned** bus fetch per instruction with no state retained. Compressed code paid two
-costs `rv32im` never pays:
+The prefetch is speculative and shares one single-outstanding I-bus with demand fetches
+(demand has priority). Validated by the full **71-test directed regression on three bus paths**
+(corebus, AXI4-Lite, AXI4-Lite with stalls), `pipeline-debug`, and the throughput guard.
+Review surfaced and fixed a **PMP/prefetch hazard**: a prefetched word must be fetch-PMP-checked
+against its *own* address, not the demand address — otherwise a sequential fall-through into a
+no-execute region could run a denied instruction in U-mode. Fixed (`fetch_pmp_addr` selects the
+prefetched address when a prefetch response lands) and guarded by `test_pmp_prefetch_x`, which
+fails without the fix. The buffer and prefetch slot are both dropped on every redirect (and any
+in-flight prefetch is discarded), so a hit is always same-privilege/same-memory.
 
-1. **Word re-fetch for the second halfword** — two 16-bit instructions in a word used to cost
-   two bus fetches (the second re-requesting a word already fetched). The buffer now serves
-   the upper halfword from `fbuf_data` with no bus access. *This is the dominant win.*
-2. **Straddle double-fetch** — a 32-bit instruction crossing a word boundary fetched two
-   words; when the low word is already resident (the common sequential case) the buffer
-   supplies the low half and only the next word is fetched.
+### Remaining / not yet validated
 
-The buffer is invalidated on every redirect (branch/jump/trap/MRET), so a hit is always
-same-privilege and same-instruction-memory as the access that hits it. Correctness verified by
-the full 70-test directed regression (incl. compressed, atomics, U-mode, PMP, trap-flush
-paths); the design also exposed and fixed a latent back-to-back-issue ordering hazard
-(`if_produces` guard on the `if_id_valid` clear).
-
-### Remaining gap / follow-on
-
-The residual ~16–28% gap is the rare branch-into-mid-word straddle (low word not yet resident)
-and back-to-back miss latency. A **2-word buffer with prefetch-ahead** would close most of it;
-see [`M9_FETCH_BUFFER_PLAN.md`](M9_FETCH_BUFFER_PLAN.md) §3.6. With the 1-word buffer landed,
-`rv32imc` is now within ~3% of `rv32im` on CoreMark while keeping the code-density advantage.
+**Fmax must be confirmed in CI STA** (`make sta-sky130`) — the prefetch adds a 2:1 mux on the
+I-bus address and the prefetch address is a registered `fetch_pc + 1`, so the impact should be
+small, but Sky130 timing is marginal (~4.55 MHz) and this has not been checked locally (no STA
+tools in the dev environment). The 10k-seed lock-step co-sim (CI) is the functional backstop for
+the speculative-fetch behavior.
 
 ## Reproducibility
 
@@ -94,9 +96,9 @@ CoreMark `rv32imc_zicsr` performance run:
 ```text
 2K performance run parameters for coremark.
 CoreMark Size    : 666
-Total ticks      : 10258078
+Total ticks      : 10457567
 Total time (secs): 10
-Iterations       : 15
+Iterations       : 16
 Compiler version : GCC 16.1.0
 Compiler flags   : rv32imc_zicsr -mabi=ilp32 -O2
 Memory location  : sisrv static RAM

@@ -214,11 +214,12 @@ Key principles:
 - Pipeline-directed forwarding, load-use, branch/jump flush, trap flush,
   interrupt flush, throughput, and debug halt/single-step tests pass.
 - CoreMark/Dhrystone benchmarking is now brought up as a post-M6 product metric:
-  internal direct-corebus `-O2` measures 1.502 CoreMark/MHz and 0.468 DMIPS/MHz on
-  `rv32im_zicsr`, and 1.462 / 0.449 on `rv32imc_zicsr`, after the direct-corebus
-  Harvard I/D split and the M9 1-word fetch buffer (which closed ~84% of the former
-  C-extension fetch gap, leaving `rv32imc` within ~3% of `rv32im` while `rv32im`
-  cycle counts are unchanged); certification and deeper CPI tuning remain separate work.
+  internal direct-corebus `-O2` measures 1.530 CoreMark/MHz and 0.475 DMIPS/MHz on
+  `rv32imc_zicsr`, and 1.522 / 0.478 on `rv32im_zicsr`, after the direct-corebus
+  Harvard I/D split and the M9 front end (1-word fetch buffer + pipelined prefetch).
+  The prefetch hides fetch latency behind execute for both ISAs, eliminating the former
+  C-extension fetch penalty so `rv32imc` now edges out `rv32im`; certification, Fmax
+  sign-off, and deeper CPI tuning remain separate work.
 
 ---
 

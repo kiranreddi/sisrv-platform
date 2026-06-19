@@ -1,9 +1,11 @@
 # Implementation Plan — M9 Fetch Buffer (front-end CPI recovery)
 
-**Status:** ✅ 1-word buffer LANDED (commit `4feecf3`) — 2-word prefetch (§3.6) remains future work
-**Result:** `rv32imc` CoreMark 1.264 → **1.462 CoreMark/MHz** (+15.7%, ~84% of the gap to
-`rv32im` closed); Dhrystone CPI 2.804 → **2.497**; `rv32im` byte-identical (pure front-end win).
-Throughput guard `test_fetch_buffer_throughput` (49 cyc with buffer vs 65 without) wired into CI.
+**Status:** ✅ 1-word buffer (commit `4feecf3`) + ✅ pipelined sequential prefetch (§3.6) BOTH LANDED.
+**Result:** `rv32imc` CoreMark 1.264 → **1.530 CoreMark/MHz** (+21%); Dhrystone CPI 2.804 → **2.360**.
+The prefetch hides fetch latency behind execute for *both* ISAs (`rv32im` 1.502 → 1.522, CPI
+2.396 → 2.345), so `rv32imc` now slightly exceeds `rv32im` — the C-extension fetch penalty is
+gone. Microbench: 32 compressed insns 49 → **33 cycles**. Validated on corebus + AXI4-Lite +
+AXI-stall (71 tests each), plus `test_pmp_prefetch_x` (prefetch PMP X-check). **Fmax pending CI STA.**
 **Target branch:** new branch off current line — keep isolated from feature work
 **Motivation:** [`BENCHMARKS.md`](BENCHMARKS.md) — the C extension currently *costs* ~17–19%
 throughput because the IF stage re-fetches words and double-fetches straddling
