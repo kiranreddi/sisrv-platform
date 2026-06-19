@@ -84,6 +84,16 @@ module sisRvCore #(
   logic        fetch_err_hold;
   logic        if_discard_rsp;
 
+  // M9 single-word instruction fetch buffer: retains the last fetched word so the
+  // second compressed halfword of a word (and the resident low half of a sequential
+  // straddling 32-bit instruction) are served without a redundant bus round-trip.
+  // Invalidated on any redirect, so a buffered word is always same-privilege and
+  // same-instruction-memory as the access that hits it.
+  logic        fbuf_valid;
+  logic [29:0] fbuf_word_addr;   // PA[31:2] of the buffered word
+  logic [31:0] fbuf_data;        // the fetched 32-bit word
+  logic        fbuf_err;         // fetch fault (bus err or PMP deny) latched with the word
+
   logic        if_id_valid;
   logic [31:0] if_id_pc;
   logic [31:0] if_id_raw;
@@ -842,11 +852,18 @@ module sisRvCore #(
   logic if_rsp_fire;
 
   assign data_req_active = ex_mem_requesting;
-  assign if_req_active   = !halted && !dbg_halt_req && (!dbg_single_step || step_active) &&
-                           !wb_single_step_stop &&
-                           !ex_redirect &&
-                           (!if_id_valid || id_to_ex_fire) &&
-                           ((if_state == IF_REQ) || (if_state == IF_SECOND_REQ));
+
+  // Fetch-buffer hit: the word the PC needs is already resident.
+  wire        fbuf_hit = fbuf_valid && (fbuf_word_addr == fetch_pc[31:2]);
+  wire        if_can_accept_fetch = !halted && !dbg_halt_req && (!dbg_single_step || step_active) &&
+                                    !wb_single_step_stop && !ex_redirect &&
+                                    (!if_id_valid || id_to_ex_fire);
+  // Serve the instruction from the buffer this cycle (no bus request).
+  wire        if_serve_buf = if_can_accept_fetch && (if_state == IF_REQ) && fbuf_hit;
+
+  // Only drive a bus fetch on a miss (or for the straddle second word).
+  assign if_req_active   = if_can_accept_fetch &&
+                           (((if_state == IF_REQ) && !fbuf_hit) || (if_state == IF_SECOND_REQ));
 
   always_comb begin
     i_req_valid = if_req_active;
@@ -881,6 +898,23 @@ module sisRvCore #(
   assign if_req_fire   = if_req_active && i_req_ready;
   assign data_rsp_fire = d_rsp_valid && d_rsp_ready;
   assign if_rsp_fire   = i_rsp_valid && i_rsp_ready;
+
+  // A full instruction word is available to decode this cycle, from either a bus
+  // response (IF_WAIT) or a fetch-buffer hit (IF_REQ). Mutually exclusive states.
+  wire        if_word_ready = (if_rsp_fire && !if_discard_rsp && (if_state == IF_WAIT)) || if_serve_buf;
+  wire [31:0] if_word_data  = if_serve_buf ? fbuf_data : i_rsp_rdata;
+  wire        if_word_err   = if_serve_buf ? fbuf_err  : (i_rsp_err || !pmp_fetch_allow);
+  wire [31:0] if_word_pc    = if_serve_buf ? fetch_pc  : fetch_req_pc;
+  // A current word actually emits an instruction into if_id (vs. the straddle first
+  // half, which only kicks off the second fetch and emits nothing this cycle).
+  wire        if_word_emits = if_word_ready &&
+                              (if_word_err || (if_word_pc[1] == 1'b0) ||
+                               (ENABLE_C && (if_word_data[17:16] != 2'b11)));
+  // The IF stage places a new instruction into if_id this cycle (bus, buffer, or
+  // straddle second half). With the fetch buffer the IF stage can issue back-to-back
+  // with id_to_ex_fire, so this guards the if_id_valid clear from clobbering it.
+  wire        if_produces   = if_word_emits ||
+                              (if_rsp_fire && !if_discard_rsp && (if_state == IF_SECOND_WAIT));
 
   // ---------------------------------------------------------------
   // Register file write logic
@@ -986,6 +1020,10 @@ module sisRvCore #(
       fetch_upper_hold <= 16'h0;
       fetch_err_hold   <= 1'b0;
       if_discard_rsp   <= 1'b0;
+      fbuf_valid       <= 1'b0;
+      fbuf_word_addr   <= 30'h0;
+      fbuf_data        <= 32'h0;
+      fbuf_err         <= 1'b0;
 
       if_id_valid         <= 1'b0;
       if_id_pc            <= 32'h0;
@@ -1110,67 +1148,85 @@ module sisRvCore #(
         end
       end
 
-      if (if_rsp_fire) begin
-        if (if_discard_rsp) begin
-          if_discard_rsp <= 1'b0;
-          if_state       <= IF_REQ;
-        end else if (if_state == IF_WAIT) begin
-          fetch_err_hold <= i_rsp_err || !pmp_fetch_allow;
-          if (i_rsp_err || !pmp_fetch_allow) begin
-            if_id_valid         <= 1'b1;
-            if_id_pc            <= fetch_req_pc;
-            if_id_raw           <= 32'h0000_0013;
-            if_id_len           <= 2'd0;
-            if_id_is_compressed <= 1'b0;
-            if_id_fetch_err     <= 1'b1;
-            fetch_pc            <= fetch_req_pc + 32'd4;
-            if_state            <= IF_REQ;
-          end else if (fetch_req_pc[1] == 1'b0) begin
-            if (ENABLE_C && (i_rsp_rdata[1:0] != 2'b11)) begin
-              if_id_valid         <= 1'b1;
-              if_id_pc            <= fetch_req_pc;
-              if_id_raw           <= {16'h0, i_rsp_rdata[15:0]};
-              if_id_len           <= 2'd2;
-              if_id_is_compressed <= 1'b1;
-              if_id_fetch_err     <= i_rsp_err || !pmp_fetch_allow;
-              fetch_pc            <= fetch_req_pc + 32'd2;
-            end else begin
-              if_id_valid         <= 1'b1;
-              if_id_pc            <= fetch_req_pc;
-              if_id_raw           <= i_rsp_rdata;
-              if_id_len           <= 2'd0;
-              if_id_is_compressed <= 1'b0;
-              if_id_fetch_err     <= i_rsp_err || !pmp_fetch_allow;
-              fetch_pc            <= fetch_req_pc + 32'd4;
-            end
-            if_state <= IF_REQ;
-          end else begin
-            if (ENABLE_C && (i_rsp_rdata[17:16] != 2'b11)) begin
-              if_id_valid         <= 1'b1;
-              if_id_pc            <= fetch_req_pc;
-              if_id_raw           <= {16'h0, i_rsp_rdata[31:16]};
-              if_id_len           <= 2'd2;
-              if_id_is_compressed <= 1'b1;
-              if_id_fetch_err     <= i_rsp_err || !pmp_fetch_allow;
-              fetch_pc            <= fetch_req_pc + 32'd2;
-              if_state            <= IF_REQ;
-            end else begin
-              fetch_upper_hold <= i_rsp_rdata[31:16];
-              if_state         <= IF_SECOND_REQ;
-            end
-          end
-        end else if (if_state == IF_SECOND_WAIT) begin
+      // Discard an in-flight bus response that a redirect invalidated.
+      if (if_rsp_fire && if_discard_rsp) begin
+        if_discard_rsp <= 1'b0;
+        if_state       <= IF_REQ;
+      end
+
+      // Fill the fetch buffer from every consumed (non-discarded) bus response.
+      if (if_rsp_fire && !if_discard_rsp) begin
+        fbuf_valid     <= 1'b1;
+        fbuf_data      <= i_rsp_rdata;
+        fbuf_err       <= i_rsp_err || !pmp_fetch_allow;
+        fbuf_word_addr <= (if_state == IF_SECOND_WAIT) ? (fetch_req_pc[31:2] + 30'd1)
+                                                       : fetch_req_pc[31:2];
+      end
+
+      // Assemble an instruction from the current word — bus response (IF_WAIT) or
+      // a fetch-buffer hit (IF_REQ). if_word_* select the source.
+      if (if_word_ready) begin
+        fetch_err_hold <= if_word_err;
+        if (if_word_err) begin
           if_id_valid         <= 1'b1;
-          if_id_pc            <= fetch_req_pc;
-          if_id_raw           <= {i_rsp_rdata[15:0], fetch_upper_hold};
+          if_id_pc            <= if_word_pc;
+          if_id_raw           <= 32'h0000_0013;
           if_id_len           <= 2'd0;
           if_id_is_compressed <= 1'b0;
-          if_id_fetch_err     <= fetch_err_hold || i_rsp_err || !pmp_fetch_allow;
-          fetch_pc            <= fetch_req_pc + 32'd4;
-          fetch_upper_hold    <= 16'h0;
-          fetch_err_hold      <= 1'b0;
+          if_id_fetch_err     <= 1'b1;
+          fetch_pc            <= if_word_pc + 32'd4;
           if_state            <= IF_REQ;
+        end else if (if_word_pc[1] == 1'b0) begin
+          if (ENABLE_C && (if_word_data[1:0] != 2'b11)) begin
+            if_id_valid         <= 1'b1;
+            if_id_pc            <= if_word_pc;
+            if_id_raw           <= {16'h0, if_word_data[15:0]};
+            if_id_len           <= 2'd2;
+            if_id_is_compressed <= 1'b1;
+            if_id_fetch_err     <= 1'b0;
+            fetch_pc            <= if_word_pc + 32'd2;
+          end else begin
+            if_id_valid         <= 1'b1;
+            if_id_pc            <= if_word_pc;
+            if_id_raw           <= if_word_data;
+            if_id_len           <= 2'd0;
+            if_id_is_compressed <= 1'b0;
+            if_id_fetch_err     <= 1'b0;
+            fetch_pc            <= if_word_pc + 32'd4;
+          end
+          if_state <= IF_REQ;
+        end else begin
+          if (ENABLE_C && (if_word_data[17:16] != 2'b11)) begin
+            if_id_valid         <= 1'b1;
+            if_id_pc            <= if_word_pc;
+            if_id_raw           <= {16'h0, if_word_data[31:16]};
+            if_id_len           <= 2'd2;
+            if_id_is_compressed <= 1'b1;
+            if_id_fetch_err     <= 1'b0;
+            fetch_pc            <= if_word_pc + 32'd2;
+            if_state            <= IF_REQ;
+          end else begin
+            // Straddling 32-bit instruction: hold the resident low half and fetch
+            // the next word. fetch_req_pc anchors the IF_SECOND_REQ address.
+            fetch_upper_hold <= if_word_data[31:16];
+            fetch_req_pc     <= if_word_pc;
+            if_state         <= IF_SECOND_REQ;
+          end
         end
+      end
+
+      // Second half of a straddling 32-bit instruction arrives from the bus.
+      if (if_rsp_fire && !if_discard_rsp && (if_state == IF_SECOND_WAIT)) begin
+        if_id_valid         <= 1'b1;
+        if_id_pc            <= fetch_req_pc;
+        if_id_raw           <= {i_rsp_rdata[15:0], fetch_upper_hold};
+        if_id_len           <= 2'd0;
+        if_id_is_compressed <= 1'b0;
+        if_id_fetch_err     <= fetch_err_hold || i_rsp_err || !pmp_fetch_allow;
+        fetch_pc            <= fetch_req_pc + 32'd4;
+        fetch_upper_hold    <= 16'h0;
+        fetch_err_hold      <= 1'b0;
+        if_state            <= IF_REQ;
       end
 
 	      if (ex_valid) begin
@@ -1291,6 +1347,7 @@ module sisRvCore #(
 	        ex_state         <= EX_EXEC;
 	        fetch_upper_hold <= 16'h0;
         fetch_err_hold   <= 1'b0;
+        fbuf_valid       <= 1'b0;  // privilege/target may change — drop the buffered word
         if (((if_state == IF_WAIT) || (if_state == IF_SECOND_WAIT)) && !if_rsp_fire) begin
           if_discard_rsp <= 1'b1;
         end else begin
@@ -1307,6 +1364,7 @@ module sisRvCore #(
         if_id_valid      <= 1'b0;
         fetch_upper_hold <= 16'h0;
         fetch_err_hold   <= 1'b0;
+        fbuf_valid       <= 1'b0;
         if (((if_state == IF_WAIT) || (if_state == IF_SECOND_WAIT)) && !if_rsp_fire) begin
           if_discard_rsp <= 1'b1;
         end else begin
@@ -1360,7 +1418,7 @@ module sisRvCore #(
         ex_mem_rdata_reg      <= 32'h0;
         ex_mem_err            <= 1'b0;
         ex_mem_misaligned     <= 1'b0;
-        if_id_valid           <= 1'b0;
+        if (!if_produces) if_id_valid <= 1'b0;  // don't clobber a same-cycle IF issue
       end
 
     end
