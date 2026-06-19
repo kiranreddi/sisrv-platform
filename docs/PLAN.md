@@ -215,10 +215,10 @@ Key principles:
   interrupt flush, throughput, and debug halt/single-step tests pass.
 - CoreMark/Dhrystone benchmarking is now brought up as a post-M6 product metric:
   internal direct-corebus `-O2` measures 1.502 CoreMark/MHz and 0.468 DMIPS/MHz on
-  `rv32im_zicsr`, and 1.264 / 0.400 on `rv32imc_zicsr`, after the direct-corebus
-  Harvard I/D split. The C extension costs ~17% throughput on the stateless
-  single-word fetch front end (M9 fetch-buffer target); certification and deeper
-  CPI tuning remain separate work.
+  `rv32im_zicsr`, and 1.462 / 0.449 on `rv32imc_zicsr`, after the direct-corebus
+  Harvard I/D split and the M9 1-word fetch buffer (which closed ~84% of the former
+  C-extension fetch gap, leaving `rv32imc` within ~3% of `rv32im` while `rv32im`
+  cycle counts are unchanged); certification and deeper CPI tuning remain separate work.
 
 ---
 
