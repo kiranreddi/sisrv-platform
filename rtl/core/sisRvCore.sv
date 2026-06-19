@@ -94,6 +94,19 @@ module sisRvCore #(
   logic [31:0] fbuf_data;        // the fetched 32-bit word
   logic        fbuf_err;         // fetch fault (bus err or PMP deny) latched with the word
 
+  // M9 sequential prefetch slot: holds the next sequential word (fbuf word + 1),
+  // fetched ahead on otherwise-idle I-bus cycles so back-to-back word fetches do not
+  // each pay the IF_REQ->IF_WAIT round trip. On a sequential advance the prefetched
+  // word is promoted into fbuf with no demand fetch. Demand fetch has bus priority;
+  // single-outstanding is preserved (at most one of {demand, prefetch} in flight).
+  logic        pf_valid;         // prefetch slot holds a valid word
+  logic [29:0] pf_addr;          // PA[31:2] of the prefetched word
+  logic [31:0] pf_data;
+  logic        pf_err;
+  logic        pf_inflight;      // a prefetch request is outstanding on the I-bus
+  logic [29:0] pf_inflight_addr; // word address of the in-flight prefetch
+  logic        pf_discard;       // drop the in-flight prefetch response (redirect)
+
   logic        if_id_valid;
   logic [31:0] if_id_pc;
   logic [31:0] if_id_raw;
@@ -498,8 +511,13 @@ module sisRvCore #(
     end
   end
 
+  // PMP-check the word whose response is being consumed this cycle: the straddle
+  // second word (SECOND_WAIT), the demand word (WAIT), or — when a prefetch response
+  // lands — the prefetched word. Single-outstanding makes these mutually exclusive.
   assign fetch_pmp_addr = (if_state == IF_SECOND_WAIT) ? ({fetch_req_pc[31:2], 2'b00} + 32'd4) :
-                                                        {fetch_req_pc[31:2], 2'b00};
+                          (if_state == IF_WAIT)        ? {fetch_req_pc[31:2], 2'b00} :
+                          pf_inflight                  ? {pf_inflight_addr, 2'b00} :
+                                                         {fetch_req_pc[31:2], 2'b00};
 
   logic [31:0] pmp_d_addr;
 
@@ -848,27 +866,48 @@ module sisRvCore #(
   logic if_req_active;
   logic data_req_fire;
   logic if_req_fire;
+  logic pf_req_fire;
   logic data_rsp_fire;
   logic if_rsp_fire;
 
   assign data_req_active = ex_mem_requesting;
 
-  // Fetch-buffer hit: the word the PC needs is already resident.
-  wire        fbuf_hit = fbuf_valid && (fbuf_word_addr == fetch_pc[31:2]);
+  // Fetch-buffer / prefetch hits: the word the PC needs is already resident.
+  wire        fbuf_hit  = fbuf_valid && (fbuf_word_addr == fetch_pc[31:2]);
+  wire        pfbuf_hit = pf_valid   && (pf_addr        == fetch_pc[31:2]);
+  wire        buf_hit   = fbuf_hit || pfbuf_hit;
   wire        if_can_accept_fetch = !halted && !dbg_halt_req && (!dbg_single_step || step_active) &&
                                     !wb_single_step_stop && !ex_redirect &&
                                     (!if_id_valid || id_to_ex_fire);
-  // Serve the instruction from the buffer this cycle (no bus request).
-  wire        if_serve_buf = if_can_accept_fetch && (if_state == IF_REQ) && fbuf_hit;
+  // Serve the instruction from a resident word this cycle (no demand bus request).
+  wire        if_serve_buf = if_can_accept_fetch && (if_state == IF_REQ) && buf_hit;
 
-  // Only drive a bus fetch on a miss (or for the straddle second word).
+  // Demand fetch only on a full miss (or for the straddle second word).
   assign if_req_active   = if_can_accept_fetch &&
-                           (((if_state == IF_REQ) && !fbuf_hit) || (if_state == IF_SECOND_REQ));
+                           (((if_state == IF_REQ) && !buf_hit) || (if_state == IF_SECOND_REQ));
+
+  // Sequential prefetch: target the word after the one the PC is in. Issue it on
+  // I-bus cycles the demand path isn't using, when it isn't already resident/in-flight.
+  wire [29:0] pf_target  = fetch_pc[31:2] + 30'd1;
+  wire        pf_want     = if_can_accept_fetch && !pf_inflight &&
+                            !(pf_valid && (pf_addr == pf_target)) &&
+                            !(fbuf_valid && (fbuf_word_addr == pf_target));
+  // Demand has bus priority; prefetch only in the normal fetch states (never while a
+  // straddle second-word fetch is being resolved, which keeps response routing simple).
+  wire        pf_issue    = pf_want && !if_req_active &&
+                            ((if_state == IF_REQ) || (if_state == IF_WAIT));
+  // A prefetch response is the in-flight one whenever the demand FSM isn't waiting.
+  wire        pf_rsp_fire = pf_inflight && i_rsp_valid &&
+                            (if_state != IF_WAIT) && (if_state != IF_SECOND_WAIT);
 
   always_comb begin
-    i_req_valid = if_req_active;
-    i_req_addr  = (if_state == IF_SECOND_REQ) ? ({fetch_req_pc[31:2], 2'b00} + 32'd4) :
-                                                {fetch_pc[31:2], 2'b00};
+    // Demand fetch (priority) or, on idle bus cycles, the sequential prefetch.
+    i_req_valid = if_req_active || pf_issue;
+    if (if_req_active)
+      i_req_addr = (if_state == IF_SECOND_REQ) ? ({fetch_req_pc[31:2], 2'b00} + 32'd4) :
+                                                 {fetch_pc[31:2], 2'b00};
+    else
+      i_req_addr = {pf_target, 2'b00};
 
     d_req_valid = data_req_active;
     d_req_addr  = ex_mem_req_addr;
@@ -892,19 +931,24 @@ module sisRvCore #(
     end
   end
 
-  assign i_rsp_ready   = (if_state == IF_WAIT) || (if_state == IF_SECOND_WAIT);
+  assign i_rsp_ready   = (if_state == IF_WAIT) || (if_state == IF_SECOND_WAIT) || pf_inflight;
   assign d_rsp_ready   = ex_valid && ((ex_state == EX_MEM_WAIT) || (ex_state == EX_AMO_STORE_WAIT));
   assign data_req_fire = data_req_active && d_req_ready;
   assign if_req_fire   = if_req_active && i_req_ready;
+  assign pf_req_fire   = pf_issue && i_req_ready;   // prefetch request accepted
   assign data_rsp_fire = d_rsp_valid && d_rsp_ready;
-  assign if_rsp_fire   = i_rsp_valid && i_rsp_ready;
+  assign if_rsp_fire   = i_rsp_valid && (if_state == IF_WAIT || if_state == IF_SECOND_WAIT);
 
   // A full instruction word is available to decode this cycle, from either a bus
-  // response (IF_WAIT) or a fetch-buffer hit (IF_REQ). Mutually exclusive states.
+  // response (IF_WAIT) or a resident-word hit (IF_REQ, fbuf or prefetch). Exclusive.
   wire        if_word_ready = (if_rsp_fire && !if_discard_rsp && (if_state == IF_WAIT)) || if_serve_buf;
-  wire [31:0] if_word_data  = if_serve_buf ? fbuf_data : i_rsp_rdata;
-  wire        if_word_err   = if_serve_buf ? fbuf_err  : (i_rsp_err || !pmp_fetch_allow);
-  wire [31:0] if_word_pc    = if_serve_buf ? fetch_pc  : fetch_req_pc;
+  wire [31:0] if_serve_data = fbuf_hit ? fbuf_data : pf_data;   // prefer fbuf on a tie
+  wire        if_serve_err  = fbuf_hit ? fbuf_err  : pf_err;
+  wire [31:0] if_word_data  = if_serve_buf ? if_serve_data : i_rsp_rdata;
+  wire        if_word_err   = if_serve_buf ? if_serve_err  : (i_rsp_err || !pmp_fetch_allow);
+  wire [31:0] if_word_pc    = if_serve_buf ? fetch_pc      : fetch_req_pc;
+  // Serving from the prefetch slot (not fbuf) promotes that word into fbuf this cycle.
+  wire        if_serve_pf   = if_serve_buf && !fbuf_hit && pfbuf_hit;
   // A current word actually emits an instruction into if_id (vs. the straddle first
   // half, which only kicks off the second fetch and emits nothing this cycle).
   wire        if_word_emits = if_word_ready &&
@@ -1024,6 +1068,13 @@ module sisRvCore #(
       fbuf_word_addr   <= 30'h0;
       fbuf_data        <= 32'h0;
       fbuf_err         <= 1'b0;
+      pf_valid         <= 1'b0;
+      pf_addr          <= 30'h0;
+      pf_data          <= 32'h0;
+      pf_err           <= 1'b0;
+      pf_inflight      <= 1'b0;
+      pf_inflight_addr <= 30'h0;
+      pf_discard       <= 1'b0;
 
       if_id_valid         <= 1'b0;
       if_id_pc            <= 32'h0;
@@ -1146,6 +1197,34 @@ module sisRvCore #(
         end else begin
           if_state     <= IF_SECOND_WAIT;
         end
+      end
+
+      // Prefetch request accepted on an idle bus cycle.
+      if (pf_req_fire) begin
+        pf_inflight      <= 1'b1;
+        pf_inflight_addr <= pf_target;
+      end
+
+      // Prefetch response: fill the prefetch slot (or drop it if a redirect intervened).
+      if (pf_rsp_fire) begin
+        pf_inflight <= 1'b0;
+        if (pf_discard) begin
+          pf_discard <= 1'b0;
+        end else begin
+          pf_valid <= 1'b1;
+          pf_addr  <= pf_inflight_addr;
+          pf_data  <= i_rsp_rdata;
+          pf_err   <= i_rsp_err || !pmp_fetch_allow;
+        end
+      end
+
+      // Promote the prefetched word into fbuf when it is served (sequential advance).
+      if (if_serve_pf) begin
+        fbuf_valid     <= 1'b1;
+        fbuf_word_addr <= pf_addr;
+        fbuf_data      <= pf_data;
+        fbuf_err       <= pf_err;
+        pf_valid       <= 1'b0;
       end
 
       // Discard an in-flight bus response that a redirect invalidated.
@@ -1348,6 +1427,8 @@ module sisRvCore #(
 	        fetch_upper_hold <= 16'h0;
         fetch_err_hold   <= 1'b0;
         fbuf_valid       <= 1'b0;  // privilege/target may change — drop the buffered word
+        pf_valid         <= 1'b0;  // drop the prefetched word (wrong path / stale privilege)
+        if (pf_inflight && !pf_rsp_fire) pf_discard <= 1'b1;  // drop the in-flight prefetch
         if (((if_state == IF_WAIT) || (if_state == IF_SECOND_WAIT)) && !if_rsp_fire) begin
           if_discard_rsp <= 1'b1;
         end else begin
@@ -1365,6 +1446,8 @@ module sisRvCore #(
         fetch_upper_hold <= 16'h0;
         fetch_err_hold   <= 1'b0;
         fbuf_valid       <= 1'b0;
+        pf_valid         <= 1'b0;
+        if (pf_inflight && !pf_rsp_fire) pf_discard <= 1'b1;
         if (((if_state == IF_WAIT) || (if_state == IF_SECOND_WAIT)) && !if_rsp_fire) begin
           if_discard_rsp <= 1'b1;
         end else begin

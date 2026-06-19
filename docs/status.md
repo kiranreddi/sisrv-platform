@@ -226,7 +226,7 @@ timer interrupt tests run with the AXI slave timer model ✅, CI covers `make re
 | Bare-metal BSP | ✅ Done | UART output, tohost pass/fail, 64-bit `mcycle`/`minstret`, minimal libc |
 | Startup `.data` copy | ✅ Done | `crt0.S` copies initialized data from ROM LMA to RAM before `main` |
 | Benchmark targets | ✅ Done | `make benchmark-coremark`, `make benchmark-dhrystone`, `make benchmark`, `make benchmark-smoke` |
-| Headline result | ✅ Measured | `-O2`: `rv32im_zicsr` 1.502 CoreMark/MHz, 0.468 DMIPS/MHz, CPI 2.396; `rv32imc_zicsr` 1.462, 0.449, CPI 2.497 (M9 1-word fetch buffer closed ~84% of the C-extension gap — now within ~3%) |
+| Headline result | ✅ Measured | `-O2`: `rv32imc_zicsr` 1.530 CoreMark/MHz, 0.475 DMIPS/MHz, CPI 2.360; `rv32im_zicsr` 1.522, 0.478, CPI 2.345 (M9 1-word fetch buffer + pipelined prefetch; `rv32imc` now edges out `rv32im`) |
 | Determinism | ✅ Done | Two consecutive local publish runs matched cycle/iteration counts exactly |
 
 ---

@@ -56,10 +56,10 @@ _start:
     li    x21, 32
     bne   x8, x21, fail
 
-    # Throughput bound. Measured 49 cycles with the 1-word fetch buffer; disabling
-    # the buffer (per-halfword re-fetch) measures 65. Bound at 58 catches that
-    # regression with margin on both sides.
-    li    x20, 58
+    # Throughput bound. Measured 33 cycles with the pipelined prefetch (fetch fully
+    # overlapped); 49 with the 1-word buffer only; 65 with no buffer. Bound at 40
+    # catches a regression to either prior design with margin on both sides.
+    li    x20, 40
     bgeu  x7, x20, fail
 
 pass:
