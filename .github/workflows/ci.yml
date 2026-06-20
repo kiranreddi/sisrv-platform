@@ -214,7 +214,7 @@ jobs:
         run: make cosim-lockstep COSIM_SEEDS=10000
 
   riscof-act:
-    name: RISCOF rv32imac_zicsr ACT
+    name: RISCOF ACT (I/M/C/Zicsr CI subset, 95 tests)
     runs-on: ubuntu-latest
     timeout-minutes: 180
     needs: lint

@@ -40,7 +40,7 @@ ASM_HEXES := $(patsubst sw/tests/asm/%.S,$(BUILD)/tests/%.hex,$(ASM_TESTS))
 
 .PHONY: sim lint clean wave regress regress-axil regress-axil-stall pipeline-debug pipeline-throughput fetch-throughput sw all tests cocotb formal formal-axil synth sta sta-sky130 cosim-lockstep \
         benchmark benchmark-coremark benchmark-dhrystone benchmark-smoke \
-        riscof-check-tools riscof-smoke riscof-act riscof-rv32i riscof-rv32im
+        riscof-check-tools riscof-smoke riscof-act riscof-act-full riscof-rv32i riscof-rv32im
 
 
 all: sim
@@ -360,6 +360,23 @@ riscof-act: $(RISCOF_WORK)/act.testlist build/sim_sisPlatformTop
 	  riscof run --config $(RISCOF_CONFIG) --no-browser \
 	    --suite $(ARCH_TEST_SUITE) --env $(ARCH_TEST_ENV) \
 	    --work-dir $(RISCOF_WORK) --testfile $(RISCOF_WORK)/act.testlist
+
+# Full ACT including PMP/privilege/A (local only — DUT timeouts + 3h+ runtime; not CI)
+$(RISCOF_WORK)/act-full.testlist: $(ARCH_TEST_ROOT) $(RISCOF_VENV)/bin/activate
+	@mkdir -p $(RISCOF_WORK)
+	@. $(RISCOF_VENV)/bin/activate && \
+	  riscof testlist --config $(RISCOF_CONFIG) \
+	    --suite $(ARCH_TEST_SUITE) --env $(ARCH_TEST_ENV) \
+	    --work-dir $(RISCOF_WORK)
+	@python3 $(RISCOF_DIR)/scripts/filter_act_testlist.py \
+	  --full $(RISCOF_WORK)/test_list.yaml $(RISCOF_WORK)/act-full.testlist
+
+riscof-act-full: $(RISCOF_WORK)/act-full.testlist build/sim_sisPlatformTop
+	@. $(RISCOF_VENV)/bin/activate && \
+	  RISCOF_TOOLCHAIN_PREFIX=$(RV_PREFIX) \
+	  riscof run --config $(RISCOF_CONFIG) --no-browser \
+	    --suite $(ARCH_TEST_SUITE) --env $(ARCH_TEST_ENV) \
+	    --work-dir $(RISCOF_WORK) --testfile $(RISCOF_WORK)/act-full.testlist
 
 riscof-rv32i: $(ARCH_TEST_ROOT) build/sim_sisPlatformTop $(RISCOF_VENV)/bin/activate
 	@. $(RISCOF_VENV)/bin/activate && \
