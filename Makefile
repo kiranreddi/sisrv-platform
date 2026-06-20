@@ -290,6 +290,7 @@ $(COSIM_STAMP): $(RTL_SRCS) $(TB_SRCS) $(CPP_SRCS)
 	  -GRAM_INIT_FILE='"ram.hex"' \
 	  -GUSE_AXIL=0 \
 	  -GAXIL_STALL_RATE=0 \
+	  -GRESET_VECTOR=32\'h0000_2000 \
 	  $(RTL_SRCS) $(TB_SRCS) $(CPP_SRCS) \
 	  -o sim_cosim_$(TOP)
 	@test -x $(COSIM_SIM_BIN)

@@ -126,17 +126,17 @@ def _as_str(data) -> str:
 
 def spike_program_commits(text: str) -> list[tuple[int, int]]:
     commits = parse_spike_commits(text)
-    # Spike's built-in boot trampoline runs below the co-sim RAM image.
-    return [(pc, insn) for pc, insn in commits if pc >= 0x80000000]
+    # Drop spike's built-in boot trampoline (runs below the program at 0x2000).
+    return [(pc, insn) for pc, insn in commits if pc >= 0x2000]
 
 
 def run_spike(elf: Path, log_path: Path) -> list[tuple[int, int]]:
     cmd = [
         "spike",
         "--isa=rv32im_zicsr",
-        # Code runs from ROM at 0x0 (matches the platform instruction-fetch map).
-        # Programs are register-only, so a single low region suffices.
-        "-m0x0:0x200000",
+        # Code runs from ROM at 0x2000 (platform instruction-fetch map; above spike's
+        # reserved [0,0x1000) region). Programs are register-only, so one region suffices.
+        "-m0x2000:0x1fe000",
         "-l",
         str(elf),
     ]
