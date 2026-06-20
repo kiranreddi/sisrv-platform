@@ -92,14 +92,16 @@ def _load_bytes(
             rom[addr] = byte_val
 
 
-def write_hex(words: dict[int, int], base: Path) -> None:
+def write_hex(words: dict[int, int], base: Path, region_base: int = 0) -> None:
     if not words:
         base.write_text("")
         return
 
     max_addr = max(words)
-    min_addr = min(words)
-    start_word = min_addr & ~0x3
+    # The sim loads this image at the region base ($readmemh -> mem[0] = region_base),
+    # so pad from region_base up to the first populated word. (For images that already
+    # start at the region base, min_addr == region_base and this is a no-op.)
+    start_word = region_base & ~0x3
     end_word = (max_addr + 4) & ~0x3
 
     lines: list[str] = []
@@ -126,8 +128,8 @@ def main() -> int:
     args = parser.parse_args()
 
     rom, ram = load_segments(args.elf)
-    write_hex(rom, args.rom_hex)
-    write_hex(ram, args.ram_hex)
+    write_hex(rom, args.rom_hex, ROM_BASE)
+    write_hex(ram, args.ram_hex, RAM_BASE)
     return 0
 
 

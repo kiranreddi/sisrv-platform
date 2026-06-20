@@ -5,7 +5,9 @@ ENTRY(_start)
 
 MEMORY
 {
-  ROM (rx)  : ORIGIN = 0x00000000, LENGTH = 2M
+  /* Code starts at 0x2000: within the platform ROM range (0..0x1FFFFF) but above
+   * Spike's reserved low region [0,0x1000) and its boot trampoline. */
+  ROM (rx)  : ORIGIN = 0x00002000, LENGTH = 0x1FE000
   RAM (rwx) : ORIGIN = 0x80000000, LENGTH = 256K
 }
 
