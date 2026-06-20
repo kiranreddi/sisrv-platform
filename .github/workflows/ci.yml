@@ -176,7 +176,10 @@ jobs:
     name: 10k-seed Lock-step Co-sim
     runs-on: ubuntu-latest
     timeout-minutes: 90
-    needs: [regress, cocotb, formal, synth, benchmark-smoke, riscof-act, sta-sky130]
+    # Independent of riscof-act: co-sim is its own functional check (lock-step vs Spike on
+    # random programs) and builds its own Spike, so it should not be skipped when the ACT
+    # suite is slow. Keep it gated on the fast functional jobs only.
+    needs: [regress, cocotb, formal, synth, benchmark-smoke, sta-sky130]
     steps:
       - uses: actions/checkout@v4
 
