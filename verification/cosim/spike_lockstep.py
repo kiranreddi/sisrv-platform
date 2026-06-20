@@ -134,9 +134,9 @@ def run_spike(elf: Path, log_path: Path) -> list[tuple[int, int]]:
     cmd = [
         "spike",
         "--isa=rv32im_zicsr",
-        # Code runs from ROM at 0x0 (matches the platform instruction-fetch map);
-        # data/stack region kept at 0x80000000.
-        "-m0x0:0x200000,0x80000000:0x40000",
+        # Code runs from ROM at 0x0 (matches the platform instruction-fetch map).
+        # Programs are register-only, so a single low region suffices.
+        "-m0x0:0x200000",
         "-l",
         str(elf),
     ]
@@ -157,7 +157,11 @@ def run_spike(elf: Path, log_path: Path) -> list[tuple[int, int]]:
     commits = spike_program_commits(log)
     if not commits and proc.returncode != 0:
         print(log, file=sys.stderr)
-        raise RuntimeError(f"Spike failed on {elf} (exit {proc.returncode})")
+        # Embed spike's own message so it propagates through the worker pool.
+        raise RuntimeError(
+            f"Spike failed on {elf} (exit {proc.returncode}) cmd={' '.join(cmd)} :: "
+            f"{log.strip()[:500]}"
+        )
     if not commits:
         print(log, file=sys.stderr)
         raise RuntimeError(f"Spike produced no commit trace on {elf}")
