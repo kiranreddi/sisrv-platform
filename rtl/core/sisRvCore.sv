@@ -13,6 +13,7 @@ module sisRvCore #(
     parameter bit          ENABLE_A     = 1'b1,
     parameter bit          ENABLE_M     = 1'b1,
     parameter bit          ENABLE_C     = 1'b1,
+    parameter int          NTRIGGER     = 2,
     parameter bit          ENABLE_U     = 1'b1,
     parameter int          PMP_ENTRIES = 8
 )(
@@ -279,6 +280,7 @@ module sisRvCore #(
   logic [31:0] amo_new_val;
   logic        wb_dec_is_legal_eff;
   logic        wb_is_ecall, wb_is_ebreak, wb_is_mret, wb_is_csr_op;
+  logic        wb_trigger_hit;
   logic [1:0]  wb_csr_op_type;
   logic [31:0] wb_csr_src_val;
   logic [31:0] wb_pc_sequential;
@@ -463,12 +465,16 @@ module sisRvCore #(
   logic [2:0]  mcounteren_o;
   logic [PMP_ENTRIES-1:0][7:0]  pmpcfg_bus;
   logic [PMP_ENTRIES-1:0][31:0] pmpaddr_bus;
+  logic [NTRIGGER-1:0][31:0]    trig_tdata1;
+  logic [NTRIGGER-1:0][31:0]    trig_tdata2;
+  logic [NTRIGGER-1:0]          trig_hit_set;
 
   sisCsr #(
     .ENABLE_A     (ENABLE_A),
     .ENABLE_C     (ENABLE_C),
     .ENABLE_U     (ENABLE_U),
-    .PMP_ENTRIES  (PMP_ENTRIES)
+    .PMP_ENTRIES  (PMP_ENTRIES),
+    .NTRIGGER     (NTRIGGER)
   ) u_csr (
     .clk         (clk),
     .rst_n       (rst_n),
@@ -496,7 +502,10 @@ module sisRvCore #(
     .mstatus_mpp_o(mstatus_mpp_o),
     .mcounteren_o(mcounteren_o),
     .pmpcfg_o    (pmpcfg_bus),
-    .pmpaddr_o   (pmpaddr_bus)
+    .pmpaddr_o   (pmpaddr_bus),
+    .trig_tdata1_o(trig_tdata1),
+    .trig_tdata2_o(trig_tdata2),
+    .trig_hit_set (trig_hit_set)
   );
 
   logic [1:0] d_pmp_priv;
@@ -679,7 +688,39 @@ module sisRvCore #(
                            (ex_is_sc && ex_sc_succeeds) || ex_is_amo_op;
   assign ex_pmp_d_fault  = ex_d_access_raw &&
                            !is_mem_misaligned(alu_result, ex_funct3) && !pmp_d_allow;
-  assign ex_mem_access   = ex_d_access_raw &&
+  // Debug trigger match (type-2 mcontrol, equality, action=0 -> breakpoint exception).
+  // execute: PC == tdata2; load/store: access address == tdata2; gated by m/u priv bits.
+  // A firing trigger behaves like a breakpoint before the instruction commits.
+  logic ex_trigger_hit;
+  always_comb begin
+    ex_trigger_hit = 1'b0;
+    trig_hit_set   = '0;
+    if (ex_valid && (ex_state == EX_EXEC) && ex_dec_is_legal_eff) begin
+      for (int t = 0; t < NTRIGGER; t = t + 1) begin
+        automatic logic m_load  = trig_tdata1[t][0];
+        automatic logic m_store = trig_tdata1[t][1];
+        automatic logic m_exec  = trig_tdata1[t][2];
+        automatic logic en_u    = trig_tdata1[t][3];
+        automatic logic en_m    = trig_tdata1[t][6];
+        automatic logic priv_ok = (en_m && (ex_priv == PRIV_M)) ||
+                                  (en_u && (ex_priv == PRIV_U));
+        automatic logic is_store_acc = ex_is_store || ex_is_sc || ex_is_amo_op;
+        if (priv_ok) begin
+          if (m_exec && (ex_pc == trig_tdata2[t])) begin
+            ex_trigger_hit = 1'b1; trig_hit_set[t] = 1'b1;
+          end
+          if (m_load && ex_is_load && (alu_result == trig_tdata2[t])) begin
+            ex_trigger_hit = 1'b1; trig_hit_set[t] = 1'b1;
+          end
+          if (m_store && is_store_acc && (alu_result == trig_tdata2[t])) begin
+            ex_trigger_hit = 1'b1; trig_hit_set[t] = 1'b1;
+          end
+        end
+      end
+    end
+  end
+  // A firing trigger suppresses the memory access (it traps instead).
+  assign ex_mem_access   = ex_d_access_raw && !ex_trigger_hit &&
                            !is_mem_misaligned(alu_result, ex_funct3) && pmp_d_allow;
   assign ex_mem_requesting = ex_valid &&
                              (((ex_state == EX_EXEC) && ex_mem_access) ||
@@ -708,7 +749,7 @@ module sisRvCore #(
 
   always_comb begin
     ex_pc_next = ex_pc_sequential;
-    if (ex_fetch_err || ex_complete_mem_err || ex_complete_mem_misaligned ||
+    if (ex_trigger_hit || ex_fetch_err || ex_complete_mem_err || ex_complete_mem_misaligned ||
         ex_instr_addr_misaligned || !ex_legal_eff) begin
       ex_pc_next = mtvec_base;   // exceptions always go to BASE (spec: even in vectored mode)
     end else if (irq_pending && !ex_is_csr_op) begin
@@ -727,7 +768,8 @@ module sisRvCore #(
   end
 
   assign ex_redirect = ex_to_wb_fire && !wb_single_step_stop &&
-                       (ex_fetch_err || ex_complete_mem_err || ex_complete_mem_misaligned ||
+                       (ex_trigger_hit ||
+                        ex_fetch_err || ex_complete_mem_err || ex_complete_mem_misaligned ||
                         ex_instr_addr_misaligned || !ex_legal_eff ||
                         ex_is_jal || ex_is_jalr || (ex_is_branch && ex_branch_taken) ||
                         ex_is_ecall || ex_is_ebreak || ex_is_mret ||
@@ -820,7 +862,7 @@ module sisRvCore #(
     end
   end
 
-  assign wb_writes_rd = wb_valid &&
+  assign wb_writes_rd = wb_valid && !wb_trigger_hit &&
                         !wb_fetch_err && !wb_mem_err && !wb_mem_misaligned &&
                         !wb_instr_addr_misaligned && wb_dec_is_legal_eff &&
                         (wb_is_alu_reg || wb_is_alu_imm || wb_is_lui ||
@@ -828,7 +870,7 @@ module sisRvCore #(
                          wb_is_load || wb_is_csr_op ||
                          wb_is_lr || wb_is_sc || wb_is_amo_op);
 
-  assign ex_forward_valid = ex_valid && (ex_state == EX_EXEC) &&
+  assign ex_forward_valid = ex_valid && (ex_state == EX_EXEC) && !ex_trigger_hit &&
                             !ex_fetch_err && !ex_instr_addr_misaligned &&
                             ex_dec_is_legal_eff && !ex_is_load && !ex_is_store &&
                             !ex_is_atomic && !ex_is_csr_op &&
@@ -985,7 +1027,7 @@ module sisRvCore #(
     instr_retire = 1'b0;
 
     if (wb_valid) begin
-      instr_retire = !(wb_fetch_err || wb_mem_err || wb_mem_misaligned ||
+      instr_retire = !(wb_fetch_err || wb_trigger_hit || wb_mem_err || wb_mem_misaligned ||
                        wb_instr_addr_misaligned || !wb_dec_is_legal_eff ||
                        wb_is_ecall || wb_is_ebreak || (wb_irq_pending && !wb_is_csr_op));
 
@@ -993,6 +1035,13 @@ module sisRvCore #(
         trap_enter = 1'b1;
         trap_cause = 32'd1;
         trap_val   = wb_pc;
+        trap_epc   = wb_pc;
+        instr_retire = 1'b0;
+      end else if (wb_trigger_hit) begin
+        // Hardware trigger (mcontrol) -> breakpoint exception before the instruction.
+        trap_enter = 1'b1;
+        trap_cause = 32'd3;
+        trap_val   = 32'h0;        // Debug 0.13: mtval = 0 for mcontrol breakpoints
         trap_epc   = wb_pc;
         instr_retire = 1'b0;
       end else if (wb_mem_misaligned) begin
@@ -1164,6 +1213,7 @@ module sisRvCore #(
       wb_dec_is_legal_eff     <= 1'b0;
       wb_is_ecall             <= 1'b0;
       wb_is_ebreak            <= 1'b0;
+      wb_trigger_hit          <= 1'b0;
       wb_is_mret              <= 1'b0;
       wb_is_csr_op            <= 1'b0;
       wb_csr_op_type          <= 2'b00;
@@ -1406,6 +1456,7 @@ module sisRvCore #(
         wb_dec_is_legal_eff     <= ex_legal_eff;
         wb_is_ecall             <= ex_is_ecall;
         wb_is_ebreak            <= ex_is_ebreak;
+        wb_trigger_hit          <= ex_trigger_hit;
         wb_is_mret              <= ex_is_mret;
         wb_is_csr_op            <= ex_is_csr_op;
         wb_csr_op_type          <= ex_csr_op_type;

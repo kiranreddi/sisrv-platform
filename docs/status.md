@@ -20,7 +20,7 @@ The core is verified through **70** directed assembly regression tests, pipeline
 |---------|--------|----------|
 | CLINT / PLIC | ✅ Complete | `sisClint.sv`, `sisPlic.sv`, `test_msip`, `test_timer`, `test_plic_irq` |
 | C extension | ✅ Complete | `sisDecompress.sv`, `ENABLE_C`, `test_compressed`, **27/27 C ACT tests** |
-| Debug / JTAG | ✅ Complete | `sisDm.sv`, `sisJtagDtm.sv`, halt/resume/step, abstract GPR → regfile |
+| Debug / JTAG | ✅ Complete | `sisDm.sv`, `sisJtagDtm.sv`, halt/resume/step, abstract GPR → regfile, 2 HW triggers (exec/load/store breakpoints) |
 | Product docs | ✅ Complete | `LICENSE`, Integration Guide, PRM, PPA datasheet |
 | Benchmarks | ✅ Internal | CoreMark/Dhrystone direct-corebus report in `docs/BENCHMARKS.md` |
 | PPA / STA | ✅ Sky130 HD | CI WNS **-199.946 ns**, TNS **-10929.076 ns**, Fmax **4.55 MHz** ([run](https://github.com/kiranreddi/sisrv-platform/actions/runs/27565469770)) |

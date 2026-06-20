@@ -58,7 +58,7 @@ defined sequence with hard exit gates.
 | Privilege | **M + U**; `mstatus` MPP/MPRV/TW; ECALL cause by mode; `mcounteren` |
 | Memory | Aligned-only assumed; **8-entry PMP**; no cache; tightly-coupled ROM/RAM |
 | Bus | Internal corebus + AXI4-Lite **master** bridge (single outstanding, no bursts) |
-| Debug | **DM 0.13 subset + JTAG DTM** (halt/resume/step); **abstract GPR → regfile** |
+| Debug | **DM 0.13 subset + JTAG DTM** (halt/resume/step); **abstract GPR → regfile**; **2 HW triggers** (exec/load/store breakpoints) |
 | Verification | **45** directed asm + pipeline throughput/debug-step + 43 cocotb + 4 formal + **RISCOF ACT 95/95 (CI)** + final gated **10k-seed lock-step co-sim** |
 | Physical | Yosys synth + **Sky130 HD STA** (WNS -199.946 ns, Fmax 4.55 MHz, CI) + PPA datasheet |
 | Collateral | **Apache-2.0**, Integration Guide, Programmer's Reference, PPA datasheet |
@@ -150,7 +150,7 @@ Legend: ✅ have · 🟡 partial · ❌ missing · **P0** = required for any pro
 | RISC-V Debug spec DM (halt/resume/step) | mandatory for product | ✅ | `sisDm.sv` subset | **P0** |
 | JTAG / cJTAG DTM | mandatory | ✅ | `sisJtagDtm.sv` | **P0** |
 | Abstract GPR access while halted | mandatory | ✅ | `sisRegFile` dbg port + `dbg_abs_*` in core/top | **P0** |
-| Hardware breakpoints/triggers (Sdtrig) | standard | ❌ | — | P1 |
+| Hardware breakpoints/triggers (Sdtrig) | standard | ✅ | 2 type-2 mcontrol triggers: exec/load/store address breakpoints -> breakpoint exception; `test_trigger_*` | P1 |
 | GDB/OpenOCD bring-up | expected | 🟡 | documented; not CI-tested | P1 |
 | Trace (instruction trace / E-Trace) | premium feature | ❌ | — | P2 |
 

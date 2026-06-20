@@ -5,7 +5,8 @@ module sisCsr #(
     parameter bit ENABLE_A = 1'b1,
     parameter bit ENABLE_C = 1'b1,
     parameter bit ENABLE_U = 1'b1,
-    parameter int PMP_ENTRIES = 8
+    parameter int PMP_ENTRIES = 8,
+    parameter int NTRIGGER   = 2
 )(
     input  logic        clk,
     input  logic        rst_n,
@@ -39,7 +40,13 @@ module sisCsr #(
     output logic [1:0]  mstatus_mpp_o,
     output logic [2:0]  mcounteren_o,
     output logic [PMP_ENTRIES-1:0][7:0]  pmpcfg_o,
-    output logic [PMP_ENTRIES-1:0][31:0] pmpaddr_o
+    output logic [PMP_ENTRIES-1:0][31:0] pmpaddr_o,
+
+    // Debug trigger module: exported config for the EX-stage match logic.
+    output logic [NTRIGGER-1:0][31:0] trig_tdata1_o,
+    output logic [NTRIGGER-1:0][31:0] trig_tdata2_o,
+    // One-cycle pulse per trigger when it fired (latches the hit bit).
+    input  logic [NTRIGGER-1:0]       trig_hit_set
 );
 
   localparam logic [1:0] PRIV_M = 2'b11;
@@ -69,6 +76,10 @@ module sisCsr #(
   localparam logic [11:0] CSR_CYCLEH    = 12'hC80;
   localparam logic [11:0] CSR_INSTRET   = 12'hC02;
   localparam logic [11:0] CSR_INSTRETH  = 12'hC82;
+  localparam logic [11:0] CSR_TSELECT   = 12'h7A0;
+  localparam logic [11:0] CSR_TDATA1    = 12'h7A1;
+  localparam logic [11:0] CSR_TDATA2    = 12'h7A2;
+  localparam logic [11:0] CSR_TINFO     = 12'h7A4;
 
   localparam logic [31:0] MSTATUS_WMASK = 32'h0022_1888; // MIE, MPIE, MPP, MPRV, TW
 
@@ -88,6 +99,22 @@ module sisCsr #(
 
   logic [PMP_ENTRIES-1:0][7:0]  pmpcfg;
   logic [PMP_ENTRIES-1:0][31:0] pmpaddr;
+
+  // Debug Trigger Module (type-2 mcontrol). tdata1 stores only the writable fields;
+  // the type (2) and dmode (0) are reconstructed on read.
+  localparam int TSEL_W = (NTRIGGER <= 1) ? 1 : $clog2(NTRIGGER);
+  logic [TSEL_W-1:0]            tselect;
+  logic [NTRIGGER-1:0][31:0]    tdata1;   // writable mcontrol fields (hit/action/match/m/u/x/s/l)
+  logic [NTRIGGER-1:0][31:0]    tdata2;
+  // mcontrol tdata1 bit positions
+  localparam int MC_HIT = 20;
+  // WARL: keep hit(20), action(15:12, force 0 since debug-mode entry unsupported),
+  // match(10:7, force 0=equal), m(6), u(3), execute(2), store(1), load(0).
+  localparam logic [31:0] TDATA1_WMASK = 32'h0010_004F; // hit + m/u/x/s/l
+  // Read value = type(2)<<28 | writable fields.
+  function automatic logic [31:0] tdata1_read(input logic [31:0] w);
+    tdata1_read = {4'd2, 28'd0} | (w & TDATA1_WMASK);
+  endfunction
 
   localparam logic [31:0] MISA_BASE  = 32'h4000_1100;
   localparam logic [31:0] MISA_VALUE = MISA_BASE
@@ -232,6 +259,10 @@ module sisCsr #(
       CSR_CYCLEH:    csr_rdata = mcycle[63:32];
       CSR_INSTRET:   csr_rdata = minstret[31:0];
       CSR_INSTRETH:  csr_rdata = minstret[63:32];
+      CSR_TSELECT:   csr_rdata = {{(32-TSEL_W){1'b0}}, tselect};
+      CSR_TDATA1:    csr_rdata = tdata1_read(tdata1[tselect]);
+      CSR_TDATA2:    csr_rdata = tdata2[tselect];
+      CSR_TINFO:     csr_rdata = 32'h0000_0004;  // bit 2: type-2 mcontrol supported
       default: begin
         if (is_pmpcfg)
           csr_rdata = pack_pmpcfg_csr(pmp_cfg_slot);
@@ -264,6 +295,11 @@ module sisCsr #(
       for (int ri = 0; ri < PMP_ENTRIES; ri = ri + 1) begin
         pmpcfg[ri]  <= 8'h0;
         pmpaddr[ri] <= 32'h0;
+      end
+      tselect <= '0;
+      for (int ti = 0; ti < NTRIGGER; ti = ti + 1) begin
+        tdata1[ti] <= 32'h0;   // all enable bits 0 -> trigger inert until programmed
+        tdata2[ti] <= 32'h0;
       end
     end else begin
       if (!mcountinhibit[0])
@@ -303,6 +339,9 @@ module sisCsr #(
           CSR_MCYCLEH:  mcycle[63:32] <= csr_new_val;
           CSR_MINSTRET: minstret[31:0] <= csr_new_val;
           CSR_MINSTRETH: minstret[63:32] <= csr_new_val;
+          CSR_TSELECT: if (csr_new_val < NTRIGGER) tselect <= csr_new_val[TSEL_W-1:0];
+          CSR_TDATA1:  tdata1[tselect] <= csr_new_val & TDATA1_WMASK;
+          CSR_TDATA2:  tdata2[tselect] <= csr_new_val;
           default: begin
             if (is_pmpcfg) begin
               for (int pj = 0; pj < 4; pj = pj + 1) begin
@@ -317,9 +356,16 @@ module sisCsr #(
           end
         endcase
       end
+
+      // Hardware sets the per-trigger hit bit on a match (wins over a same-cycle
+      // CSR clear). Triggers are independent of trap_enter/mret.
+      for (int ti = 0; ti < NTRIGGER; ti = ti + 1)
+        if (trig_hit_set[ti]) tdata1[ti][MC_HIT] <= 1'b1;
     end
   end
 
+  assign trig_tdata1_o = tdata1;
+  assign trig_tdata2_o = tdata2;
   assign mtvec_out = mtvec;
   assign mepc_out  = mepc;
   assign priv_o = priv;

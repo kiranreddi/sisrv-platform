@@ -45,7 +45,7 @@ keeping the implementation readable and open.
 | Privilege | Machine mode, core CSRs, trap entry/return, counters, WFI legal no-op |
 | Platform | ROM, RAM, tohost, CLINT, PLIC, GPIO, UART |
 | Interrupts | CLINT (MSIP/MTIP/MTIME), PLIC (8 prioritized sources), GPIO→PLIC mux |
-| Debug | RISC-V DM 0.13 subset + JTAG DTM; halt/resume/step, abstract GPR wired to regfile while halted |
+| Debug | RISC-V DM 0.13 subset + JTAG DTM; halt/resume/step, abstract GPR wired to regfile while halted; 2 hardware triggers (exec/load/store breakpoints) |
 | Bus | Internal corebus plus optional AXI4-Lite bridge path |
 | Verification | 45 assembly regression tests, pipeline throughput/debug-step tests, 43 cocotb tests, formal proofs, RISCOF ACT **95/95** + gated 10k lock-step co-sim |
 | Implementation | Synthesizable SystemVerilog, Verilator simulation, Yosys + Sky130 STA |
@@ -259,7 +259,7 @@ Unsupported classes remain PMP, S/U modes, and A/F/D.
 - Traps: ECALL, EBREAK, illegal instruction, misaligned access, access fault, MRET.
 - Atomics: LR.W/SC.W + full AMO set (AMOSWAP/ADD/XOR/AND/OR/MIN/MAX/MINU/MAXU); single-hart reservation model.
 - Interrupts: CLINT at `0x0200_0000`, PLIC (8 sources) at `0x0C00_0000`.
-- Debug: RISC-V Debug 0.13 subset + JTAG DTM (halt/resume/step); abstract GPR access.
+- Debug: RISC-V Debug 0.13 subset + JTAG DTM (halt/resume/step); abstract GPR access; 2 hardware triggers (`tdata1`/`tdata2` mcontrol — execute/load/store breakpoints).
 
 ### Memory Map
 
