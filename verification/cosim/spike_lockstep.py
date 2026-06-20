@@ -134,7 +134,9 @@ def run_spike(elf: Path, log_path: Path) -> list[tuple[int, int]]:
     cmd = [
         "spike",
         "--isa=rv32im_zicsr",
-        "-m0x80000000:0x100000",
+        # Code runs from ROM at 0x0 (matches the platform instruction-fetch map);
+        # data/stack region kept at 0x80000000.
+        "-m0x0:0x200000,0x80000000:0x40000",
         "-l",
         str(elf),
     ]
