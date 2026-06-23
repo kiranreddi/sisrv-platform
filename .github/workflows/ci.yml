@@ -10,6 +10,9 @@ on:
 permissions:
   contents: read
 
+env:
+  SPIKE_REF: 1280c3ca1ef0ce5ec95994cb9b7144f3ea2c655c
+
 jobs:
   lint:
     name: Verilator Lint
@@ -34,7 +37,7 @@ jobs:
         run: make lint
 
   regress:
-    name: Assembly Regression (70 tests + pipeline guards)
+    name: Assembly Regression (76 tests + pipeline guards)
     runs-on: ubuntu-latest
     needs: lint
     steps:
@@ -200,15 +203,31 @@ jobs:
           sudo apt-get install -y gcc-riscv64-linux-gnu || true
           sudo apt-get install -y gcc-riscv64-unknown-elf binutils-riscv64-unknown-elf || true
 
+      - name: Cache Spike
+        id: cache-spike-cosim
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/spike
+          key: spike-${{ runner.os }}-${{ env.SPIKE_REF }}
+
       - name: Install Spike (reference model)
         run: |
           sudo apt-get install -y device-tree-compiler
-          git clone --depth 1 https://github.com/riscv-software-src/riscv-isa-sim.git /tmp/riscv-isa-sim
+          echo "$HOME/.local/spike/bin" >> "$GITHUB_PATH"
+          if [ -x "$HOME/.local/spike/bin/spike" ]; then
+            "$HOME/.local/spike/bin/spike" --version || true
+            exit 0
+          fi
+          git init /tmp/riscv-isa-sim
           cd /tmp/riscv-isa-sim
+          git remote add origin https://github.com/riscv-software-src/riscv-isa-sim.git
+          git fetch --depth 1 origin "$SPIKE_REF"
+          git checkout FETCH_HEAD
           mkdir build && cd build
-          ../configure --prefix=/usr/local --enable-commitlog
+          ../configure --prefix="$HOME/.local/spike" --enable-commitlog
           make -j$(nproc)
-          sudo make install
+          make install
+          "$HOME/.local/spike/bin/spike" --version || true
 
       - name: Run 10k-seed lock-step co-sim
         run: make cosim-lockstep COSIM_SEEDS=10000
@@ -238,15 +257,31 @@ jobs:
           sudo apt-get install -y gcc-riscv64-linux-gnu || true
           sudo apt-get install -y gcc-riscv64-unknown-elf binutils-riscv64-unknown-elf || true
 
+      - name: Cache Spike
+        id: cache-spike-riscof
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/spike
+          key: spike-${{ runner.os }}-${{ env.SPIKE_REF }}
+
       - name: Install Spike (reference model)
         run: |
           sudo apt-get install -y device-tree-compiler
-          git clone --depth 1 https://github.com/riscv-software-src/riscv-isa-sim.git /tmp/riscv-isa-sim
+          echo "$HOME/.local/spike/bin" >> "$GITHUB_PATH"
+          if [ -x "$HOME/.local/spike/bin/spike" ]; then
+            "$HOME/.local/spike/bin/spike" --version || true
+            exit 0
+          fi
+          git init /tmp/riscv-isa-sim
           cd /tmp/riscv-isa-sim
+          git remote add origin https://github.com/riscv-software-src/riscv-isa-sim.git
+          git fetch --depth 1 origin "$SPIKE_REF"
+          git checkout FETCH_HEAD
           mkdir build && cd build
-          ../configure --prefix=/usr/local --enable-commitlog
+          ../configure --prefix="$HOME/.local/spike" --enable-commitlog
           make -j$(nproc)
-          sudo make install
+          make install
+          "$HOME/.local/spike/bin/spike" --version || true
 
       - name: Install RISCOF Python stack
         run: |

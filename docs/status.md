@@ -1,18 +1,19 @@
 # Implementation Status
 
-**Last updated**: 2026-06-16 (U-mode + PMP on benchmark-bringup)
+**Last updated**: 2026-06-23 (HPM counters + backlog cleanup on benchmark-bringup)
 
 ## Summary
 
 The sisrv-platform project implements a fully functional RV32IMAC RISC-V processor core
 with M-mode CSRs, trap handling, **CLINT/PLIC interrupts**, **RISC-V Debug subset**,
-GPIO, UART, and an AXI4-Lite master bridge.
-The core is verified through **70** directed assembly regression tests, pipeline throughput/debug-step Verilator tests, 43+ cocotb randomized unit tests (incl. PMP matcher lane),
-4 formal proofs, **RISCOF rv32imac_zicsr ACT suite** with privilege/PMP subset enabled (**95+** filtered tests in CI; Smepmp/S-mode/vm tests still excluded), and
+GPIO, UART, HPM counters, and an AXI4-Lite master bridge.
+The core is verified through **76** directed assembly regression tests, pipeline throughput/debug-step Verilator tests, 43+ cocotb randomized unit tests (incl. PMP matcher lane),
+4 formal proofs, **RISCOF rv32imac_zicsr ACT suite** I/M/C subset (**95/95** filtered tests in CI; A/PMP/privilege still excluded from the per-push lane), and
 **10k-seed retired-instruction Spike lock-step co-sim** as a final gated CI lane.
 
 | P0 closure snapshot (2026-06-15) | see below |
 | U-mode + PMP (2026-06-16) | ✅ Complete | `ENABLE_U=1`, `PMP_ENTRIES=8`, `sisPmp.sv`, 25 new asm tests, cocotb PMP lane |
+| Zihpm-style HPM counters (2026-06-23) | ✅ Complete | `mhpmcounter3..31`, `mhpmevent3..31`, U-mode `hpmcounter3..31` gating, directed asm coverage |
 
 ### P0 closure snapshot (2026-06-15)
 
@@ -23,8 +24,8 @@ The core is verified through **70** directed assembly regression tests, pipeline
 | Debug / JTAG | ✅ Complete | `sisDm.sv`, `sisJtagDtm.sv`, halt/resume/step, abstract GPR → regfile, 2 HW triggers (exec/load/store breakpoints) |
 | Product docs | ✅ Complete | `LICENSE`, Integration Guide, PRM, PPA datasheet |
 | Benchmarks | ✅ Internal | CoreMark/Dhrystone direct-corebus report in `docs/BENCHMARKS.md` |
-| PPA / STA | ✅ Sky130 HD | CI WNS **-199.946 ns**, TNS **-10929.076 ns**, Fmax **4.55 MHz** ([run](https://github.com/kiranreddi/sisrv-platform/actions/runs/27565469770)) |
-| RISCOF / co-sim | ✅ Gated | **95/95** ACT green in latest short CI; **10k-seed** lock-step restored as final gated CI job |
+| PPA / STA | ✅ Sky130 HD | CI WNS **+10.887 ns**, TNS **0 ns**, estimated Fmax **~109.7 MHz** |
+| RISCOF / co-sim | ✅ Gated | **95/95** I/M/C ACT subset green in latest short CI; **10k-seed** lock-step restored as final gated CI job with pinned Spike |
 
 ## Milestone Status
 
@@ -58,7 +59,7 @@ The core is verified through **70** directed assembly regression tests, pipeline
 | `sisDecode.sv` | ✅ Done | All RV32I/RV32M instruction types decoded |
 | `sisMemFabric.sv` | ✅ Done | Address decoder: ROM/RAM/MMIO routing |
 
-**Test coverage** (45 directed regression tests plus pipeline throughput/debug tests, all passing):
+**Test coverage** (76 directed regression tests plus pipeline throughput/debug tests, all passing):
 
 | Test | Instructions Covered |
 |------|---------------------|
@@ -153,8 +154,8 @@ x0 always 0 ✅, PC word-aligned ✅, correct sign/zero extension ✅
 | AXI-Lite timer support | ✅ Done | `tb/models/sisAxiLiteSlave.sv` models MTIME/MTIMECMP and MTIP |
 | AXI-Lite GPIO support | ✅ Done | `tb/models/sisAxiLiteSlave.sv` models DATA/DIR/IN/SET/CLR |
 | AXI-Lite UART support | ✅ Done | `tb/models/sisAxiLiteSlave.sv` models TXDATA/RXDATA/STATUS/CTRL/BAUDDIV |
-| AXI-Lite PLIC/CLINT support | ✅ Done | Inline PLIC + CLINT in `sisAxiLiteSlave.sv` (45/45 regress-axil) |
-| AXI-Lite system regression | ✅ Done | `make regress-axil` runs all 45 regression assembly tests through the AXI path |
+| AXI-Lite PLIC/CLINT support | ✅ Done | Inline PLIC + CLINT in `sisAxiLiteSlave.sv` (76/76 regress-axil) |
+| AXI-Lite system regression | ✅ Done | `make regress-axil` runs all 76 regression assembly tests through the AXI path |
 | cocotb bridge tests | ✅ Done | 11 tests: reset, R/W, errors, stalls, 100-txn random stress |
 | Formal AXI-Lite bridge | Optional | Bounded VALID stability, mutual exclusion, data stability (`make formal-axil`) |
 
@@ -269,7 +270,7 @@ timer interrupt tests run with the AXI slave timer model ✅, CI covers `make re
 | A extension — full AMO set | ✅ Done | AMOSWAP/ADD/XOR/AND/OR/MIN/MAX/MINU/MAXU; two-phase read-modify-write via `EX_AMO_STORE_REQ/WAIT` states |
 | misa.A + misa reporting | ✅ Done | `sisCsr.sv` MISA_VALUE includes A extension; `test_machine_counters` updated |
 | mepc 2-byte alignment | ✅ Fixed | `mepc` masked to `0xFFFFFFFE` (not `0xFFFFFFFC`) with C extension; required for MRET to compressed-instruction return addresses |
-| Regression | ✅ 45/45 | All tests pass including new `test_atomics` |
+| Regression | ✅ 76/76 | All tests pass including atomics, U/PMP, triggers, and HPM counters |
 
 ---
 
@@ -291,8 +292,8 @@ Planned:
 | Verilator version | 5.038 |
 | Lint status | ✅ Clean (Wall, no warnings) |
 | Compiler | riscv64-linux-gnu-gcc 13.3 |
-| Assembly regression suite | 45 tests |
-| Assembly regression | 45/45 passing through corebus, AXI-Lite, and stalled AXI-Lite paths |
+| Assembly regression suite | 76 tests |
+| Assembly regression | 76/76 passing through corebus, AXI-Lite, and stalled AXI-Lite paths |
 | Pipeline throughput guard | `make pipeline-throughput` passing on the direct corebus path |
 | Benchmark smoke | `make benchmark-smoke` builds/runs reduced CoreMark + Dhrystone validation |
 | Publish benchmark | `make benchmark` generates `build/bench/summary.json` and logs |
@@ -350,7 +351,7 @@ Planned:
 ### Software
 - `sw/bsp/crt0.S` — C runtime startup
 - `sw/bsp/link.ld` — Linker script
-- `sw/tests/asm/test_*.S` — 45 regression assembly programs plus direct-corebus pipeline throughput guard
+- `sw/tests/asm/test_*.S` — 76 regression assembly programs plus direct-corebus pipeline throughput guard
 
 ### Build & CI
 - `Makefile` — Build, lint, sim, regression, cocotb, formal, synth targets

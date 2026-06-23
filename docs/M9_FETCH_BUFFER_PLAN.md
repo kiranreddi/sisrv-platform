@@ -5,7 +5,8 @@
 The prefetch hides fetch latency behind execute for *both* ISAs (`rv32im` 1.502 → 1.522, CPI
 2.396 → 2.345), so `rv32imc` now slightly exceeds `rv32im` — the C-extension fetch penalty is
 gone. Microbench: 32 compressed insns 49 → **33 cycles**. Validated on corebus + AXI4-Lite +
-AXI-stall (71 tests each), plus `test_pmp_prefetch_x` (prefetch PMP X-check). **Fmax pending CI STA.**
+AXI-stall (76 tests each), plus `test_pmp_prefetch_x` (prefetch PMP X-check). Sky130 HD CI STA:
+WNS +10.887 ns, TNS 0 ns, estimated Fmax ~109.7 MHz.
 **Target branch:** new branch off current line — keep isolated from feature work
 **Motivation:** [`BENCHMARKS.md`](BENCHMARKS.md) — the C extension currently *costs* ~17–19%
 throughput because the IF stage re-fetches words and double-fetches straddling
@@ -169,9 +170,9 @@ invariant no longer applies — re-baseline both).
 
 **Hard parts / why it needs care:**
 1. **Fmax** — driving `i_req_addr`/`i_req_valid` from a combinationally-computed prefetch
-   address adds a path into the bus; Sky130 Fmax is already ~4.55 MHz. Register the prefetch
-   address (prefetch is speculative, a 1-cycle-late address is fine) to keep the path short, and
-   **re-run `make sta-sky130`** before landing.
+   address adds a path into the bus. Register the prefetch address (prefetch is speculative,
+   a 1-cycle-late address is fine) to keep the path short, and **re-run `make sta-sky130`**
+   before landing.
 2. **Redirect** — a redirect must drop both slots and any in-flight/just-issued prefetch
    response (the existing `if_discard_rsp` mechanism, extended to the prefetch request).
 3. **PMP/privilege** — a prefetched word fetched under the old privilege must not be served
@@ -182,7 +183,7 @@ invariant no longer applies — re-baseline both).
 5. **Wrong-path prefetch waste** — prefetching past a branch fetches a word that's discarded;
    acceptable (the bus would otherwise be idle), but don't let it stall a demand fetch.
 
-**Gate:** `make regress` (70) + `make fetch-throughput` (expect < ~40) + `make pipeline-debug`
+**Gate:** `make regress` (76) + `make fetch-throughput` (expect < ~40) + `make pipeline-debug`
 + both benchmarks (re-baseline `rv32im`; expect lower CPI) + **`make sta-sky130` Fmax not
 regressed** + `make cosim-lockstep` green. Revert if any of these don't hold.
 
@@ -246,13 +247,13 @@ is `riscv64-elf-`).
 
 ## 6. Acceptance criteria
 
-- [x] `make lint` clean; `make regress` green (70/70 directed, incl. compressed/atomic/U-mode/PMP).
+- [x] `make lint` clean; `make regress` green (76/76 directed, incl. compressed/atomic/U-mode/PMP/HPM).
 - [x] `rv32im` CoreMark/Dhrystone cycle counts **unchanged** (byte-identical — verified).
 - [x] `rv32imc` CoreMark/MHz and DMIPS/MHz **materially improved** (CoreMark +15.7%, ~84% of
       the gap closed; recorded in `BENCHMARKS.md`).
 - [x] Throughput guard `test_fetch_buffer_throughput` added + wired into CI (`make fetch-throughput`).
 - [ ] `make cosim-lockstep` (10k) green; `make riscof-act` green — **CI only** (spike/riscof not local).
-- [ ] `make sta-sky130` — Fmax not regressed — **CI only** (long run; pending CI).
+- [x] `make sta-sky130` — Fmax not regressed — **CI only** (WNS +10.887 ns, TNS 0 ns, estimated Fmax ~109.7 MHz).
 - [x] `BENCHMARKS.md` updated with before/after and the buffer description; "Analysis" reframed to "done".
 
 ---

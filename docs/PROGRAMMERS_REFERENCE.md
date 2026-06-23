@@ -12,6 +12,7 @@
 | Zicsr | CSRs, ECALL, EBREAK, MRET, WFI (TW-gated in U) |
 | Zifencei | FENCE.I treated as NOP |
 | U | User mode with PMP (8 regions, G=0) |
+| Zihpm-style HPM | `mhpmcounter3..31` / `mhpmevent3..31` platform events |
 
 ## Privilege
 
@@ -26,7 +27,7 @@ deliver to M-mode. `mret` transitions M↔U using `mstatus.MPP`.
 | misa | 0x301 | RO | I+M+A+C+U bits |
 | mie | 0x304 | RW | MSIE(3), MTIE(7), MEIE(11) |
 | mtvec | 0x305 | RW | Direct or vectored (MODE=1) |
-| mcounteren | 0x306 | RW | CY/TM/IR gates for U-mode `cycle`/`instret` |
+| mcounteren | 0x306 | RW | CY/IR/HPM gates for U-mode counter shadows |
 | mscratch | 0x340 | RW | |
 | mepc | 0x341 | RW | Word-aligned on write |
 | mcause | 0x342 | RW | ECALL: 8 (U), 11 (M) |
@@ -36,7 +37,26 @@ deliver to M-mode. `mret` transitions M↔U using `mstatus.MPP`.
 | pmpaddr0–7 | 0x3B0–0x3B7 | RW | Physical address [33:2] |
 | cycle/instret | 0xC00/0xC02 | RO shadows | Gated by `mcounteren` in U |
 | mcycle/minstret | 0xB00/0xB02 | RW | Zicntr |
+| hpmcounter3–31 | 0xC03–0xC1F | RO shadows | Gated by `mcounteren[3..31]` in U |
+| mhpmcounter3–31 | 0xB03–0xB1F | RW | 64-bit HPM counters, high halves at 0xB83–0xB9F |
+| mhpmevent3–31 | 0x323–0x33F | RW | Platform event-select bitmask |
 | ID CSRs | 0xF11–0xF15 | RO | Zero (configurable later) |
+
+### HPM event bits
+
+`mhpmeventN` is a platform-defined bitmask. `mhpmcounterN` increments once per
+cycle when any selected event bit is high and `mcountinhibit[N]` is clear.
+
+| Bit | Event |
+|---:|---|
+| 0 | retired instruction |
+| 1 | retired load / LR |
+| 2 | retired store / SC / AMO |
+| 3 | taken conditional branch |
+| 4 | control redirect (jump, taken branch, MRET) |
+| 5 | synchronous trap entry |
+| 6 | interrupt trap entry |
+| 7 | load-use stall |
 
 ## PMP
 
@@ -69,6 +89,6 @@ bit 2 for step mode, and bit 0 for `dmactive`.
 
 The core is an in-order IF/ID/EX-MEM pipeline with an independent WB/retire slot
 and direct-corebus Harvard instruction/data path.
-Internal direct-corebus Verilator measurements on `rv32imc_zicsr -O2`: **1.264
-CoreMark/MHz**, **0.400 Dhrystone DMIPS/MHz**, Dhrystone **CPI 2.804**. See
+Internal direct-corebus Verilator measurements on `rv32imc_zicsr -O2`: **1.530
+CoreMark/MHz**, **0.475 Dhrystone DMIPS/MHz**, Dhrystone **CPI 2.360**. See
 [BENCHMARKS.md](BENCHMARKS.md) for conditions, raw excerpts, and caveats.

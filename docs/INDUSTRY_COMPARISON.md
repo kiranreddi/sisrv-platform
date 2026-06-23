@@ -15,9 +15,9 @@ licensable / product-grade RISC-V core.
 
 ## 1. Executive summary
 
-`sisRvCore` today is a **correct, well-verified RV32IMAC teaching/MVP platform**: an
-in-order IF/ID/EX-MEM pipeline with independent WB/retire and direct-corebus Harvard I/D path, M-mode only, with clean RTL,
-real formal proofs, cocotb unit tests, a 45-test directed regression plus pipeline throughput guard, an AXI4-Lite bridge, CLINT/PLIC, debug/JTAG, C extension,
+`sisRvCore` today is a **correct, well-verified RV32IMACU teaching/MVP platform**: an
+in-order IF/ID/EX-MEM pipeline with independent WB/retire and direct-corebus Harvard I/D path, M+U privilege, with clean RTL,
+real formal proofs, cocotb unit tests, a 76-test directed regression plus pipeline throughput/debug guards, an AXI4-Lite bridge, CLINT/PLIC, debug/JTAG, C/A extensions, PMP, HPM counters,
 and a Yosys synthesis path. That is a genuinely strong *foundation* — better verified
 than many hobby cores.
 
@@ -31,9 +31,9 @@ is three things commercial cores treat as table stakes:
    72 upstream PMP/A/privilege tests excluded) is green in CI, and the
    **10k-seed retired-instruction** Spike lock-step co-sim is restored as the
    final gated CI lane.
-3. **Productization rigor.** Sky130 HD STA in CI: WNS **-199.946 ns**, TNS **-10929.076 ns**,
-   Fmax **4.55 MHz**; internal `-O2` performance after the direct-corebus Harvard
-   instruction/data split is **1.502 CoreMark/MHz** / **0.468 DMIPS/MHz** on
+3. **Productization rigor.** Sky130 HD STA in CI: WNS **+10.887 ns**, TNS **0 ns**,
+   estimated Fmax **~109.7 MHz**; internal `-O2` performance after the direct-corebus Harvard
+   instruction/data split and M9 front end is
    **1.522** / **0.478** on `rv32im_zicsr` and **1.530** / **0.475** on `rv32imc_zicsr`
    (the M9 1-word fetch buffer + pipelined prefetch eliminated the former C-extension
    fetch cost — `rv32imc` now slightly *exceeds* `rv32im` — see [`BENCHMARKS.md`](BENCHMARKS.md)).
@@ -48,19 +48,19 @@ defined sequence with hard exit gates.
 
 | Dimension | Current state |
 |---|---|
-| ISA | RV32I + M + **C** (`rv32imac_zicsr`), M-mode only |
+| ISA | RV32I + M + A + **C** (`rv32imac_zicsr`), M+U privilege |
 | Microarchitecture | In-order IF/ID/EX-MEM pipeline with independent WB/retire; single outstanding transaction per I/D corebus port |
 | Performance | Internal direct-corebus Verilator, `-O2`: `rv32imc_zicsr` 1.530 CoreMark/MHz, 0.475 DMIPS/MHz; `rv32im_zicsr` 1.522, 0.478 (M9 fetch buffer + pipelined prefetch) |
 | Privilege | **M + U**; no S-mode; PMP enforced |
 | Traps | Illegal instr, ECALL, EBREAK, MRET; misaligned load/store/control-flow traps; instruction/load/store access faults |
 | Interrupts | **CLINT** (MSIP/MTIP/MTIME at 0x0200_0000) + **PLIC** (8 sources at 0x0C00_0000) |
-| CSRs | mstatus, misa (**A**/**C**), mtvec (direct + vectored MODE=1), mepc, mcause, mtval, mscratch, mie, mip, ID CSRs, mcycle/minstret/mcountinhibit. WFI legal no-op. |
+| CSRs | mstatus, misa (**A**/**C**/**U**), mtvec (direct + vectored MODE=1), mepc, mcause, mtval, mscratch, mie, mip, ID CSRs, mcycle/minstret/mcountinhibit, `mhpmcounter3..31`, `mhpmevent3..31`. WFI legal no-op. |
 | Privilege | **M + U**; `mstatus` MPP/MPRV/TW; ECALL cause by mode; `mcounteren` |
 | Memory | Aligned-only assumed; **8-entry PMP**; no cache; tightly-coupled ROM/RAM |
 | Bus | Internal corebus + AXI4-Lite **master** bridge (single outstanding, no bursts) |
 | Debug | **DM 0.13 subset + JTAG DTM** (halt/resume/step); **abstract GPR → regfile**; **2 HW triggers** (exec/load/store breakpoints) |
-| Verification | **45** directed asm + pipeline throughput/debug-step + 43 cocotb + 4 formal + **RISCOF ACT 95/95 (CI)** + final gated **10k-seed lock-step co-sim** |
-| Physical | Yosys synth + **Sky130 HD STA** (WNS -199.946 ns, Fmax 4.55 MHz, CI) + PPA datasheet |
+| Verification | **76** directed asm + pipeline throughput/debug-step + 43+ cocotb + 4 formal + **RISCOF ACT 95/95 I/M/C subset (CI)** + final gated **10k-seed lock-step co-sim** |
+| Physical | Yosys synth + **Sky130 HD STA** (WNS +10.887 ns, estimated Fmax ~109.7 MHz, CI) + PPA datasheet |
 | Collateral | **Apache-2.0**, Integration Guide, Programmer's Reference, PPA datasheet |
 
 ---
@@ -230,7 +230,7 @@ top-to-bottom by risk-adjusted value.
 - ✅ ROM decode expanded to 2 MB (matches ACT `link.ld`).
 - **Exit gate:** ✅ RISCOF rv32imac_zicsr ACT suite **95/95** green in CI; ✅ 10k-seed
   retired-instruction Spike lock-step co-sim restored as final gated CI; ✅ Sky130 STA report in CI
-  (WNS -199.946 ns, TNS -10929.076 ns, Fmax 4.55 MHz); nested-trap + access-fault directed
+  (WNS +10.887 ns, TNS 0 ns, estimated Fmax ~109.7 MHz); nested-trap + access-fault directed
   tests pass.
 
 ### Phase B — System integration (droppable into an SoC)
@@ -253,7 +253,7 @@ top-to-bottom by risk-adjusted value.
   second compressed halfword without a redundant fetch; the prefetch streams the next word
   ahead on idle I-bus cycles, hiding fetch latency behind execute for both ISAs. CoreMark
   1.264 → 1.530 for `rv32imc` (now edging out `rv32im`); base CPI fell for both configs. The
-  former ~19% C-extension fetch penalty is eliminated. Fmax (Sky130) to be confirmed in CI STA
+  former ~19% C-extension fetch penalty is eliminated. Sky130 HD STA is clean at the 20 ns target
   — see [`BENCHMARKS.md`](BENCHMARKS.md) and [`M9_FETCH_BUFFER_PLAN.md`](M9_FETCH_BUFFER_PLAN.md).
 - A bounded dual-slot/MEM-hold experiment passed directed regression but measured worse
   on the current one-cycle RAM path, so it was not retained. M9 should only land with

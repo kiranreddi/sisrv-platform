@@ -8,7 +8,7 @@
 
 | Parameter | Value |
 |-----------|-------|
-| ISA | RV32IMC + Zicsr |
+| ISA | RV32IMAC + Zicsr + U-mode + PMP + Zihpm-style HPM counters |
 | Microarchitecture | In-order IF/ID/EX-MEM pipeline with independent WB/retire slot and direct-corebus Harvard I/D path |
 | Bus | Corebus or AXI4-Lite |
 | Clock target | 50 MHz (20 ns) |
@@ -31,7 +31,7 @@ includes core FSM, decode, CSR, CLINT/PLIC, debug DM/DTM, and AXI bridge.
 |--------|-------|--------|
 | Target period | 20 ns | SDC `create_clock` |
 | STA sign-off | Post-synth OpenSTA | `make sta-sky130` |
-| Sky130 HD latest CI | WNS -199.946 ns, TNS -10929.076 ns, estimated Fmax 4.55 MHz | CI run #27565469770 |
+| Sky130 HD latest CI | WNS +10.887 ns, TNS 0 ns, estimated Fmax ~109.7 MHz | Sky130 HD OpenSTA estimate |
 
 ## Power
 
@@ -49,9 +49,9 @@ Exit gate: GDS DRC/LVS clean or documented deltas per milestone M8.
 |--------|----------------|
 | Microarchitecture | In-order IF/ID/EX-MEM pipeline with independent WB/retire slot and direct-corebus Harvard I/D path |
 | Directed pipeline smoke | forwarding 60 cycles; load-use 66; branch/jump flush 59; trap flush 55; interrupt flush 76; throughput guard 94; debug single-step 36 |
-| CoreMark/MHz | **1.264** (`rv32imc_zicsr -O2`, direct corebus, internal Verilator, not certified EEMBC) |
-| Dhrystone DMIPS/MHz | **0.400** (`rv32imc_zicsr -O2`, direct corebus, internal Verilator) |
-| Dhrystone CPI | **2.804** over 1,491 iterations |
+| CoreMark/MHz | **1.530** (`rv32imc_zicsr -O2`, direct corebus, internal Verilator, not certified EEMBC) |
+| Dhrystone DMIPS/MHz | **0.475** (`rv32imc_zicsr -O2`, direct corebus, internal Verilator) |
+| Dhrystone CPI | **2.360** over 1,741 iterations |
 
 See `docs/BENCHMARKS.md` for raw logs, validation status, compiler flags, and the
 `rv32im_zicsr -O2` comparison row.

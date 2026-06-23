@@ -210,7 +210,7 @@ Key principles:
   - precise retirement from WB
 
 ### Exit criteria
-- 45-test directed regression passes through direct corebus and AXI-Lite paths.
+- 76-test directed regression passes through direct corebus and AXI-Lite paths.
 - Pipeline-directed forwarding, load-use, branch/jump flush, trap flush,
   interrupt flush, throughput, and debug halt/single-step tests pass.
 - CoreMark/Dhrystone benchmarking is now brought up as a post-M6 product metric:

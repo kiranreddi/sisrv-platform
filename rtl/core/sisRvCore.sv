@@ -260,6 +260,7 @@ module sisRvCore #(
   logic [4:0]  wb_rd;
   logic [2:0]  wb_funct3;
   logic        wb_is_lui, wb_is_auipc, wb_is_jal, wb_is_jalr;
+  logic        wb_is_branch;
   logic        wb_is_load, wb_is_store;
   logic        wb_is_alu_imm, wb_is_alu_reg;
   logic        wb_is_legal;
@@ -462,7 +463,8 @@ module sisRvCore #(
   logic        mstatus_tw_o;
   logic        mstatus_mprv_o;
   logic [1:0]  mstatus_mpp_o;
-  logic [2:0]  mcounteren_o;
+  logic [31:0] mcounteren_o;
+  logic [31:0] hpm_events;
   logic [PMP_ENTRIES-1:0][7:0]  pmpcfg_bus;
   logic [PMP_ENTRIES-1:0][31:0] pmpaddr_bus;
   logic [NTRIGGER-1:0][31:0]    trig_tdata1;
@@ -489,6 +491,7 @@ module sisRvCore #(
     .trap_epc    (trap_epc),
     .mret_exec   (mret_exec),
     .instr_retire(instr_retire),
+    .hpm_events  (hpm_events),
     .ext_msip    (ext_msip),
     .ext_mtip    (ext_mtip),
     .ext_meip    (ext_meip),
@@ -613,11 +616,15 @@ module sisRvCore #(
                                  (ex_csr_req_priv == 2'b01) ||
                                  (ex_csr_req_priv == 2'b10));
   wire [11:0] ex_csr_addr_f = ex_instr[31:20];
+  wire       ex_is_u_hpmcounter = ((ex_csr_addr_f >= 12'hC03) && (ex_csr_addr_f <= 12'hC1F)) ||
+                                  ((ex_csr_addr_f >= 12'hC83) && (ex_csr_addr_f <= 12'hC9F));
+  wire [4:0] ex_u_hpmcounter_idx = ex_csr_addr_f[4:0];
   wire       ex_mcounteren_block = ENABLE_U && ex_is_csr_op && (ex_priv == PRIV_U) &&
                                    ((((ex_csr_addr_f == 12'hC00) || (ex_csr_addr_f == 12'hC80)) &&
                                      !mcounteren_o[0]) ||
                                     (((ex_csr_addr_f == 12'hC02) || (ex_csr_addr_f == 12'hC82)) &&
-                                     !mcounteren_o[2]));
+                                     !mcounteren_o[2]) ||
+                                    (ex_is_u_hpmcounter && !mcounteren_o[ex_u_hpmcounter_idx]));
 
   assign ex_priv_illegal = ENABLE_U &&
                            ((ex_is_mret && (ex_priv != PRIV_M)) ||
@@ -881,6 +888,26 @@ module sisRvCore #(
   assign id_depends_ex_rd = if_id_valid && ex_valid && (ex_rd != 5'd0) &&
                             ((ex_rd == dec_rs1) || (ex_rd == dec_rs2));
   assign id_ex_hazard = id_depends_ex_rd && !ex_forward_valid;
+
+  wire wb_branch_taken = wb_valid && instr_retire && wb_is_branch &&
+                         (wb_pc_next != wb_pc_sequential);
+  wire wb_control_redirect = wb_valid && instr_retire &&
+                             (wb_is_jal || wb_is_jalr || wb_branch_taken || wb_is_mret);
+  wire hpm_trap_enter = trap_enter && !trap_cause[31];
+  wire hpm_irq_enter  = trap_enter && trap_cause[31];
+  wire hpm_load_use_stall = id_ex_hazard && if_id_valid && ex_valid && ex_is_load;
+
+  always_comb begin
+    hpm_events = 32'h0;
+    hpm_events[0] = wb_valid && instr_retire;
+    hpm_events[1] = wb_valid && instr_retire && (wb_is_load || wb_is_lr);
+    hpm_events[2] = wb_valid && instr_retire && (wb_is_store || wb_is_sc || wb_is_amo_op);
+    hpm_events[3] = wb_branch_taken;
+    hpm_events[4] = wb_control_redirect;
+    hpm_events[5] = hpm_trap_enter;
+    hpm_events[6] = hpm_irq_enter;
+    hpm_events[7] = hpm_load_use_stall;
+  end
 
   // ID reads see WB and same-cycle EX completion through these bypasses.
   logic [31:0] id_rs1_val, id_rs2_val;
@@ -1193,6 +1220,7 @@ module sisRvCore #(
       wb_is_auipc             <= 1'b0;
       wb_is_jal               <= 1'b0;
       wb_is_jalr              <= 1'b0;
+      wb_is_branch            <= 1'b0;
       wb_is_load              <= 1'b0;
       wb_is_store             <= 1'b0;
       wb_is_alu_imm           <= 1'b0;
@@ -1436,6 +1464,7 @@ module sisRvCore #(
         wb_is_auipc             <= ex_is_auipc;
         wb_is_jal               <= ex_is_jal;
         wb_is_jalr              <= ex_is_jalr;
+        wb_is_branch            <= ex_is_branch;
         wb_is_load              <= ex_is_load;
         wb_is_store             <= ex_is_store;
         wb_is_alu_imm           <= ex_is_alu_imm;
