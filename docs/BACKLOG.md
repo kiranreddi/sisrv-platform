@@ -1,9 +1,11 @@
 # sisrv-platform — Engineering Backlog (handoff)
 
 Prioritized, self-contained items for a cold agent. Each has **what / why / where / done-when**.
-State as of: RV32IMACU + 8-region PMP, M9 fetch buffer + pipelined prefetch, 2 HW debug triggers.
-CI on `main` is green (lint, 71-test regression on 3 bus paths, cocotb, formal, RISCOF I/M/C,
-Sky130 STA ~110 MHz / WNS +10.9 ns, 10k-seed Spike lock-step, synth, benchmark). `rv32imc`
+State as of: RV32IMACU + 8-region PMP, M9 fetch buffer + pipelined prefetch, 2 HW debug triggers,
+Zihpm-style HPM counters.
+Current branch validation covers lint and the 76-test regression on 3 bus paths. CI-only lanes
+cover cocotb, formal, RISCOF I/M/C, Sky130 STA ~110 MHz / WNS +10.9 ns, 10k-seed Spike lock-step,
+synth, and benchmark. `rv32imc`
 CoreMark 1.530/MHz (edges out `rv32im`); Dhrystone CPI ~2.36.
 
 Toolchain note: dev env has `riscv64-elf-` at `/opt/homebrew/bin`; run make with
@@ -52,6 +54,9 @@ chained/edge cases) pass.
 captured in `docs/BENCHMARKS.md`.
 
 ### B5. mhpmcounters (Zihpm) — `mhpmcounter3..31` + `mhpmevent3..31`
+**Status:** ✅ Done on `codex/benchmark-bringup` (2026-06-23). RTL implements
+`mhpmcounter3..31`, `mhpmevent3..31`, U-mode `hpmcounter3..31` access via `mcounteren`, and
+directed coverage in `test_hpmcounters`.
 **Why:** standard performance-monitoring CSRs; enables B4 *and* is a productization feature.
 **Where:** `rtl/core/sisCsr.sv` (CSR file, mirrors mcycle/minstret), event wires from the core
 (retire, load, store, branch-taken, mispredict-flush, stall). Gate U-access via `mcounteren`.
@@ -62,7 +67,7 @@ captured in `docs/BENCHMARKS.md`.
 the rare branch-into-mid-word straddle — see `docs/M9_FETCH_BUFFER_PLAN.md` §3.6), then a tiny BTB or
 static branch hint. Re-check STA after any front-end change.
 **Done when:** measurable CoreMark/Dhrystone gain with `make sta-sky130` Fmax not regressed and
-71+ regression + 10k cosim green.
+76+ regression + 10k cosim green.
 
 ---
 
@@ -97,12 +102,16 @@ killing fetch throughput. Pairs with B9 (line fills over AXI4 bursts).
 **Done when:** GDS generated, DRC/LVS clean-or-documented, power numbers in the PPA datasheet.
 
 ### B12. Fix stale Fmax in docs  *(quick win)*
+**Status:** ✅ Done on `codex/benchmark-bringup` (2026-06-23). Stale 4.55 MHz / negative-WNS
+references were replaced with the latest Sky130 HD estimate.
 **Why:** several docs still cite **4.55 MHz / WNS -199.946 ns** (`docs/INDUSTRY_COMPARISON.md`,
 `docs/status.md`, `docs/PPA_DATASHEET.md`). The current CI STA is **~110 MHz, WNS +10.887 ns,
 TNS 0**. Badly understates the core.
 **Done when:** all Fmax/WNS/TNS references match the latest STA; note it's a Sky130 HD estimate.
 
 ### B13. Pin Spike in CI  *(reliability)*
+**Status:** ✅ Done on `codex/benchmark-bringup` (2026-06-23). CI now pins Spike with
+`SPIKE_REF=1280c3ca1ef0ce5ec95994cb9b7144f3ea2c655c` and caches the installed build.
 **Why:** `.github/workflows/ci.yml` builds Spike from **unpinned HEAD** (`git clone --depth 1`). It
 already drifted once (slower build). Pin a known-good rev (+ cache) for reproducible CI.
 

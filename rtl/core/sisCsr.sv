@@ -24,6 +24,7 @@ module sisCsr #(
 
     input  logic        mret_exec,
     input  logic        instr_retire,
+    input  logic [31:0] hpm_events,
 
     input  logic        ext_msip,
     input  logic        ext_mtip,
@@ -38,7 +39,7 @@ module sisCsr #(
     output logic        mstatus_tw_o,
     output logic        mstatus_mprv_o,
     output logic [1:0]  mstatus_mpp_o,
-    output logic [2:0]  mcounteren_o,
+    output logic [31:0] mcounteren_o,
     output logic [PMP_ENTRIES-1:0][7:0]  pmpcfg_o,
     output logic [PMP_ENTRIES-1:0][31:0] pmpaddr_o,
 
@@ -95,6 +96,8 @@ module sisCsr #(
   logic [31:0] mcountinhibit;
   logic [63:0] mcycle;
   logic [63:0] minstret;
+  logic [63:0] mhpmcounter [3:31];
+  logic [31:0] mhpmevent   [3:31];
   logic [1:0]  priv;
 
   logic [PMP_ENTRIES-1:0][7:0]  pmpcfg;
@@ -215,6 +218,51 @@ module sisCsr #(
     end
   endfunction
 
+  function automatic logic csr_is_mhpmcounter(input logic [11:0] addr, output int idx, output logic high);
+    begin
+      csr_is_mhpmcounter = 1'b0;
+      idx = 0;
+      high = 1'b0;
+      if (addr >= 12'hB03 && addr <= 12'hB1F) begin
+        idx = int'(addr - 12'hB00);
+        high = 1'b0;
+        csr_is_mhpmcounter = 1'b1;
+      end else if (addr >= 12'hB83 && addr <= 12'hB9F) begin
+        idx = int'(addr - 12'hB80);
+        high = 1'b1;
+        csr_is_mhpmcounter = 1'b1;
+      end
+    end
+  endfunction
+
+  function automatic logic csr_is_hpmcounter(input logic [11:0] addr, output int idx, output logic high);
+    begin
+      csr_is_hpmcounter = 1'b0;
+      idx = 0;
+      high = 1'b0;
+      if (addr >= 12'hC03 && addr <= 12'hC1F) begin
+        idx = int'(addr - 12'hC00);
+        high = 1'b0;
+        csr_is_hpmcounter = 1'b1;
+      end else if (addr >= 12'hC83 && addr <= 12'hC9F) begin
+        idx = int'(addr - 12'hC80);
+        high = 1'b1;
+        csr_is_hpmcounter = 1'b1;
+      end
+    end
+  endfunction
+
+  function automatic logic csr_is_mhpmevent(input logic [11:0] addr, output int idx);
+    begin
+      csr_is_mhpmevent = 1'b0;
+      idx = 0;
+      if (addr >= 12'h323 && addr <= 12'h33F) begin
+        idx = int'(addr - 12'h320);
+        csr_is_mhpmevent = 1'b1;
+      end
+    end
+  endfunction
+
   logic [31:0] csr_new_val;
   always_comb begin
     case (csr_op)
@@ -227,12 +275,23 @@ module sisCsr #(
 
   logic        is_pmpcfg;
   logic        is_pmpaddr;
+  logic        is_mhpmcounter;
+  logic        is_hpmcounter;
+  logic        is_mhpmevent;
   int          pmp_cfg_slot;
   int          pmp_idx;
+  int          mhpmcounter_idx;
+  int          hpmcounter_idx;
+  int          hpmevent_idx;
+  logic        mhpmcounter_high;
+  logic        hpmcounter_high;
 
   always_comb begin
     is_pmpcfg = csr_is_pmpcfg(csr_addr, pmp_cfg_slot);
     is_pmpaddr = csr_is_pmpaddr(csr_addr, pmp_idx);
+    is_mhpmcounter = csr_is_mhpmcounter(csr_addr, mhpmcounter_idx, mhpmcounter_high);
+    is_hpmcounter = csr_is_hpmcounter(csr_addr, hpmcounter_idx, hpmcounter_high);
+    is_mhpmevent = csr_is_mhpmevent(csr_addr, hpmevent_idx);
 
     case (csr_addr)
       CSR_MSTATUS:  csr_rdata = mstatus;
@@ -268,6 +327,14 @@ module sisCsr #(
           csr_rdata = pack_pmpcfg_csr(pmp_cfg_slot);
         else if (is_pmpaddr)
           csr_rdata = pmpaddr[pmp_idx];
+        else if (is_mhpmcounter)
+          csr_rdata = mhpmcounter_high ? mhpmcounter[mhpmcounter_idx][63:32] :
+                                         mhpmcounter[mhpmcounter_idx][31:0];
+        else if (is_hpmcounter)
+          csr_rdata = hpmcounter_high ? mhpmcounter[hpmcounter_idx][63:32] :
+                                        mhpmcounter[hpmcounter_idx][31:0];
+        else if (is_mhpmevent)
+          csr_rdata = mhpmevent[hpmevent_idx];
         else
           csr_rdata = 32'h0;
       end
@@ -291,6 +358,10 @@ module sisCsr #(
       mcountinhibit <= 32'h0;
       mcycle   <= 64'h0;
       minstret <= 64'h0;
+      for (int hi = 3; hi < 32; hi = hi + 1) begin
+        mhpmcounter[hi] <= 64'h0;
+        mhpmevent[hi]   <= 32'h0;
+      end
       priv     <= PRIV_M;
       for (int ri = 0; ri < PMP_ENTRIES; ri = ri + 1) begin
         pmpcfg[ri]  <= 8'h0;
@@ -306,6 +377,10 @@ module sisCsr #(
         mcycle <= mcycle + 64'd1;
       if (instr_retire && !mcountinhibit[2])
         minstret <= minstret + 64'd1;
+      for (int hi = 3; hi < 32; hi = hi + 1) begin
+        if (!mcountinhibit[hi] && ((mhpmevent[hi] & hpm_events) != 32'h0))
+          mhpmcounter[hi] <= mhpmcounter[hi] + 64'd1;
+      end
 
       if (trap_enter) begin
         mepc    <= trap_epc;
@@ -329,7 +404,7 @@ module sisCsr #(
           CSR_MSTATUS:  mstatus <= apply_mstatus_warl(mstatus, csr_new_val);
           CSR_MIE:      mie <= csr_new_val;
           CSR_MTVEC:    mtvec <= csr_new_val;
-          CSR_MCOUNTEREN: mcounteren <= csr_new_val & 32'h0000_0007;
+          CSR_MCOUNTEREN: mcounteren <= csr_new_val & 32'hFFFF_FFFD;
           CSR_MCOUNTINHIBIT: mcountinhibit <= csr_new_val;
           CSR_MSCRATCH: mscratch <= csr_new_val;
           CSR_MEPC:     mepc <= csr_new_val & (ENABLE_C ? 32'hFFFF_FFFE : 32'hFFFF_FFFC);
@@ -352,6 +427,13 @@ module sisCsr #(
               end
             end else if (is_pmpaddr && !pmpaddr_write_blocked(pmp_idx)) begin
               pmpaddr[pmp_idx] <= csr_new_val;
+            end else if (is_mhpmcounter) begin
+              if (mhpmcounter_high)
+                mhpmcounter[mhpmcounter_idx][63:32] <= csr_new_val;
+              else
+                mhpmcounter[mhpmcounter_idx][31:0] <= csr_new_val;
+            end else if (is_mhpmevent) begin
+              mhpmevent[hpmevent_idx] <= csr_new_val;
             end
           end
         endcase
@@ -372,7 +454,7 @@ module sisCsr #(
   assign mstatus_tw_o = mstatus[21];
   assign mstatus_mprv_o = mstatus[17];
   assign mstatus_mpp_o = mstatus[12:11];
-  assign mcounteren_o = mcounteren[2:0];
+  assign mcounteren_o = mcounteren;
   assign pmpcfg_o = pmpcfg;
   assign pmpaddr_o = pmpaddr;
 

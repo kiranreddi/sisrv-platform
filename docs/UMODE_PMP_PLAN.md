@@ -166,7 +166,7 @@ if (mstatus.MPP != 2'b11) mstatus.MPRV <= 1'b0;  // MRET to <M clears MPRV
 carefully; recommend computing `next_priv = mstatus.MPP` first.)
 
 **Outputs to add from `sisCsr`:** `priv_o[1:0]`, `mstatus_tw_o`, `mstatus_mprv_o`,
-`mstatus_mpp_o[1:0]`, `mcounteren_o[2:0]`, plus the flattened `pmpcfg`/`pmpaddr` buses for the PMP.
+`mstatus_mpp_o[1:0]`, `mcounteren_o[31:0]`, plus the flattened `pmpcfg`/`pmpaddr` buses for the PMP.
 Also export an **effective D-side privilege**:
 `ls_priv = (mstatus_mprv_o && priv==M) ? mstatus_mpp_o : priv` (compute in core or CSR; core is fine).
 
@@ -361,7 +361,7 @@ with `-march=rv32im_zicsr`. Update:
 | 6 | pmpcfg/pmpaddr CSRs + WARL/lock immutability | `sisCsr.sv` | lint; readback tests |
 | 7 | Wire D-side PMP gate (suppress bus, fault cause 5/7) | `sisRvCore.sv` | **PMP load/store §5.2 tests** |
 | 8 | Wire I-side PMP gate (fetch fault cause 1) | `sisRvCore.sv` | `test_pmp_napot_x`, `test_pmp_causes` |
-| 9 | Param plumbing `ENABLE_U`/`PMP_ENTRIES` | `sisPlatformTop.sv` | lint; full `make regress` (now ~70 tests) |
+| 9 | Param plumbing `ENABLE_U`/`PMP_ENTRIES` | `sisPlatformTop.sv` | lint; full `make regress` (now 76 tests) |
 | 10 | Formal (optional) | `formal/pmp_props.sv` | `make formal` |
 | 11 | RISCOF privilege/PMP subset | `verification/riscof/*` | `make riscof-act` clean on enabled subset |
 | 12 | Cosim ISA bump + U/PMP seed | `verification/cosim/spike_lockstep.py` | `make cosim-lockstep` green |

@@ -119,7 +119,7 @@ Unit-level tests using cocotb with constrained random stimulus on Verilator 5.03
 ## Running Tests
 
 ```bash
-# Run all assembly regression tests (45 tests)
+# Run all assembly regression tests (76 tests)
 make regress
 
 # Run direct-corebus pipeline throughput guard

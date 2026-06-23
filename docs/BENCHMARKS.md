@@ -55,7 +55,7 @@ microbench (`test_fetch_buffer_throughput`) a 32-instruction block dropped **49 
 ### Correctness
 
 The prefetch is speculative and shares one single-outstanding I-bus with demand fetches
-(demand has priority). Validated by the full **71-test directed regression on three bus paths**
+(demand has priority). Validated by the full **76-test directed regression on three bus paths**
 (corebus, AXI4-Lite, AXI4-Lite with stalls), `pipeline-debug`, and the throughput guard.
 Review surfaced and fixed a **PMP/prefetch hazard**: a prefetched word must be fetch-PMP-checked
 against its *own* address, not the demand address — otherwise a sequential fall-through into a
@@ -66,11 +66,9 @@ in-flight prefetch is discarded), so a hit is always same-privilege/same-memory.
 
 ### Remaining / not yet validated
 
-**Fmax must be confirmed in CI STA** (`make sta-sky130`) — the prefetch adds a 2:1 mux on the
-I-bus address and the prefetch address is a registered `fetch_pc + 1`, so the impact should be
-small, but Sky130 timing is marginal (~4.55 MHz) and this has not been checked locally (no STA
-tools in the dev environment). The 10k-seed lock-step co-sim (CI) is the functional backstop for
-the speculative-fetch behavior.
+**Fmax was rechecked in CI STA** (`make sta-sky130`) — latest Sky130 HD estimate is
+WNS +10.887 ns, TNS 0 ns, estimated Fmax ~109.7 MHz. The 10k-seed lock-step co-sim
+(CI) remains the functional backstop for the speculative-fetch behavior.
 
 ## Reproducibility
 
