@@ -38,6 +38,28 @@ def find_toolchain() -> str | None:
     return None
 
 
+PROFILE_CONFIG = {
+    "rv32im": {
+        "march": "rv32im_zicsr",
+        "spike_isa": "rv32im_zicsr",
+        "spike_priv": None,
+        "spike_pmpregions": None,
+    },
+    "rv32imac": {
+        "march": "rv32imac_zicsr",
+        "spike_isa": "rv32imac_zicsr",
+        "spike_priv": None,
+        "spike_pmpregions": None,
+    },
+    "rv32imac-u-pmp": {
+        "march": "rv32imac_zicsr",
+        "spike_isa": "rv32imac_zicsr",
+        "spike_priv": "mu",
+        "spike_pmpregions": "8",
+    },
+}
+
+
 def gen_program_words(seed: int, n_insn: int) -> list[int]:
     rng = random.Random(seed)
     words: list[int] = []
@@ -55,18 +77,74 @@ def gen_program_words(seed: int, n_insn: int) -> list[int]:
     return words
 
 
-def write_elf(prefix: str, words: list[int], out_dir: Path) -> Path:
+def gen_program_asm(seed: int, n_insn: int, profile: str) -> list[str]:
+    if profile == "rv32im":
+        return [f".word 0x{word:08x}" for word in gen_program_words(seed, n_insn)]
+
+    rng = random.Random(seed)
+    lines = [
+        ".option push",
+        ".option rvc",
+        "li x4, 0x80000000",
+        "li x5, 1",
+        "li x6, 2",
+        "sw x0, 0(x4)",
+    ]
+
+    if profile == "rv32imac-u-pmp":
+        lines = [
+            ".option push",
+            ".option rvc",
+            "li x4, -1",
+            "csrw pmpaddr0, x4",
+            "li x4, 0x1f",
+            "csrw pmpcfg0, x4",
+            "la x4, 1f",
+            "csrw mepc, x4",
+            "csrr x4, mstatus",
+            "li x5, 0xffffe7ff",
+            "and x4, x4, x5",
+            "csrw mstatus, x4",
+            "mret",
+            "1:",
+            "li x4, 0x80000000",
+            "li x5, 1",
+            "li x6, 2",
+            "sw x0, 0(x4)",
+        ]
+
+    ops = [
+        "addi x1, x1, 1",
+        "addi x2, x2, -1",
+        "add x3, x1, x2",
+        "xor x6, x6, x5",
+        "mul x7, x5, x6",
+        "lw x8, 0(x4)",
+        "sw x8, 4(x4)",
+        "amoadd.w x0, x5, (x4)",
+        "lr.w x9, (x4)",
+        "sc.w x10, x5, (x4)",
+        "c.nop",
+        "c.addi x8, 1",
+        "c.mv x9, x8",
+    ]
+    for _ in range(n_insn):
+        lines.append(rng.choice(ops))
+    lines.extend(["j .", ".option pop"])
+    return lines
+
+
+def write_elf(prefix: str, program_lines: list[str], march: str, out_dir: Path) -> Path:
     asm = out_dir / "prog.S"
     elf = out_dir / "prog.elf"
     lines = [".section .text.init", ".globl _start", "_start:"]
-    for word in words:
-        lines.append(f".word 0x{word:08x}")
+    lines.extend(program_lines)
     asm.write_text("\n".join(lines) + "\n")
 
     gcc = prefix + "gcc"
     cmd = [
         gcc,
-        "-march=rv32im_zicsr",
+        f"-march={march}",
         "-mabi=ilp32",
         "-Wl,-melf32lriscv",
         "-nostdlib",
@@ -130,16 +208,26 @@ def spike_program_commits(text: str) -> list[tuple[int, int]]:
     return [(pc, insn) for pc, insn in commits if pc >= 0x2000]
 
 
-def run_spike(elf: Path, log_path: Path) -> list[tuple[int, int]]:
+def run_spike(
+    elf: Path,
+    log_path: Path,
+    spike_isa: str,
+    spike_priv: str | None,
+    spike_pmpregions: str | None,
+) -> list[tuple[int, int]]:
     cmd = [
         "spike",
-        "--isa=rv32im_zicsr",
+        f"--isa={spike_isa}",
         # Code runs from ROM at 0x2000 (platform instruction-fetch map; above spike's
-        # reserved [0,0x1000) region). Programs are register-only, so one region suffices.
-        "-m0x2000:0x1fe000",
+        # reserved [0,0x1000) region). RAM is included for load/store/AMO profiles.
+        "-m0x2000:0x1fe000,0x80000000:0x40000",
         "-l",
         str(elf),
     ]
+    if spike_priv:
+        cmd.insert(2, f"--priv={spike_priv}")
+    if spike_pmpregions:
+        cmd.insert(2, f"--pmpregions={spike_pmpregions}")
     try:
         proc = subprocess.run(
             cmd,
@@ -224,19 +312,26 @@ def compare_commits(
             )
 
 
-def run_one_seed(cfg: tuple[int, str, int, str]) -> str | None:
-    seed, prefix, insns, sim_path = cfg
+def run_one_seed(cfg: tuple[int, str, int, str, str]) -> str | None:
+    seed, prefix, insns, sim_path, profile = cfg
+    profile_cfg = PROFILE_CONFIG[profile]
     with tempfile.TemporaryDirectory() as tmp:
         work = Path(tmp)
-        words = gen_program_words(seed, insns)
-        elf = write_elf(prefix, words, work)
+        program_lines = gen_program_asm(seed, insns, profile)
+        elf = write_elf(prefix, program_lines, profile_cfg["march"], work)
         rom_hex = work / "rom.hex"
         ram_hex = work / "ram.hex"
         spike_log = work / "spike.log"
         rtl_log = work / "rtl.log"
         elf_to_hex(elf, rom_hex, ram_hex)
 
-        spike_commits = run_spike(elf, spike_log)
+        spike_commits = run_spike(
+            elf,
+            spike_log,
+            profile_cfg["spike_isa"],
+            profile_cfg["spike_priv"],
+            profile_cfg["spike_pmpregions"],
+        )
         global SIM
         SIM = Path(sim_path)
         rtl_commits = run_verilator(rom_hex, ram_hex, rtl_log)
@@ -252,6 +347,7 @@ def main() -> int:
     parser.add_argument("--seeds", type=int, default=10000)
     parser.add_argument("--insns", type=int, default=12)
     parser.add_argument("--jobs", type=int, default=min(8, cpu_count() or 4))
+    parser.add_argument("--profile", choices=sorted(PROFILE_CONFIG), default="rv32im")
     parser.add_argument("--require-spike", action=argparse.BooleanOptionalAction, default=True)
     args = parser.parse_args()
 
@@ -269,7 +365,7 @@ def main() -> int:
         return 1
 
     sim_path = str(SIM)
-    tasks = [(seed, prefix, args.insns, sim_path) for seed in range(args.seeds)]
+    tasks = [(seed, prefix, args.insns, sim_path, args.profile) for seed in range(args.seeds)]
     completed = 0
     with Pool(processes=args.jobs) as pool:
         for err in pool.imap_unordered(run_one_seed, tasks, chunksize=16):
@@ -282,7 +378,7 @@ def main() -> int:
                 print(f"Lock-step progress: {completed}/{args.seeds} seeds")
 
     print(
-        f"Lock-step co-sim: {args.seeds} seeds PASS "
+        f"Lock-step co-sim: {args.seeds} seeds PASS profile={args.profile} "
         f"(retired-instruction Spike vs RTL)"
     )
     return 0

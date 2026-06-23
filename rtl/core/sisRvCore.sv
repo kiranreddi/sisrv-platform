@@ -1591,6 +1591,8 @@ module sisRvCore #(
   import "DPI-C" function void dpi_sisrv_retire_insn(
     input int unsigned pc_val,
     input int unsigned insn_val,
+    input int unsigned raw_insn_val,
+    input byte         is_compressed,
     input int unsigned rd_val,
     input int unsigned wdata_val,
     input byte         wr_en
@@ -1601,6 +1603,8 @@ module sisRvCore #(
       dpi_sisrv_retire_insn(
         wb_pc,
         wb_instr,
+        wb_raw,
+        {7'b0, wb_is_compressed},
         rf_rd_addr,
         rf_rd_data,
         {7'b0, rf_wr_en}

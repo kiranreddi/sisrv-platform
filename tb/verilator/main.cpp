@@ -60,6 +60,8 @@ static std::FILE* g_commit_fp = nullptr;
 extern "C" void dpi_sisrv_retire_insn(
     int unsigned pc_val,
     int unsigned insn_val,
+    int unsigned raw_insn_val,
+    unsigned char is_compressed,
     int unsigned rd_val,
     int unsigned wdata_val,
     unsigned char wr_en
@@ -71,7 +73,7 @@ extern "C" void dpi_sisrv_retire_insn(
       g_commit_fp,
       "%08x %08x %01x %08x %01x\n",
       pc_val,
-      insn_val,
+      is_compressed ? (raw_insn_val & 0xFFFFu) : raw_insn_val,
       rd_val & 0x1F,
       wdata_val,
       wr_en & 1

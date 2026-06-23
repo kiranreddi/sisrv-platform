@@ -3,6 +3,7 @@
 VERILATOR ?= verilator
 TOP       ?= sisPlatformTop
 BUILD     ?= build
+HOST_JOBS ?= $(shell nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
 USE_AXIL  ?= 0
 AXIL_STALL_RATE ?= 0
 # Keep corebus and AXI simulation binaries separate; append _stall<N> for stalled AXI runs.
@@ -38,7 +39,7 @@ CYCLE_GUARD_TESTS        := $(PIPELINE_THROUGHPUT_TEST) $(FETCH_THROUGHPUT_TEST)
 ASM_TESTS := $(filter-out $(CYCLE_GUARD_TESTS),$(wildcard sw/tests/asm/*.S))
 ASM_HEXES := $(patsubst sw/tests/asm/%.S,$(BUILD)/tests/%.hex,$(ASM_TESTS))
 
-.PHONY: sim lint clean wave regress regress-axil regress-axil-stall pipeline-debug pipeline-throughput fetch-throughput sw all tests cocotb formal formal-axil synth sta sta-sky130 cosim-lockstep \
+.PHONY: sim lint clean wave regress regress-axil regress-axil-stall pipeline-debug pipeline-throughput fetch-throughput sw all tests cocotb formal formal-axil synth sta sta-sky130 cosim-lockstep cosim-lockstep-imac cosim-lockstep-imac-upmp \
         benchmark benchmark-coremark benchmark-dhrystone benchmark-smoke \
         riscof-check-tools riscof-smoke riscof-act riscof-act-full riscof-rv32i riscof-rv32im
 
@@ -276,6 +277,9 @@ sta-sky130:
 	@cat $(BUILD)/sta_sky130_report.txt
 
 COSIM_SEEDS ?= 10000
+COSIM_INSNS ?= 12
+COSIM_PROFILE ?= rv32im
+COSIM_ARGS ?=
 
 COSIM_SIM_BIN = obj_dir/sim_cosim_$(TOP)
 COSIM_STAMP   = $(BUILD)/.cosim_sim_built
@@ -297,7 +301,13 @@ $(COSIM_STAMP): $(RTL_SRCS) $(TB_SRCS) $(CPP_SRCS)
 	@touch $(COSIM_STAMP)
 
 cosim-lockstep: $(COSIM_STAMP)
-	COSIM_SIM=$(abspath $(COSIM_SIM_BIN)) python3 verification/cosim/spike_lockstep.py --seeds $(COSIM_SEEDS) --jobs $$(nproc)
+	COSIM_SIM=$(abspath $(COSIM_SIM_BIN)) python3 verification/cosim/spike_lockstep.py --seeds $(COSIM_SEEDS) --insns $(COSIM_INSNS) --profile $(COSIM_PROFILE) --jobs $(HOST_JOBS) $(COSIM_ARGS)
+
+cosim-lockstep-imac:
+	$(MAKE) cosim-lockstep COSIM_PROFILE=rv32imac
+
+cosim-lockstep-imac-upmp:
+	$(MAKE) cosim-lockstep COSIM_PROFILE=rv32imac-u-pmp
 
 # ---------------------------------------------------------------------------
 # RISCOF architectural compliance (optional; requires external tools)

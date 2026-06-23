@@ -16,6 +16,9 @@ Toolchain note: dev env has `riscv64-elf-` at `/opt/homebrew/bin`; run make with
 ## P0 — Verification honesty (the green overstates coverage)
 
 ### B1. Re-enable full-ISA RISCOF compliance (A / PMP / privilege)
+**Branch work:** `codex/compliance-lockstep` adds opt-in/nightly CI lanes for
+`riscof-act-full`; the fast per-push ACT lane remains the I/M/C subset until the slow lane
+is proven green and runtime-bounded.
 **Why:** to keep CI under its 3 h timeout, the ACT filter was scoped to I/M/C only
 (`verification/riscof/scripts/filter_act_testlist.py` excludes `/pmp/`, `/A/`, `/privilege/`).
 So the advertised **IMACU + PMP** ISA is *not* compliance-signed-off — only directed tests cover it.
@@ -27,6 +30,9 @@ the per-push job stays fast. Then re-include those paths and fix any genuine fai
 **Done when:** A/PMP/privilege ACT runs green in CI (nightly or bounded), exclusions documented.
 
 ### B2. Extend Spike lock-step co-sim to rv32imac / U / PMP
+**Branch work:** `codex/compliance-lockstep` adds selectable cosim profiles, including
+`rv32imac-u-pmp`, and changes the RTL retire log to compare raw fetched instruction encodings so
+compressed instructions can lock-step against Spike.
 **Why:** lock-step (`verification/cosim/spike_lockstep.py`) was reverted to **rv32im** to get green;
 it diverged on random imac/privilege programs (an edge case worth finding). Compressed/atomic/U/PMP
 paths have no lock-step backstop.
