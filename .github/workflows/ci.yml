@@ -6,6 +6,15 @@ on:
   pull_request:
     branches: [ main ]
   workflow_dispatch:
+    inputs:
+      extended_compliance:
+        description: "Run slow A/PMP/privilege ACT and rv32imac+U+PMP co-sim lanes"
+        required: false
+        default: false
+        type: boolean
+  schedule:
+    # Nightly extended compliance on the default branch after this workflow lands.
+    - cron: "17 8 * * *"
 
 permissions:
   contents: read
@@ -232,6 +241,61 @@ jobs:
       - name: Run 10k-seed lock-step co-sim
         run: make cosim-lockstep COSIM_SEEDS=10000
 
+  cosim-lockstep-imac-upmp:
+    name: 10k-seed Lock-step Co-sim (rv32imac + U/PMP)
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.extended_compliance == true)
+    needs: [regress, cocotb, formal, synth, benchmark-smoke, sta-sky130]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Verilator 5.038
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git autoconf g++ flex bison libfl2 libfl-dev help2man make ccache zlib1g-dev
+          cd /tmp
+          git clone --depth 1 --branch v5.038 https://github.com/verilator/verilator.git
+          cd verilator
+          autoconf
+          ./configure --prefix=/usr/local
+          make -j$(nproc)
+          sudo make install
+
+      - name: Install RISC-V toolchain
+        run: |
+          sudo apt-get install -y gcc-riscv64-linux-gnu || true
+          sudo apt-get install -y gcc-riscv64-unknown-elf binutils-riscv64-unknown-elf || true
+
+      - name: Cache Spike
+        id: cache-spike-cosim-imac-upmp
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/spike
+          key: spike-${{ runner.os }}-${{ env.SPIKE_REF }}
+
+      - name: Install Spike (reference model)
+        run: |
+          sudo apt-get install -y device-tree-compiler
+          echo "$HOME/.local/spike/bin" >> "$GITHUB_PATH"
+          if [ -x "$HOME/.local/spike/bin/spike" ]; then
+            "$HOME/.local/spike/bin/spike" --version || true
+            exit 0
+          fi
+          git init /tmp/riscv-isa-sim
+          cd /tmp/riscv-isa-sim
+          git remote add origin https://github.com/riscv-software-src/riscv-isa-sim.git
+          git fetch --depth 1 origin "$SPIKE_REF"
+          git checkout FETCH_HEAD
+          mkdir build && cd build
+          ../configure --prefix="$HOME/.local/spike" --enable-commitlog
+          make -j$(nproc)
+          make install
+          "$HOME/.local/spike/bin/spike" --version || true
+
+      - name: Run 10k-seed rv32imac + U/PMP lock-step co-sim
+        run: make cosim-lockstep-imac-upmp COSIM_SEEDS=10000
+
   riscof-act:
     name: RISCOF ACT (I/M/C/Zicsr CI subset, 95 tests)
     runs-on: ubuntu-latest
@@ -301,6 +365,77 @@ jobs:
           make riscof-check-tools
           make build/sim_sisPlatformTop USE_AXIL=0
           make riscof-act
+
+  riscof-act-full:
+    name: RISCOF ACT Full (A/PMP/privilege opt-in)
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.extended_compliance == true)
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Verilator 5.038
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git autoconf g++ flex bison libfl2 libfl-dev help2man make ccache zlib1g-dev
+          cd /tmp
+          git clone --depth 1 --branch v5.038 https://github.com/verilator/verilator.git
+          cd verilator
+          autoconf
+          ./configure --prefix=/usr/local
+          make -j$(nproc)
+          sudo make install
+
+      - name: Install RISC-V toolchain
+        run: |
+          sudo apt-get install -y gcc-riscv64-linux-gnu || true
+          sudo apt-get install -y gcc-riscv64-unknown-elf binutils-riscv64-unknown-elf || true
+
+      - name: Cache Spike
+        id: cache-spike-riscof-full
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/spike
+          key: spike-${{ runner.os }}-${{ env.SPIKE_REF }}
+
+      - name: Install Spike (reference model)
+        run: |
+          sudo apt-get install -y device-tree-compiler
+          echo "$HOME/.local/spike/bin" >> "$GITHUB_PATH"
+          if [ -x "$HOME/.local/spike/bin/spike" ]; then
+            "$HOME/.local/spike/bin/spike" --version || true
+            exit 0
+          fi
+          git init /tmp/riscv-isa-sim
+          cd /tmp/riscv-isa-sim
+          git remote add origin https://github.com/riscv-software-src/riscv-isa-sim.git
+          git fetch --depth 1 origin "$SPIKE_REF"
+          git checkout FETCH_HEAD
+          mkdir build && cd build
+          ../configure --prefix="$HOME/.local/spike" --enable-commitlog
+          make -j$(nproc)
+          make install
+          "$HOME/.local/spike/bin/spike" --version || true
+
+      - name: Install RISCOF Python stack
+        run: |
+          python3 -m venv .venv-riscof
+          . .venv-riscof/bin/activate
+          pip install -r verification/riscof/requirements.txt
+
+      - name: Run full RISCOF rv32imac_zicsr ACT suite
+        run: |
+          . .venv-riscof/bin/activate
+          if command -v riscv64-unknown-elf-gcc >/dev/null; then
+            export RV_PREFIX=riscv64-unknown-elf-
+          else
+            export RV_PREFIX=riscv64-linux-gnu-
+          fi
+          export RISCOF_TOOLCHAIN_PREFIX="$RV_PREFIX"
+          make riscof-check-tools
+          make build/sim_sisPlatformTop USE_AXIL=0
+          make riscof-act-full
 
   sta-sky130:
     name: Sky130 STA (WNS/TNS/Fmax)
