@@ -96,6 +96,21 @@ module sisAxiLiteSlave #(
   logic [7:0]  uart_rx_data;
   logic        uart_rx_valid;
 
+  typedef enum logic [2:0] {
+    WR_IDLE,
+    WR_GOT_AW,
+    WR_GOT_W,
+    WR_EXEC,
+    WR_WAIT,
+    WR_RESP
+  } wr_state_t;
+  wr_state_t wr_state;
+  logic [31:0] wr_addr_reg;
+  logic [31:0] wr_data_reg;
+  logic [3:0]  wr_strb_reg;
+  logic [1:0]  wr_resp_reg;
+  logic [3:0]  wr_stall_cnt;
+
   // PLIC subset (inline; matches rtl/periph/sisPlic.sv register layout)
   localparam logic [31:0] PLIC_OFF_PRIORITY  = 32'h0000_0004;
   localparam logic [31:0] PLIC_OFF_PENDING   = 32'h0000_1000;
@@ -386,22 +401,6 @@ module sisAxiLiteSlave #(
   // ---------------------------------------------------------------
   // Write path FSM
   // ---------------------------------------------------------------
-  typedef enum logic [2:0] {
-    WR_IDLE,
-    WR_GOT_AW,   // Got AW, waiting for W
-    WR_GOT_W,    // Got W, waiting for AW
-    WR_EXEC,     // Both AW+W received, execute write
-    WR_WAIT,     // Stall before B response
-    WR_RESP      // B response
-  } wr_state_t;
-
-  wr_state_t wr_state;
-  logic [31:0] wr_addr_reg;
-  logic [31:0] wr_data_reg;
-  logic [3:0]  wr_strb_reg;
-  logic [1:0]  wr_resp_reg;
-  logic [3:0]  wr_stall_cnt;
-
   always_comb begin
     mtime_next = mtime + 64'd1;
     if (wr_state == WR_EXEC && is_clint(wr_addr_reg)) begin
