@@ -52,7 +52,8 @@ module sisRam #(
 
   assign req_ready = !pending || rsp_ready;
 
-  always_ff @(posedge clk or negedge rst_n) begin
+  // The simulation-only initialization and clocked byte writes are separate processes.
+  always @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
       pending   <= 1'b0;
       rdata_reg <= 32'h0;

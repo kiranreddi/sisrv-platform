@@ -56,6 +56,12 @@ module sisRvCore #(
     input  logic        d_rsp_err
 );
 
+  // Declare cross-stage control signals before any earlier combinational use.
+  logic halted;
+  logic data_rsp_fire;
+  logic id_to_ex_fire;
+  logic wb_single_step_stop;
+
   localparam logic [3:0] ALU_ADD = 4'b0000;
   localparam logic [3:0] ALU_SUB = 4'b1000;
 
@@ -302,7 +308,6 @@ module sisRvCore #(
 
   localparam logic [1:0] PRIV_M = 2'b11;
   localparam logic [1:0] PRIV_U = 2'b00;
-  logic        halted;
   logic        step_active;
   assign dbg_halted = halted;
 
@@ -936,7 +941,6 @@ module sisRvCore #(
   logic data_req_fire;
   logic if_req_fire;
   logic pf_req_fire;
-  logic data_rsp_fire;
   logic if_rsp_fire;
 
   assign data_req_active = ex_mem_requesting;
@@ -1122,9 +1126,6 @@ module sisRvCore #(
   // Pipeline control
   // ---------------------------------------------------------------
   logic ex_can_accept;
-  logic id_to_ex_fire;
-  logic wb_single_step_stop;
-
   assign ex_can_accept = !ex_valid || ex_to_wb_fire;
   assign id_to_ex_fire = if_id_valid && ex_can_accept && !ex_redirect &&
                          !id_ex_hazard &&
@@ -1587,7 +1588,8 @@ module sisRvCore #(
     end
   end
 
-`ifndef SYNTHESIS
+`ifndef COMMERCIAL_SIM
+  // Commercial simulators do not link the Verilator-only retire callback.
   import "DPI-C" function void dpi_sisrv_retire_insn(
     input int unsigned pc_val,
     input int unsigned insn_val,

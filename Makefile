@@ -2,6 +2,7 @@
 
 VERILATOR ?= verilator
 TOP       ?= sisPlatformTop
+ROOT      := $(CURDIR)
 BUILD     ?= build
 HOST_JOBS ?= $(shell nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
 USE_AXIL  ?= 0
@@ -39,7 +40,9 @@ CYCLE_GUARD_TESTS        := $(PIPELINE_THROUGHPUT_TEST) $(FETCH_THROUGHPUT_TEST)
 ASM_TESTS := $(filter-out $(CYCLE_GUARD_TESTS),$(wildcard sw/tests/asm/*.S))
 ASM_HEXES := $(patsubst sw/tests/asm/%.S,$(BUILD)/tests/%.hex,$(ASM_TESTS))
 
-.PHONY: sim lint clean wave regress regress-axil regress-axil-stall pipeline-debug pipeline-throughput fetch-throughput sw all tests cocotb formal formal-axil synth sta sta-sky130 cosim-lockstep cosim-lockstep-imac cosim-lockstep-imac-upmp \
+.PHONY: sim lint clean wave regress regress-axil regress-axil-stall pipeline-debug pipeline-throughput fetch-throughput sw all tests cocotb formal formal-axil formal-questa \
+        sim-questa sim-vcs sim-xcelium regress-questa regress-vcs regress-xcelium regress-all-sims \
+        synth sta sta-sky130 cosim-lockstep cosim-lockstep-imac cosim-lockstep-imac-upmp \
         benchmark benchmark-coremark benchmark-dhrystone benchmark-smoke \
         riscof-check-tools riscof-smoke riscof-act riscof-act-full riscof-rv32i riscof-rv32im
 
@@ -154,6 +157,55 @@ regress-axil:
 regress-axil-stall:
 	@$(MAKE) regress USE_AXIL=1 AXIL_STALL_RATE=25
 
+# Commercial simulator bring-up. Each tool invocation runs inside LSF.
+SIM_TEST ?= test_pass
+SIM_RESULTS ?= $(BUILD)/multisim
+FORMAL_RESULTS ?= $(BUILD)/formal-questa
+LSF_QUEUE ?= regress
+
+sim-questa: $(BUILD)/tests/$(SIM_TEST).hex
+	@mkdir -p $(SIM_RESULTS)
+	bsub -q $(LSF_QUEUE) -J sisrv_questa -o $(SIM_RESULTS)/questa.out -e $(SIM_RESULTS)/questa.err \
+	  "$(ROOT)/verification/sim/run_questa.sh $(SIM_TEST) $(SIM_RESULTS)/questa/$(SIM_TEST)"
+
+sim-vcs: $(BUILD)/tests/$(SIM_TEST).hex
+	@mkdir -p $(SIM_RESULTS)
+	bsub -q $(LSF_QUEUE) -J sisrv_vcs -o $(SIM_RESULTS)/vcs.out -e $(SIM_RESULTS)/vcs.err \
+	  "$(ROOT)/verification/sim/run_vcs.sh $(SIM_TEST) $(SIM_RESULTS)/vcs/$(SIM_TEST)"
+
+sim-xcelium: $(BUILD)/tests/$(SIM_TEST).hex
+	@mkdir -p $(SIM_RESULTS)
+	bsub -q $(LSF_QUEUE) -J sisrv_xcelium -o $(SIM_RESULTS)/xcelium.out -e $(SIM_RESULTS)/xcelium.err \
+	  "$(ROOT)/verification/sim/run_xcelium.sh $(SIM_TEST) $(SIM_RESULTS)/xcelium/$(SIM_TEST)"
+
+regress-questa:
+	$(ROOT)/verification/sim/run_regress_lsf.sh questa $(SIM_RESULTS)/questa
+
+regress-vcs:
+	$(ROOT)/verification/sim/run_regress_lsf.sh vcs $(SIM_RESULTS)/vcs
+
+regress-xcelium:
+	$(ROOT)/verification/sim/run_regress_lsf.sh xcelium $(SIM_RESULTS)/xcelium
+
+regress-all-sims:
+	@$(MAKE) regress-questa SIM_RESULTS=$(SIM_RESULTS)
+	@$(MAKE) regress-vcs SIM_RESULTS=$(SIM_RESULTS)
+	@$(MAKE) regress-xcelium SIM_RESULTS=$(SIM_RESULTS)
+	@printf '%-32s | %-8s | %-8s | %-8s\n' TEST QUESTA VCS XCELIUM
+	@printf '%-32s-+-%-8s-+-%-8s-+-%-8s\n' '--------------------------------' '--------' '--------' '--------'
+	@status=0; for hex in $(ASM_HEXES); do \
+	  name=$$(basename $$hex .hex); \
+	  row="$$name"; \
+	  for tool in questa vcs xcelium; do \
+	    log="$(SIM_RESULTS)/$$tool/logs/$$name/sim.log"; \
+	    if grep -q '\*\*\* PASS \*\*\*' "$$log" 2>/dev/null; then result=PASS; \
+	    elif grep -q '\*\*\* TIMEOUT \*\*\*' "$$log" 2>/dev/null; then result=TIMEOUT; status=1; \
+	    else result=FAIL; status=1; fi; \
+	    row="$$row|$$result"; \
+	  done; \
+	  printf '%-32s | %-8s | %-8s | %-8s\n' $$(echo "$$row" | tr '|' ' '); \
+	done; exit $$status
+
 # Run a single test
 run-%: $(SIM) $(BUILD)/tests/%.hex
 	@touch ram.hex
@@ -241,6 +293,10 @@ formal-axil:
 	@echo "=== Running optional AXI-Lite formal check ==="
 	@cd formal && sby -f axil_master.sby
 	@echo "=== AXI-Lite formal check PASSED ==="
+
+formal-questa:
+	@verification/formal/questa/run_lsf.sh $(FORMAL_RESULTS) autocheck
+	@verification/formal/questa/run_lsf.sh $(FORMAL_RESULTS) propcheck
 
 # Yosys synthesis (requires yosys)
 synth:

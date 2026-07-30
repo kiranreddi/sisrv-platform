@@ -43,7 +43,7 @@ module sisJtagDtm (
   localparam logic [3:0] ST_DR_EXIT = 4'd2;
   localparam logic [3:0] ST_IR_SHIFT = 4'd3;
 
-  always_ff @(posedge clk or negedge rst_n) begin
+  always @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
       tck_sync  <= 1'b0;
       tck_prev  <= 1'b0;
@@ -59,7 +59,7 @@ module sisJtagDtm (
 
   wire tck_rise = tck_sync && !tck_prev;
 
-  always_ff @(posedge clk or negedge rst_n) begin
+  always @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
       tap_state <= ST_IDLE;
       ir        <= IR_BYPASS;
@@ -108,7 +108,8 @@ module sisJtagDtm (
   logic        dmi_pending;
   logic [40:0] dmi_op; // {op[1:0], addr[6:0], data[31:0]}
 
-  always_ff @(posedge clk or negedge rst_n) begin
+  // The DMI process consumes DR, which is updated by the TAP process above.
+  always @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
       dmi_pending   <= 1'b0;
       dmi_op        <= 41'h0;
