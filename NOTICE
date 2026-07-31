@@ -1,0 +1,33 @@
+sisrv-platform
+Copyright 2026 Silicon Verification Consultants Ltd
+
+This product includes software developed by Silicon Verification Consultants Ltd,
+licensed under the Apache License, Version 2.0 (see LICENSE).
+
+--------------------------------------------------------------------------------
+Third-party components
+--------------------------------------------------------------------------------
+
+The files under third_party/ are vendored from upstream projects and are NOT
+covered by the Apache License above. They remain under their own terms. Each
+directory records its upstream source and pinned revision in SOURCE.md.
+
+1. EEMBC CoreMark  --  third_party/coremark/
+   Upstream: https://github.com/eembc/coremark
+   Version:  v1.01 (commit cfa9ab377835911f23d9b0831c7be302ed1f58de)
+   Terms:    CoreMark Acceptable Use Agreement, third_party/coremark/LICENSE.md
+   Note:     CoreMark is a registered trademark of the Embedded Microprocessor
+             Benchmark Consortium. Publishing CoreMark scores is subject to
+             EEMBC run and reporting rules. Benchmark figures produced by this
+             repository are internal cycle-normalized Verilator measurements
+             and are not official or certified EEMBC submissions.
+
+2. Dhrystone 2.1  --  third_party/dhrystone/
+   Upstream: https://github.com/Keith-S-Thompson/dhrystone
+   Version:  Dhrystone C 2.1, 25 May 1988
+             (commit 66bb9df1a5dea67f33437b856bf68ae52bd5c90f)
+   Terms:    See third_party/dhrystone/README and RATIONALE. The original
+             Dhrystone distribution carries no formal license text.
+   Note:     Dhrystone figures produced by this repository are internal
+             cycle-normalized Verilator measurements, reported with the
+             compiler, ISA, simulator, and memory conditions recorded.
