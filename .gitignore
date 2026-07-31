@@ -25,6 +25,10 @@ formal/*/
 # Synthesis artifacts
 build/*_synth.v
 
+# Fetched Sky130 PDK / liberty (scripts/fetch_sky130_*.sh)
+third_party/sky130/
+third_party/sky130hd/
+
 # RISCOF / architectural test artifacts
 .venv-riscof/
 verification/riscof/riscv-arch-test/

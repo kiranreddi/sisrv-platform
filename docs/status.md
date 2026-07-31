@@ -1,6 +1,6 @@
 # Implementation Status
 
-**Last updated**: 2026-06-23 (HPM counters + backlog cleanup on benchmark-bringup)
+**Last updated**: 2026-07-31 (M8 OpenROAD Sky130 hardening)
 
 ## Summary
 
@@ -157,6 +157,7 @@ x0 always 0 ✅, PC word-aligned ✅, correct sign/zero extension ✅
 | AXI-Lite PLIC/CLINT support | ✅ Done | Inline PLIC + CLINT in `sisAxiLiteSlave.sv` (76/76 regress-axil) |
 | AXI-Lite system regression | ✅ Done | `make regress-axil` runs all 76 regression assembly tests through the AXI path |
 | cocotb bridge tests | ✅ Done | 11 tests: reset, R/W, errors, stalls, 100-txn random stress |
+| 1000-seed stall nightly | ✅ Done | `make cocotb-axil-stall-nightly`; CI schedule / workflow_dispatch |
 | Formal AXI-Lite bridge | Optional | Bounded VALID stability, mutual exclusion, data stability (`make formal-axil`) |
 
 **Exit criteria**: Full regression suite passes through the AXI path ✅,
@@ -243,6 +244,7 @@ timer interrupt tests run with the AXI slave timer model ✅, CI covers `make re
 | Reset strategy audit | ✅ Done | Consistent async active-low reset across all modules |
 | No sim constructs in synth | ✅ Done | $readmemh, $display behind guards; initial blocks are ASIC-safe |
 | `make synth` target | ✅ Done | Runs Yosys synthesis from Makefile |
+| Synth report CI artifact | ✅ Done | `ppa-synth-report` uploaded from the `synth` job |
 
 **Synthesis constraints (documented)**:
 - Target clock period: 20ns (50 MHz, conservative for educational design)
@@ -274,14 +276,21 @@ timer interrupt tests run with the AXI slave timer model ✅, CI covers `make re
 
 ---
 
-### 🔲 Milestone 8 — OpenROAD hardening
-**Status: NOT STARTED**
+### ✅ Milestone 8 — OpenROAD hardening
+**Status: COMPLETE** (reference hardenable IP slice on Sky130 HD)
 
-Planned:
-- Sky130 PDK flow
-- Core + AXI bridge only (RAM/ROM as blackboxes)
-- GDS generation
-- DRC/LVS (clean or documented deltas)
+| Deliverable | Status | Notes |
+|-------------|--------|-------|
+| Harden top | ✅ Done | `rtl/asic/sisHardenTop.sv` — ALU + decode + regfile + decompress + AXI-Lite |
+| Sky130 PDK fetch | ✅ Done | `scripts/fetch_sky130_pdk.sh` → `third_party/sky130hd/` |
+| Yosys Sky130 synth | ✅ Done | `make synth-harden` |
+| OpenROAD PnR | ✅ Done | `scripts/openroad_flow.tcl` — floorplan/place/CTS/route → DEF/SPEF/SDF |
+| GDS stream-out | ✅ Done | Magic `scripts/magic_gds.tcl` (`make openroad-gds`) |
+| DRC/LVS | ✅ Done | Magic DRC + optional KLayout; deltas in `docs/HARDENING.md` |
+| Power report | ✅ Done | Vectorless OpenROAD `*_power.rpt` → PPA datasheet |
+| Full `sisRvCore` GDS | 🔲 Deferred | Yosys SV frontend cannot parse CSR/PMP packed arrays / `int` casts yet |
+
+**Exit criteria**: GDS produced ✅; DRC/LVS clean or deltas documented ✅ (`docs/HARDENING.md`)
 
 ---
 
@@ -304,7 +313,8 @@ Planned:
 | Simulation time | < 2s per test |
 | Waveform format | FST |
 | CI pipeline | GitHub Actions (lint, regress, pipeline debug, cocotb, formal, synth, RISCOF, STA, gated 10k co-sim) |
-| Synthesis | Yosys (make synth) |
+| Synthesis | Yosys (make synth); reports uploaded as CI artifacts |
+| OpenROAD harden (M8) | `make harden` → Sky130 HD GDS/DEF/SDF for `sisHardenTop` |
 
 ## Files Implemented
 

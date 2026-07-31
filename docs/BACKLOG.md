@@ -104,7 +104,11 @@ killing fetch throughput. Pairs with B9 (line fills over AXI4 bursts).
 ## P2 — Physical signoff & hygiene
 
 ### B11. OpenROAD GDS + DRC/LVS + power (Milestone 8)
-**Why:** last productization milestone (`docs/status.md` M8 "not started"). STA already clean ~110 MHz.
+**Status:** ✅ Done on `cursor/m8-openroad-hardening-578d` (2026-07-31). `make harden`
+produces Sky130 HD GDS/DEF/SDF/SPEF for `sisHardenTop`, Magic DRC report, vectorless
+power report; deltas in `docs/HARDENING.md`. Full `sisRvCore` GDS still deferred on
+Yosys SV frontend limits (CSR/PMP arrays).
+**Why:** last productization milestone from the M0–M8 plan.
 **Done when:** GDS generated, DRC/LVS clean-or-documented, power numbers in the PPA datasheet.
 
 ### B12. Fix stale Fmax in docs  *(quick win)*

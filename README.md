@@ -35,7 +35,7 @@ keeping the implementation readable and open.
 
 - Not a certified or licensable commercial RISC-V IP product.
 - **U-mode + PMP**: 8-region physical memory protection, M+U privilege, 76 asm regress tests.
-- No cache, certified benchmark submission, or physical GDS signoff yet.
+- No cache or certified benchmark submission yet; M8 produces a Sky130 HD GDS for the hardenable datapath+AXI slice (`make harden`).
 
 ## Product Snapshot
 
@@ -122,7 +122,7 @@ analysis and product-grade roadmap.
 | M5 - RV32M multiply/divide | Complete: 33/33 asm tests pass |
 | M6 - 3-stage pipeline | Complete: independent IF, ID, EX/MEM, and WB/retire occupancy |
 | M7 - Yosys synthesis | Complete |
-| M8 - OpenROAD hardening | Planned |
+| M8 - OpenROAD hardening | Complete: Sky130 HD GDS for `sisHardenTop` (`make harden`) |
 
 Detailed status lives in [`docs/status.md`](docs/status.md).
 

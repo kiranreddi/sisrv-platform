@@ -115,6 +115,33 @@ jobs:
           echo "================================"
           make cocotb
 
+  axil-stall-nightly:
+    name: AXI-Lite 1000-seed Stall Nightly (M3)
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.extended_compliance == true)
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Verilator 5.038
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git autoconf g++ flex bison libfl2 libfl-dev help2man make ccache zlib1g-dev python3-pip
+          cd /tmp
+          git clone --depth 1 --branch v5.038 https://github.com/verilator/verilator.git
+          cd verilator
+          autoconf
+          ./configure --prefix=/usr/local
+          make -j$(nproc)
+          sudo make install
+
+      - name: Install cocotb
+        run: pip install cocotb
+
+      - name: Run 1000-seed AXI-Lite stall stress
+        run: make cocotb-axil-stall-nightly AXIL_STALL_SEEDS=1000 AXIL_STALL_TXNS=100
+
   formal:
     name: Formal Verification (ALU + RegFile + Decoder + AXI-Lite)
     runs-on: ubuntu-latest
@@ -150,6 +177,13 @@ jobs:
           make synth
           test -s build/ppa_synth_report.txt
           head -40 build/ppa_synth_report.txt
+
+      - name: Upload synthesis report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ppa-synth-report
+          path: build/ppa_synth_report.txt
+          if-no-files-found: error
 
   benchmark-smoke:
     name: Benchmark Smoke
@@ -470,3 +504,63 @@ jobs:
 
       - name: Run Sky130 STA
         run: make sta-sky130
+
+      - name: Upload STA report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sta-sky130-report
+          path: build/sta_sky130_report.txt
+          if-no-files-found: error
+
+  openroad-harden:
+    name: OpenROAD Sky130 Harden (M8)
+    runs-on: ubuntu-latest
+    needs: synth
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install micromamba + OpenROAD/Yosys/Magic
+        run: |
+          curl -Ls https://micro.mamba.pm/api/micromamba/linux-64/latest | tar -xvj -C /tmp bin/micromamba
+          export MAMBA_ROOT_PREFIX=$HOME/mamba
+          /tmp/bin/micromamba create -y -n or -c litex-hub -c conda-forge openroad yosys magic
+          echo "$HOME/mamba/envs/or/bin" >> $GITHUB_PATH
+
+      - name: Run full M8 harden flow
+        run: |
+          yosys -V
+          openroad -version
+          magic --version
+          # Skip TritonRoute detailed_route in CI (multi-hour on litex-hub OpenROAD).
+          make harden HARDEN_DROUTE_ITERS=0
+          test -s build/openroad/sisHardenTop.gds
+          test -s build/openroad/sisHardenTop.def
+          test -s build/openroad/sisHardenTop_pnr.v
+          test -s build/openroad/sisHardenTop.sdf
+          test -s build/openroad/sisHardenTop_magic_drc.rpt
+          test -s build/harden_pnr_report.txt
+          test -s build/harden_power.rpt
+          echo "=== PnR report ==="
+          cat build/harden_pnr_report.txt
+          echo "=== DRC (head) ==="
+          head -30 build/harden_drc.rpt
+
+      - name: Upload harden artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: openroad-harden-sky130
+          path: |
+            build/openroad/sisHardenTop.gds
+            build/openroad/sisHardenTop.def
+            build/openroad/sisHardenTop_pnr.v
+            build/openroad/sisHardenTop.sdf
+            build/openroad/sisHardenTop.spef
+            build/openroad/sisHardenTop_pnr_report.txt
+            build/openroad/sisHardenTop_power.rpt
+            build/openroad/sisHardenTop_magic_drc.rpt
+            build/openroad/sisHardenTop_synth_stat.txt
+            build/harden_pnr_report.txt
+            build/harden_power.rpt
+            build/harden_drc.rpt
+          if-no-files-found: error
