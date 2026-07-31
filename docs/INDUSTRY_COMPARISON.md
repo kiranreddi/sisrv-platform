@@ -173,7 +173,7 @@ Legend: ✅ have · 🟡 partial · ❌ missing · **P0** = required for any pro
 | PPA datasheet (area, fmax, power, per node) | yes | ✅ | `docs/PPA_DATASHEET.md` + Yosys area | **P0** |
 | DFT: scan insertion, MBIST hooks, coverage | yes | ❌ | reset strategy is DFT-friendly but no scan | P1 |
 | Low-power intent (UPF), clock gating | yes | ❌ | — | P2 |
-| OpenROAD/commercial GDS hardening | yes | 🟡 | planned (M8), not done | P1 |
+| OpenROAD/commercial GDS hardening | yes | 🟡 | M8 `sisHardenTop` GDS/DRC on Sky130 HD; full-core GDS deferred (Yosys SV) | P1 |
 | Lint/CDC sign-off (Spyglass-class) | yes | 🟡 | Verilator lint only; no CDC (single clock today) | P1 |
 
 ### 4.8 Productization & business
@@ -305,7 +305,7 @@ Ship criteria — all must be true to make the claim:
 - [x] Standard interrupt subsystem (CLINT + PLIC/CLIC), multiple prioritized sources.
 - [x] RISC-V Debug Module + JTAG (halt/resume/step subset); GDB/OpenOCD path documented.
 - [x] RV32IMC at minimum with M6 in-order pipeline implemented; internal benchmark numbers published in `docs/BENCHMARKS.md`.
-- [x] STA reported on a named PDK with a PPA datasheet; timing closure and GDS DRC/LVS remain M8 work.
+- [x] STA reported on a named PDK with a PPA datasheet; M8 GDS/DRC/LVS for hardenable IP slice (`docs/HARDENING.md`).
 - [x] OSI license, PRM + integration guide, versioned release collateral started.
 
 ---

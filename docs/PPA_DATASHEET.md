@@ -35,13 +35,25 @@ includes core FSM, decode, CSR, CLINT/PLIC, debug DM/DTM, and AXI bridge.
 
 ## Power
 
-Power estimation requires switching activity (VCD/SAIF) and Liberty power tables.
-Use OpenROAD + Sky130 after place-and-route for wire-accurate capacitance.
+| Metric | Value | Method |
+|--------|-------|--------|
+| Vectorless post-PnR | `build/openroad/sisHardenTop_power.rpt` after `make harden` | OpenROAD `report_power` / area on Sky130 HD |
+| Activity-based (SAIF/VCD) | not yet | Needs switching dump from Verilator |
+| Post-PnR WNS (global route) | +5.807 ns | `make harden` / `sisHardenTop_pnr_report.txt` |
+| Post-PnR est. Fmax | ~70.5 MHz | Derived from 20 ns clock − WNS |
+
+Wire-accurate capacitance needs RCX SPEF; older OpenROAD builds used in CI may emit a SPEF stub — see `docs/HARDENING.md`.
 
 ## Hardening (M8)
 
-OpenROAD Sky130 flow: `scripts/openroad_flow.tcl`  
-Exit gate: GDS DRC/LVS clean or documented deltas per milestone M8.
+| Item | Status |
+|------|--------|
+| Flow | `make harden` → `scripts/openroad_flow.tcl` + Magic GDS/DRC |
+| Top | `sisHardenTop` (ALU/decode/regfile/decompress + AXI-Lite) |
+| Synth area | ~63.4k µm² (Yosys Sky130 HD) |
+| GDS | `build/openroad/sisHardenTop.gds` (~4 MB) |
+| Magic DRC | 0 errors on streamed DEF (educational tech) |
+| Full-core GDS | Deferred (Yosys SV frontend limits on CSR/PMP) |
 
 ## CPI / Performance
 

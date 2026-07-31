@@ -44,7 +44,9 @@ ASM_HEXES := $(patsubst sw/tests/asm/%.S,$(BUILD)/tests/%.hex,$(ASM_TESTS))
         sim-questa sim-vcs sim-xcelium regress-questa regress-vcs regress-xcelium regress-all-sims \
         synth sta sta-sky130 cosim-lockstep cosim-lockstep-imac cosim-lockstep-imac-upmp \
         benchmark benchmark-coremark benchmark-dhrystone benchmark-smoke \
-        riscof-check-tools riscof-smoke riscof-act riscof-act-full riscof-rv32i riscof-rv32im
+        riscof-check-tools riscof-smoke riscof-act riscof-act-full riscof-rv32i riscof-rv32im \
+        fetch-sky130-pdk synth-harden openroad-harden openroad-gds openroad-drc openroad-lvs harden \
+        cocotb-axil-stall-nightly
 
 
 all: sim
@@ -279,6 +281,16 @@ cocotb:
 	@cd tb/cocotb && rm -rf sim_build results.xml && $(MAKE) -f Makefile.pmp SIM=verilator
 	@echo "=== cocotb tests PASSED ==="
 
+# M3 stretch: 1000-seed AXI-Lite random stall stress (nightly / optional)
+AXIL_STALL_SEEDS ?= 1000
+AXIL_STALL_TXNS ?= 100
+cocotb-axil-stall-nightly:
+	@echo "=== AXI-Lite random stall stress ($(AXIL_STALL_SEEDS) seeds × $(AXIL_STALL_TXNS) txns) ==="
+	@cd tb/cocotb && rm -rf sim_build results.xml && \
+	  AXIL_STALL_SEEDS=$(AXIL_STALL_SEEDS) AXIL_STALL_TXNS=$(AXIL_STALL_TXNS) \
+	  $(MAKE) -f Makefile.axil SIM=verilator
+	@echo "=== AXI-Lite stall nightly PASSED ==="
+
 # Formal verification (requires SymbiYosys + yosys + z3)
 formal:
 	@echo "=== Running formal proofs ==="
@@ -331,6 +343,109 @@ sta-sky130:
 	@sta -no_splash $(BUILD)/sta_sky130_run.tcl
 	@test -s $(BUILD)/sta_sky130_report.txt
 	@cat $(BUILD)/sta_sky130_report.txt
+
+# ---------------------------------------------------------------------------
+# Milestone 8 — OpenROAD Sky130 hardening (sisHardenTop)
+# Requires: yosys (SV-capable), openroad, magic; klayout optional for DRC/LVS
+# ---------------------------------------------------------------------------
+SKY130_PDK_DIR ?= third_party/sky130hd
+SKY130_HARDEN_LIB ?= $(SKY130_PDK_DIR)/lib/sky130_fd_sc_hd__tt_025C_1v80.lib
+HARDEN_TOP ?= sisHardenTop
+HARDEN_OUT ?= $(BUILD)/openroad
+HARDEN_NETLIST ?= $(HARDEN_OUT)/$(HARDEN_TOP)_synth.v
+HARDEN_STAT ?= $(HARDEN_OUT)/$(HARDEN_TOP)_synth_stat.txt
+
+fetch-sky130-pdk:
+	@bash scripts/fetch_sky130_pdk.sh
+	@# Keep the STA liberty cache in sync when the full PDK is present.
+	@mkdir -p third_party/sky130
+	@if [ -s "$(SKY130_HARDEN_LIB)" ]; then \
+	  cp -f "$(SKY130_HARDEN_LIB)" third_party/sky130/sky130_fd_sc_hd__tt_025C_1v80.lib; \
+	fi
+
+synth-harden: fetch-sky130-pdk
+	@echo "=== Yosys Sky130 synth ($(HARDEN_TOP)) ==="
+	@mkdir -p $(HARDEN_OUT)
+	@command -v yosys >/dev/null || (echo "yosys not installed"; exit 1)
+	@sed -e "s|@LIBERTY_FILE@|$(SKY130_HARDEN_LIB)|g" \
+	     -e "s|@OUT_NETLIST@|$(HARDEN_NETLIST)|g" \
+	     -e "s|@OUT_STAT@|$(HARDEN_STAT)|g" \
+	     scripts/yosys_synth_harden.tcl > $(HARDEN_OUT)/yosys_synth_harden.ys
+	@yosys -s $(HARDEN_OUT)/yosys_synth_harden.ys
+	@test -s $(HARDEN_NETLIST)
+	@test -s $(HARDEN_STAT)
+	@echo "Netlist: $(HARDEN_NETLIST)"
+	@tail -20 $(HARDEN_STAT)
+
+# Default 0: skip detailed_route in CI (older TritonRoute is multi-hour on this
+# slice). Set HARDEN_DROUTE_ITERS=3+ locally for a deeper route attempt.
+HARDEN_DROUTE_ITERS ?= 0
+
+openroad-harden: synth-harden
+	@echo "=== OpenROAD PnR ($(HARDEN_TOP)) ==="
+	@command -v openroad >/dev/null || (echo "openroad not installed — see docs/HARDENING.md"; exit 1)
+	@mkdir -p $(HARDEN_OUT)
+	@PDK_DIR=$(abspath $(SKY130_PDK_DIR)) \
+	 NETLIST=$(abspath $(HARDEN_NETLIST)) \
+	 SDC=$(abspath scripts/constraints_sisHardenTop.sdc) \
+	 OUT_DIR=$(abspath $(HARDEN_OUT)) \
+	 DESIGN_NAME=$(HARDEN_TOP) \
+	 LIBERTY_FILE=$(abspath $(SKY130_HARDEN_LIB)) \
+	 HARDEN_DROUTE_ITERS=$(HARDEN_DROUTE_ITERS) \
+	 openroad -no_init -exit scripts/openroad_flow.tcl
+	@test -s $(HARDEN_OUT)/$(HARDEN_TOP).def
+	@test -s $(HARDEN_OUT)/$(HARDEN_TOP)_pnr.v
+	@echo "PnR report:"; cat $(HARDEN_OUT)/$(HARDEN_TOP)_pnr_report.txt
+
+MAGIC_TECH ?= $(SKY130_PDK_DIR)/magic/sky130gds.tech
+
+openroad-gds: openroad-harden
+	@echo "=== Magic GDS stream-out ==="
+	@command -v magic >/dev/null || (echo "magic not installed — see docs/HARDENING.md"; exit 1)
+	@test -s $(MAGIC_TECH) || (echo "Missing Magic tech $(MAGIC_TECH) — run make fetch-sky130-pdk"; exit 1)
+	@PDK_DIR=$(abspath $(SKY130_PDK_DIR)) \
+	 OUT_DIR=$(abspath $(HARDEN_OUT)) \
+	 DESIGN_NAME=$(HARDEN_TOP) \
+	 magic -T $(MAGIC_TECH) -noconsole -dnull scripts/magic_gds.tcl
+	@test -s $(HARDEN_OUT)/$(HARDEN_TOP).gds
+	@ls -lh $(HARDEN_OUT)/$(HARDEN_TOP).gds
+
+openroad-drc: openroad-gds
+	@echo "=== Magic DRC ==="
+	@PDK_DIR=$(abspath $(SKY130_PDK_DIR)) \
+	 OUT_DIR=$(abspath $(HARDEN_OUT)) \
+	 DESIGN_NAME=$(HARDEN_TOP) \
+	 magic -T $(MAGIC_TECH) -noconsole -dnull scripts/magic_drc.tcl
+	@test -s $(HARDEN_OUT)/$(HARDEN_TOP)_magic_drc.rpt
+	@head -20 $(HARDEN_OUT)/$(HARDEN_TOP)_magic_drc.rpt
+	@PDK_DIR=$(abspath $(SKY130_PDK_DIR)) \
+	 OUT_DIR=$(abspath $(HARDEN_OUT)) \
+	 DESIGN_NAME=$(HARDEN_TOP) \
+	 bash scripts/run_klayout_drc_lvs.sh
+
+openroad-lvs: openroad-drc
+	@echo "=== LVS summary (KLayout when available) ==="
+	@if [ -f $(HARDEN_OUT)/$(HARDEN_TOP)_klayout_lvs.lvsdb ]; then \
+	  ls -lh $(HARDEN_OUT)/$(HARDEN_TOP)_klayout_lvs.lvsdb; \
+	else \
+	  echo "KLayout LVS skipped or unavailable; see docs/HARDENING.md deltas"; \
+	fi
+
+# Full M8 exit path: synth → PnR → GDS → DRC (+ optional LVS)
+harden: openroad-drc
+	@echo "=== M8 harden artifacts ==="
+	@ls -lh $(HARDEN_OUT)/$(HARDEN_TOP).gds \
+	        $(HARDEN_OUT)/$(HARDEN_TOP).def \
+	        $(HARDEN_OUT)/$(HARDEN_TOP)_pnr.v \
+	        $(HARDEN_OUT)/$(HARDEN_TOP).sdf \
+	        $(HARDEN_OUT)/$(HARDEN_TOP).spef \
+	        $(HARDEN_OUT)/$(HARDEN_TOP)_pnr_report.txt \
+	        $(HARDEN_OUT)/$(HARDEN_TOP)_magic_drc.rpt \
+	        $(HARDEN_OUT)/$(HARDEN_TOP)_power.rpt
+	@cp -f $(HARDEN_OUT)/$(HARDEN_TOP)_pnr_report.txt $(BUILD)/harden_pnr_report.txt
+	@cp -f $(HARDEN_OUT)/$(HARDEN_TOP)_power.rpt $(BUILD)/harden_power.rpt
+	@cp -f $(HARDEN_OUT)/$(HARDEN_TOP)_magic_drc.rpt $(BUILD)/harden_drc.rpt
+	@echo "M8 harden complete — see docs/HARDENING.md"
 
 COSIM_SEEDS ?= 10000
 COSIM_INSNS ?= 12
