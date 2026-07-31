@@ -33,12 +33,14 @@ Those modules remain fully verified in simulation / RISCOF / co-sim. Closing the
 
 ```bash
 # Tools: yosys (≥0.38 recommended), openroad, magic; klayout optional
-make fetch-sky130-pdk   # sparse-checkout ORFS sky130hd platform (~20 MB)
+# Install tip: micromamba create -n or -c litex-hub -c conda-forge openroad yosys magic
+make fetch-sky130-pdk   # sparse-checkout ORFS sky130hd + Magic tech (~20 MB)
 make synth-harden       # Yosys → Sky130 netlist
-make openroad-harden    # Floorplan / place / CTS / route → DEF + SDF + SPEF
+make openroad-harden    # Floorplan / place / CTS / global route → DEF/SDF
 make openroad-gds       # Magic stream-out → GDS
 make openroad-drc       # Magic DRC (+ KLayout DRC/LVS if installed)
-make harden             # Full M8 path
+make harden             # Full M8 path (CI default: HARDEN_DROUTE_ITERS=0)
+make harden HARDEN_DROUTE_ITERS=3   # optional deeper TritonRoute attempt
 ```
 
 Artifacts land in `build/openroad/`:
