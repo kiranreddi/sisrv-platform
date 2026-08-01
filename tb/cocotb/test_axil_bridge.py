@@ -292,35 +292,47 @@ async def test_axil_back_to_back(dut):
 
 @cocotb.test()
 async def test_axil_random_stall_stress(dut):
-    """Randomized read/write stress with random stalls (100 transactions)."""
+    """Randomized read/write stress with random stalls.
+
+    Defaults: 1 seed × 100 txns (fast CI). Nightly M3 coverage sets
+    AXIL_STALL_SEEDS=1000 (and optionally AXIL_STALL_TXNS).
+    """
+    import os
+
     clock = Clock(dut.clk, 10, units="ns")
     cocotb.start_soon(clock.start())
     await reset_dut(dut)
 
-    random.seed(42)
-    count = 100
+    seed_count = int(os.environ.get("AXIL_STALL_SEEDS", "1"))
+    count = int(os.environ.get("AXIL_STALL_TXNS", "100"))
+    base_seed = int(os.environ.get("AXIL_STALL_BASE_SEED", "42"))
 
-    for i in range(count):
-        is_write = random.choice([True, False])
-        addr = random.choice([
-            random.randint(0, 0x0000FFFF),       # ROM range
-            random.randint(0x80000000, 0x8003FFFF), # RAM range
-            0x10000000,                            # MMIO
-        ])
-        stall_a = random.randint(0, 5)
-        stall_d = random.randint(0, 5)
+    for seed_off in range(seed_count):
+        seed = base_seed + seed_off
+        random.seed(seed)
+        for i in range(count):
+            is_write = random.choice([True, False])
+            addr = random.choice([
+                random.randint(0, 0x0000FFFF),       # ROM range
+                random.randint(0x80000000, 0x8003FFFF), # RAM range
+                0x10000000,                            # MMIO
+            ])
+            stall_a = random.randint(0, 5)
+            stall_d = random.randint(0, 5)
 
-        if is_write:
-            data = random.randint(0, MASK32)
-            stall_b = random.randint(0, 3)
-            err = await do_write(dut, addr, data, stall_aw=stall_a, stall_w=stall_d, stall_b=stall_b)
-        else:
-            rdata = random.randint(0, MASK32)
-            result, err = await do_read(dut, addr, stall_ar=stall_a, stall_r=stall_d, rdata=rdata)
-            assert result == rdata, \
-                f"Txn {i}: read data mismatch 0x{result:08x} vs 0x{rdata:08x}"
+            if is_write:
+                data = random.randint(0, MASK32)
+                stall_b = random.randint(0, 3)
+                err = await do_write(dut, addr, data, stall_aw=stall_a, stall_w=stall_d, stall_b=stall_b)
+            else:
+                rdata = random.randint(0, MASK32)
+                result, err = await do_read(dut, addr, stall_ar=stall_a, stall_r=stall_d, rdata=rdata)
+                assert result == rdata, \
+                    f"seed={seed} txn={i}: read data mismatch 0x{result:08x} vs 0x{rdata:08x}"
 
-    dut._log.info(f"Random stall stress ({count} txns): PASS")
+    dut._log.info(
+        f"Random stall stress ({seed_count} seeds × {count} txns): PASS"
+    )
 
 
 @cocotb.test()

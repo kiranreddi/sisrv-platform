@@ -120,7 +120,7 @@ Key principles:
 - ✅ 11 cocotb bridge unit tests with random stall stress (100 txns)
 - ✅ Bounded formal safety check: VALID stability, mutual exclusion, data stability
 - ✅ Full regression (29 asm tests) through AXI path in CI
-- 🔲 1000-seed randomized stall nightly (stretch/nightly coverage)
+- ✅ 1000-seed randomized stall nightly (`make cocotb-axil-stall-nightly`, CI schedule)
 
 ### Exit criteria
 - ✅ AXI-Lite bridge lint-clean and unit-tested
@@ -242,25 +242,27 @@ Key principles:
 ### Exit criteria
 - ✅ Yosys synthesis script exists and synthesizes core + bridge
 - ✅ Sim-only constructs properly guarded
-- 🔲 Synthesis reports saved as CI artifacts
+- ✅ Synthesis reports saved as CI artifacts
 
 ---
 
-## Milestone 8 — OpenROAD hardening (Sky130 reference) (2–4 weeks)
+## Milestone 8 — OpenROAD hardening (Sky130 reference) — COMPLETE
 ### Objectives
-- Produce GDS for core + bridge (mem/ROM blackboxed).
+- Produce GDS for core datapath + bridge (mem/ROM blackboxed).
 
 ### Approach
-- Harden core + AXI bridge only first (no RAM macros)
+- Harden synthesizable datapath + AXI bridge first (no RAM macros)
 - Treat RAM/ROM as blackboxes (use known SRAM macros later)
+- Full `sisRvCore` GDS deferred until Yosys can parse CSR/PMP SV constructs
 
 ### Deliverables
-- OpenROAD flow scripts + constraints
-- Floorplan, PnR, DRC/LVS (as far as open flow allows)
-- Post-PnR netlist and SDF (if generated)
+- ✅ `rtl/asic/sisHardenTop.sv` + `scripts/openroad_flow.tcl` + SDC
+- ✅ Floorplan, PnR, Magic GDS, Magic/KLayout DRC (+ optional LVS)
+- ✅ Post-PnR netlist, SPEF, SDF, vectorless power report
+- ✅ Deltas documented in `docs/HARDENING.md`
 
 ### Exit criteria
-- GDS produced; DRC/LVS is clean or deltas are documented and understood.
+- ✅ GDS produced; DRC/LVS clean or deltas documented (`make harden`)
 
 ---
 
