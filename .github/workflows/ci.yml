@@ -28,7 +28,7 @@ env:
 jobs:
   # Build Verilator once; consumers download the install prefix artifact.
   verilator:
-    name: Build Verilator (${{ env.VERILATOR_REF }})
+    name: Build Verilator
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
