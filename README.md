@@ -324,7 +324,9 @@ Workflow: [`.github/workflows/ci.yml`](.github/workflows/ci.yml). Runs on push/P
 | Build Verilator (`v5.050`) | every PR/push | Shared Verilator install artifact for sim jobs |
 | Verilator Lint | every PR/push | RTL lint-clean |
 | Assembly Regression | every PR/push | 76 asm tests corebus + AXI-Lite + stall path; pipeline/fetch/debug guards |
-| cocotb Tests (50) | every PR/push | ALU, RegFile, Decode, CSR, AXI-Lite, PMP (cocotb 2.0.1) |
+| cocotb Tests (55) | every PR/push | ALU, RegFile, Decode, Decompress, CSR, AXI-Lite, PMP (cocotb 2.0.1) |
+| Unit Coverage Baseline | every PR/push | Informational Verilator `--coverage` (Decompress) |
+| Lock-step Smoke (imac+U/PMP) | every PR/push | 64-seed B2 triage (10k nightly) |
 | Software Artifacts (UVM/cocotb) | every PR/push | Prebuilt asm hex/elf for hosts without `riscv-gcc` |
 | Formal | every PR/push | Required ALU/RegFile/Decode proofs |
 | Yosys Synthesis | every PR/push | Generic synth; uploads `ppa-synth-report` |

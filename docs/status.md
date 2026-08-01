@@ -7,7 +7,7 @@
 The sisrv-platform project implements a fully functional RV32IMAC RISC-V processor core
 with M-mode CSRs, trap handling, **CLINT/PLIC interrupts**, **RISC-V Debug subset**,
 GPIO, UART, HPM counters, and an AXI4-Lite master bridge.
-The core is verified through **76** directed assembly regression tests, pipeline throughput/debug-step Verilator tests, **50** cocotb unit tests (ALU/RegFile/Decode/CSR/AXI/PMP),
+The core is verified through **76** directed assembly regression tests, pipeline throughput/debug-step Verilator tests, **55** cocotb unit tests (ALU/RegFile/Decode/Decompress/CSR/AXI/PMP),
 required formal proofs (ALU/RegFile/Decode; optional AXI), **RISCOF rv32imac_zicsr ACT suite** I/M/C subset (**95/95** filtered tests in CI; A/PMP/privilege still excluded from the per-push lane), and
 **10k-seed retired-instruction Spike lock-step co-sim** (rv32im profile) as a final gated CI lane.
 
@@ -307,7 +307,7 @@ timer interrupt tests run with the AXI slave timer model ✅, CI covers `make re
 | Pipeline throughput guard | `make pipeline-throughput` passing on the direct corebus path |
 | Benchmark smoke | `make benchmark-smoke` builds/runs reduced CoreMark + Dhrystone validation |
 | Publish benchmark | `make benchmark` generates `build/bench/summary.json` and logs |
-| cocotb unit tests | 50 tests (3 ALU + 4 RegFile + 11 Decode + 14 CSR + 11 AXI-Lite + 7 PMP) |
+| cocotb unit tests | 55 tests (3 ALU + 4 RegFile + 11 Decode + 5 Decompress + 14 CSR + 11 AXI-Lite + 7 PMP) |
 | cocotb status | 50/50 in CI job name / `@cocotb.test` count |
 | Formal proofs/checks | Required: ALU (all 10 ops), RegFile (x0=0), Decode (fields + legality). Optional: AXI-Lite bounded safety (`make formal-axil`) |
 | Formal status | All proofs PASS |
