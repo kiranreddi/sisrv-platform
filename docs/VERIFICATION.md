@@ -3,7 +3,7 @@
 ## Summary
 
 The sisrv-platform uses a multi-tier verification strategy combining directed assembly
-tests, randomized cocotb unit tests, and formal proofs. All tests run on Verilator 5.038.
+tests, randomized cocotb unit tests, and formal proofs. All tests run on Verilator 5.050.
 
 If your host cannot install a RISC-V toolchain, download CI-built ROM images
 (`sisrv-sw-artifacts`) and install with `make sw-from-artifacts` — see
@@ -40,7 +40,7 @@ Compiled with `rv32im_zicsr` ISA and run on the full platform simulation.
 
 ### Tier 2: cocotb Randomized Tests (43 tests)
 
-Unit-level tests using cocotb with constrained random stimulus on Verilator 5.038.
+Unit-level tests using cocotb 2.x with constrained random stimulus on Verilator 5.050.
 
 **ALU (3 tests)**:
 - 1000 directed edge-case pairs (10 values × 10 values × 10 ops)

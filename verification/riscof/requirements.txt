@@ -1,4 +1,6 @@
 # Pinned versions for a working RISCOF stack (see README.md).
+# Kept on the ACT-compatible 1.23.x line (legacy riscv-test-suite/ layout).
+# Do not bump to riscof 1.25+ / riscv-config 3.x without re-validating ACT fetch.
 riscof==1.23.4
 riscv-config==2.17.0
 riscv-isac==0.7.2
