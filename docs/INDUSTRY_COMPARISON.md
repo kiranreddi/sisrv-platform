@@ -184,7 +184,7 @@ Legend: ✅ have · 🟡 partial · ❌ missing · **P0** = required for any pro
 | Integration guide + programmer's reference manual | yes | ✅ | `docs/INTEGRATION_GUIDE.md`, `docs/PROGRAMMERS_REFERENCE.md` | **P0** |
 | Configurable, documented parameter set | yes | 🟡 | a few params, not a product config matrix | P1 |
 | Versioning, release notes, errata process | yes | ❌ | — | P1 |
-| Example SoC + firmware (BSP, RTOS port) | yes | 🟡 | bare-metal asm only; no C BSP/RTOS port | P1 |
+| Example SoC + firmware (BSP, RTOS port) | yes | 🟡 | bare-metal asm + C BSP for CoreMark/Dhrystone; no RTOS port | P1 |
 
 ---
 
