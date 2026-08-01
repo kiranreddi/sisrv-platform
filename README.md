@@ -289,7 +289,7 @@ implemented.
 |---|---:|---:|---|
 | ROM | `0x0000_0000` | 2 MB | Reset vector, program code (ACT link.ld) |
 | Timer / CLINT | `0x0200_0000` | 64 KB | MSIP, MTIMECMP, MTIME |
-| PLIC | `0x0C00_0000` | 64 KB | 8 external IRQ sources |
+| PLIC | `0x0C00_0000` | 4 MB | 8 external IRQ sources (context @ `+0x20_0000`) |
 | MMIO | `0x1000_0000` | 64 KB | tohost pass/fail signaling |
 | GPIO | `0x1000_3000` | 20 B | DATA/DIR/IN/SET/CLR |
 | UART | `0x1000_4000` | 20 B | TXDATA/RXDATA/STATUS/CTRL/BAUDDIV |

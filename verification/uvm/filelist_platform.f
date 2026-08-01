@@ -1,6 +1,7 @@
 +incdir+third_party/uvm/src
 +incdir+verification/uvm/vip/decompress
 +incdir+verification/uvm/vip/tohost
++incdir+verification/uvm/vip/jtag
 +incdir+verification/uvm/env
 +incdir+verification/uvm/tests
 +incdir+rtl
@@ -17,6 +18,8 @@ verification/uvm/vip/decompress/sis_decompress_if.sv
 verification/uvm/vip/decompress/sis_decompress_pkg.sv
 verification/uvm/vip/tohost/sis_tohost_if.sv
 verification/uvm/vip/tohost/sis_tohost_pkg.sv
+verification/uvm/vip/jtag/sis_jtag_if.sv
+verification/uvm/vip/jtag/sis_jtag_pkg.sv
 verification/uvm/env/sis_env_pkg.sv
 verification/uvm/tests/sis_test_pkg.sv
 rtl/core/sisAlu.sv

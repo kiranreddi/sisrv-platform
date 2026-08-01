@@ -44,5 +44,10 @@ make uvm-platform UVM_TEST=sis_platform_tohost_test \
 
 ## Coverage
 
-Enable Verilator code coverage with `UVM_COVERAGE=1 make uvm-decompress`.
-Functional bins for Verilator remain Python/cocotb or SVA `cover` (no SV covergroups).
+```bash
+UVM_COVERAGE=1 make uvm-decompress           # single-smoke .dat
+make uvm-coverage                            # L0 + all asm via UVM; merge/annotate
+# Reports: build/coverage/uvm/coverage_uvm.txt  (see docs/UVM_COVERAGE_BASELINE.md)
+```
+
+Functional bins: decompress scoreboard `DEC_FC` (no SV covergroups on Verilator).

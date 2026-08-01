@@ -3,6 +3,7 @@ package sis_env_pkg;
   `include "uvm_macros.svh"
   import sis_decompress_pkg::*;
   import sis_tohost_pkg::*;
+  import sis_jtag_pkg::*;
 
   class sis_decompress_env extends uvm_env;
     `uvm_component_utils(sis_decompress_env)
@@ -27,6 +28,7 @@ package sis_env_pkg;
   class sis_platform_env extends uvm_env;
     `uvm_component_utils(sis_platform_env)
     sis_tohost_agent tohost;
+    sis_jtag_agent   jtag;
 
     function new(string name, uvm_component parent);
       super.new(name, parent);
@@ -35,6 +37,7 @@ package sis_env_pkg;
     function void build_phase(uvm_phase phase);
       super.build_phase(phase);
       tohost = sis_tohost_agent::type_id::create("tohost", this);
+      jtag   = sis_jtag_agent::type_id::create("jtag", this);
     endfunction
   endclass
 

@@ -207,6 +207,51 @@ jobs:
           make uvm-platform UVM_PLATFORM_TEST=sis_platform_tohost_test \
             UVM_ROM_HEX=build/tests/test_pass.hex
 
+      - name: UVM platform regress (all asm)
+        run: make uvm-platform-regress
+
+  uvm-coverage:
+    name: UVM Coverage (informational)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    needs: [verilator, lint]
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Download Verilator
+        uses: actions/download-artifact@v4
+        with:
+          name: verilator-${{ env.VERILATOR_REF }}
+          path: /tmp/verilator-art
+
+      - name: Install Verilator + RISC-V toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential ccache \
+            gcc-riscv64-linux-gnu binutils-riscv64-linux-gnu
+          mkdir -p "$HOME/.local"
+          tar -xzf /tmp/verilator-art/verilator.tar.gz -C "$HOME/.local"
+          echo "$HOME/.local/verilator/bin" >> "$GITHUB_PATH"
+          echo "VERILATOR_ROOT=$HOME/.local/verilator/share/verilator" >> "$GITHUB_ENV"
+          "$HOME/.local/verilator/bin/verilator" --version
+
+      - name: Ensure UVM library present
+        run: |
+          if [ ! -f third_party/uvm/src/uvm.sv ]; then
+            bash scripts/ci/fetch_uvm.sh
+          fi
+
+      - name: UVM coverage (decompress + platform regress)
+        run: make uvm-coverage
+
+      - name: Upload UVM coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-uvm
+          path: build/coverage/uvm/
+          if-no-files-found: warn
+
   coverage-unit:
     name: Unit Coverage Baseline (informational)
     runs-on: ubuntu-latest

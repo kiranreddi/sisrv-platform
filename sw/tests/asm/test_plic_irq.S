@@ -12,8 +12,8 @@ ext_handler:
     ori   x7, x7, 11
     bne   x5, x7, fail
 
-    # PLIC claim (read) then complete (write)
-    li    x8, 0x0C002004
+    # PLIC claim (read) then complete (write) @ 0x0C200004
+    li    x8, 0x0C200004
     lw    x9, 0(x8)
     addi  x20, x20, 1
     sw    x9, 0(x8)
@@ -35,13 +35,27 @@ setup:
     li    x19, 0
     li    x20, 0
 
+    # priority[1] = 5
     li    x8, 0x0C000004
     li    x9, 5
     sw    x9, 0(x8)
 
+    # enable source 1
     li    x8, 0x0C002000
     li    x9, 2
     sw    x9, 0(x8)
+
+    # threshold = 0 (allow priority 5) @ 0x0C200000
+    li    x8, 0x0C200000
+    sw    x0, 0(x8)
+
+    # Cover PLIC readback paths (pending/enable/threshold)
+    li    x8, 0x0C001000
+    lw    x9, 0(x8)
+    li    x8, 0x0C002000
+    lw    x9, 0(x8)
+    li    x8, 0x0C200000
+    lw    x9, 0(x8)
 
     li    x1, 0x800
     csrw  mie, x1

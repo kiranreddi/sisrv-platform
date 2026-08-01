@@ -34,15 +34,26 @@ third_party/uvm/    Accellera UVM (uvm-2017-1.0-vlt)
 ```bash
 make uvm-decompress                          # L0 UVM smoke
 make sw && make uvm-platform                 # platform UVM + test_pass.hex
-UVM_COVERAGE=1 make uvm-decompress           # code coverage
+make uvm-platform-regress                    # all asm images via UVM platform TB
+UVM_COVERAGE=1 make uvm-decompress           # code coverage (single smoke)
+make uvm-coverage                            # L0 + full platform regress, merge/annotate
+# Reports: build/coverage/uvm/coverage_uvm.txt (+ annotate/)
 ```
+
+## Coverage notes
+
+- Verilator `--coverage` (line/toggle/branch/expr). No SV `covergroup` on Verilator.
+- UVM decompress scoreboard also prints Python-style functional bins (`DEC_FC`).
+- Constrained `randomize()` needs z3 on Verilator; sequences use `$urandom` instead.
+- Annotate noise includes UVM library; DUT summary filters `sis*.sv`.
 
 ## Phase order
 
-1. **Ship UVM env on Verilator** (this work): Decompress agent + platform tohost env + CI.
-2. **B2**: keep 64-seed imac+U/PMP lock-step smoke; fix divergences via Issues.
-3. Grow VIP: corebus/AXI agents, IRQ, then JTAG/DM.
-4. Coverage floors only after measured baselines.
+1. **Ship UVM env on Verilator** (done): Decompress agent + platform tohost env + CI.
+2. **Enable coverage + close L0 gaps** (this work): `make uvm-coverage`, expand decompress seq/scoreboard.
+3. **B2**: keep 64-seed imac+U/PMP lock-step smoke; fix divergences via Issues.
+4. Grow VIP: corebus/AXI agents, IRQ, then JTAG/DM.
+5. Coverage floors only after measured baselines.
 
 ## Non-goals
 

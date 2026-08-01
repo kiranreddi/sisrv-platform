@@ -137,7 +137,7 @@ x0 always 0 ✅, PC word-aligned ✅, correct sign/zero extension ✅
 | Formal Decode proof | ✅ Done | Field extraction, immediate invariants, legality consistency (yosys SAT) |
 | Formal AXI-Lite check | Optional | Bounded VALID stability, mutual exclusion, data stability (`make formal-axil`) |
 | cocotb PMP lane | ✅ Done | 7 tests in `tb/cocotb/test_pmp.py` (part of the 50-test suite) |
-| UVM on Verilator | ✅ Done | `verification/uvm/` + `third_party/uvm` (uvm-2017-1.0-vlt); L0 decompress smoke + platform tohost (`test_pass`) |
+| UVM on Verilator | ✅ Done | `verification/uvm/` + `third_party/uvm` (uvm-2017-1.0-vlt); L0 decompress + **76/76** platform UVM regress; `make uvm-coverage` baseline in `docs/UVM_COVERAGE_BASELINE.md` |
 | CI pipeline | ✅ Done | GitHub Actions: lint, regress, cocotb (55), UVM Verilator, formal, synth, RISCOF, STA, OpenROAD harden, gated 10k co-sim (+ nightly/opt-in lanes) |
 
 ---
@@ -311,7 +311,7 @@ timer interrupt tests run with the AXI slave timer model ✅, CI covers `make re
 | Publish benchmark | `make benchmark` generates `build/bench/summary.json` and logs |
 | cocotb unit tests | 55 tests (3 ALU + 4 RegFile + 11 Decode + 5 Decompress + 14 CSR + 11 AXI-Lite + 7 PMP) |
 | cocotb status | 55/55 in CI job name / `@cocotb.test` count |
-| UVM (Verilator) | `make uvm-decompress` + `make uvm-platform` (tohost/`test_pass`); CI job `uvm-verilator` |
+| UVM (Verilator) | `make uvm-decompress` / `uvm-platform` / `uvm-platform-regress` / `uvm-coverage`; CI `uvm-verilator` + informational `uvm-coverage` |
 | Formal proofs/checks | Required: ALU (all 10 ops), RegFile (x0=0), Decode (fields + legality). Optional: AXI-Lite bounded safety (`make formal-axil`) |
 | Formal status | All proofs PASS |
 | Simulation time | < 2s per test |

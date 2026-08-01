@@ -5,7 +5,7 @@
 //   ROM:   0x0000_0000 - 0x001F_FFFF (2 MB; matches ACT link.ld and sisRom depth)
 //   CLINT: 0x0200_0000 - 0x0200_FFFF
 //   MMIO:  0x1000_0000 - 0x1000_FFFF (tohost, GPIO, UART)
-//   PLIC:  0x0C00_0000 - 0x0C00_FFFF
+//   PLIC:  0x0C00_0000 - 0x0C3F_FFFF (covers context threshold/claim @ +0x20_0000)
 //   RAM:   0x8000_0000 - 0x8003_FFFF
 
 module sisMemFabric (
@@ -89,7 +89,7 @@ module sisMemFabric (
   assign sel_rom   = ~|m_req_addr[31:21];
   assign sel_clint = (m_req_addr[31:16] == 16'h0200);
   assign sel_mmio  = (m_req_addr[31:16] == 16'h1000);
-  assign sel_plic  = (m_req_addr[31:16] == 16'h0C00);
+  assign sel_plic  = (m_req_addr[31:22] == 10'h030); // 0x0C00_0000–0x0C3F_FFFF
   assign sel_ram   = (m_req_addr[31:18] == 14'b10_0000_0000_0000);
 
   logic [2:0] active_slave;

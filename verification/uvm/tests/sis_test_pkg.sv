@@ -3,6 +3,7 @@ package sis_test_pkg;
   `include "uvm_macros.svh"
   import sis_decompress_pkg::*;
   import sis_tohost_pkg::*;
+  import sis_jtag_pkg::*;
   import sis_env_pkg::*;
 
   // Shared base: quiet Verilator UVM_NO_DPI name-check noise; fail the process
@@ -86,9 +87,14 @@ package sis_test_pkg;
 
     task run_phase(uvm_phase phase);
       phase.raise_objection(this);
-      wait (got_result);
-      if (result != TOHOST_PASS)
-        `uvm_error("TOHOST", $sformatf("platform test ended with %s", result.name()))
+      fork
+        env.jtag.driver.smoke();
+        begin
+          wait (got_result);
+          if (result != TOHOST_PASS)
+            `uvm_error("TOHOST", $sformatf("platform test ended with %s", result.name()))
+        end
+      join
       phase.drop_objection(this);
     endtask
   endclass
