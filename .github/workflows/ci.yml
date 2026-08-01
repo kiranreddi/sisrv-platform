@@ -23,7 +23,8 @@ env:
   VERILATOR_REF: v5.050
   SPIKE_REF: 3d8eb089bd289c59dcb506f197a172e02beb7b5b
   COCOTB_VERSION: "2.0.1"
-  OPENSTA_REF: v2.2.0
+  # OpenSTA release tags can reject SWIG 4.x on ubuntu-latest; use tip.
+  OPENSTA_REF: master
 
 jobs:
   # Build Verilator once; consumers download the install prefix artifact.
@@ -39,7 +40,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/.local/verilator
-          key: verilator-${{ runner.os }}-${{ env.VERILATOR_REF }}
+          key: verilator-${{ runner.os }}-${{ env.VERILATOR_REF }}-noccache1
 
       - name: Build Verilator
         if: steps.cache-verilator.outputs.cache-hit != 'true'
@@ -76,6 +77,8 @@ jobs:
 
       - name: Install Verilator from artifact
         run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential ccache
           mkdir -p "$HOME/.local"
           tar -xzf /tmp/verilator-art/verilator.tar.gz -C "$HOME/.local"
           echo "$HOME/.local/verilator/bin" >> "$GITHUB_PATH"
@@ -100,6 +103,8 @@ jobs:
 
       - name: Install Verilator from artifact
         run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential ccache
           mkdir -p "$HOME/.local"
           tar -xzf /tmp/verilator-art/verilator.tar.gz -C "$HOME/.local"
           echo "$HOME/.local/verilator/bin" >> "$GITHUB_PATH"
@@ -140,6 +145,8 @@ jobs:
 
       - name: Install Verilator from artifact
         run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential ccache
           mkdir -p "$HOME/.local"
           tar -xzf /tmp/verilator-art/verilator.tar.gz -C "$HOME/.local"
           echo "$HOME/.local/verilator/bin" >> "$GITHUB_PATH"
@@ -214,6 +221,8 @@ jobs:
 
       - name: Install Verilator from artifact
         run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential ccache
           mkdir -p "$HOME/.local"
           tar -xzf /tmp/verilator-art/verilator.tar.gz -C "$HOME/.local"
           echo "$HOME/.local/verilator/bin" >> "$GITHUB_PATH"
@@ -285,6 +294,8 @@ jobs:
 
       - name: Install Verilator from artifact
         run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential ccache
           mkdir -p "$HOME/.local"
           tar -xzf /tmp/verilator-art/verilator.tar.gz -C "$HOME/.local"
           echo "$HOME/.local/verilator/bin" >> "$GITHUB_PATH"
@@ -324,6 +335,8 @@ jobs:
 
       - name: Install Verilator from artifact
         run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential ccache
           mkdir -p "$HOME/.local"
           tar -xzf /tmp/verilator-art/verilator.tar.gz -C "$HOME/.local"
           echo "$HOME/.local/verilator/bin" >> "$GITHUB_PATH"
@@ -369,6 +382,8 @@ jobs:
 
       - name: Install Verilator from artifact
         run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential ccache
           mkdir -p "$HOME/.local"
           tar -xzf /tmp/verilator-art/verilator.tar.gz -C "$HOME/.local"
           echo "$HOME/.local/verilator/bin" >> "$GITHUB_PATH"
@@ -413,6 +428,8 @@ jobs:
 
       - name: Install Verilator from artifact
         run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential ccache
           mkdir -p "$HOME/.local"
           tar -xzf /tmp/verilator-art/verilator.tar.gz -C "$HOME/.local"
           echo "$HOME/.local/verilator/bin" >> "$GITHUB_PATH"
@@ -474,6 +491,8 @@ jobs:
 
       - name: Install Verilator from artifact
         run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential ccache
           mkdir -p "$HOME/.local"
           tar -xzf /tmp/verilator-art/verilator.tar.gz -C "$HOME/.local"
           echo "$HOME/.local/verilator/bin" >> "$GITHUB_PATH"
