@@ -1,0 +1,11 @@
+---
+description: Git author identity and no co-authored-by trailers
+alwaysApply: true
+---
+
+# Git identity and commits
+
+- Commit as **Kiran Tathekalva** `<kiranreddi.t@gmail.com>` only.
+- Never use Synaptics (or other employer) emails or affiliation in commits or docs.
+- Never add `Co-authored-by:` trailers (Cursor, Copilot, or any bot).
+- Do not set the commit author to `Cursor Agent` or `cursoragent@cursor.com`.
