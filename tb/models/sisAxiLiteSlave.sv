@@ -135,9 +135,7 @@ module sisAxiLiteSlave #(
 
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
-      plic_pending      <= '0;
-      plic_claim_active <= 1'b0;
-      plic_claim_id     <= 4'd0;
+      plic_pending <= '0;
     end else begin
       for (int i = 1; i <= 8; i++) begin
         if (plic_irq[i] | gpio_out[i])
@@ -356,11 +354,6 @@ module sisAxiLiteSlave #(
               rd_stall_cnt <= lfsr_r[3:0] & 4'hF;
             end else begin
               rd_data_reg <= mem_read(araddr);
-              if (is_plic(araddr) && ((araddr - 32'h0C00_0000) == PLIC_OFF_CLAIM) &&
-                  !plic_claim_active && plic_irq_active) begin
-                plic_claim_id     <= plic_winner_id;
-                plic_claim_active <= 1'b1;
-              end
               rd_resp_reg <= (is_rom(araddr) || is_ram(araddr) || is_clint(araddr) || is_plic(araddr) || is_gpio(araddr) || is_uart(araddr) || is_mmio(araddr)) ? 2'b00 : 2'b11;
               rd_state    <= RD_RESP;
             end
@@ -370,11 +363,6 @@ module sisAxiLiteSlave #(
         RD_WAIT: begin
           if (rd_stall_cnt == 0) begin
             rd_data_reg <= mem_read(rd_addr_reg);
-            if (is_plic(rd_addr_reg) && ((rd_addr_reg - 32'h0C00_0000) == PLIC_OFF_CLAIM) &&
-                !plic_claim_active && plic_irq_active) begin
-              plic_claim_id     <= plic_winner_id;
-              plic_claim_active <= 1'b1;
-            end
             rd_resp_reg <= (is_rom(rd_addr_reg) || is_ram(rd_addr_reg) || is_clint(rd_addr_reg) || is_plic(rd_addr_reg) || is_gpio(rd_addr_reg) || is_uart(rd_addr_reg) || is_mmio(rd_addr_reg)) ? 2'b00 : 2'b11;
             rd_state    <= RD_RESP;
           end else begin
@@ -397,6 +385,37 @@ module sisAxiLiteSlave #(
   assign rvalid  = (rd_state == RD_RESP);
   assign rdata   = rd_data_reg;
   assign rresp   = rd_resp_reg;
+
+  // Single-driver claim state (avoids MULTIDRIVEN under Verilator 5.050+ -Wall).
+  logic plic_claim_take;
+  logic plic_claim_complete;
+  always_comb begin
+    plic_claim_take = 1'b0;
+    if (rd_state == RD_IDLE && arvalid && arready && !should_stall(lfsr_r) &&
+        is_plic(araddr) && ((araddr - 32'h0C00_0000) == PLIC_OFF_CLAIM) &&
+        !plic_claim_active && plic_irq_active)
+      plic_claim_take = 1'b1;
+    else if (rd_state == RD_WAIT && rd_stall_cnt == 0 &&
+             is_plic(rd_addr_reg) && ((rd_addr_reg - 32'h0C00_0000) == PLIC_OFF_CLAIM) &&
+             !plic_claim_active && plic_irq_active)
+      plic_claim_take = 1'b1;
+  end
+  always_comb begin
+    plic_claim_complete = (wr_state == WR_EXEC) && is_plic(wr_addr_reg) &&
+                          ((wr_addr_reg - 32'h0C00_0000) == PLIC_OFF_CLAIM) &&
+                          plic_claim_active && (wr_data_reg[3:0] == plic_claim_id);
+  end
+  always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+      plic_claim_active <= 1'b0;
+      plic_claim_id     <= 4'd0;
+    end else if (plic_claim_take) begin
+      plic_claim_id     <= plic_winner_id;
+      plic_claim_active <= 1'b1;
+    end else if (plic_claim_complete) begin
+      plic_claim_active <= 1'b0;
+    end
+  end
 
   // ---------------------------------------------------------------
   // Write path FSM
@@ -429,8 +448,6 @@ module sisAxiLiteSlave #(
         plic_prio[i] <= 8'd1;
       plic_enabled      <= '0;
       plic_threshold    <= 8'd0;
-      plic_claim_id     <= 4'd0;
-      plic_claim_active <= 1'b0;
       gpio_out     <= 32'h0;
       gpio_oe      <= 32'h0;
       uart_ctrl     <= 32'h1;
@@ -540,8 +557,7 @@ module sisAxiLiteSlave #(
                   plic_threshold <= wr_data_reg[7:0];
               end
               PLIC_OFF_CLAIM: begin
-                if (plic_claim_active && (wr_data_reg[3:0] == plic_claim_id))
-                  plic_claim_active <= 1'b0;
+                // Claim complete handled in dedicated plic_claim always_ff.
               end
               default: begin
                 logic [31:0] rel;
