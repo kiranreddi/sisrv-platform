@@ -8,6 +8,19 @@ SPIKE_REF="${SPIKE_REF:?SPIKE_REF must be set}"
 PREFIX="${PREFIX:-${HOME}/.local/spike}"
 JOBS="${JOBS:-$(nproc 2>/dev/null || echo 4)}"
 
+# Spike shells out to `dtc` at runtime. Always ensure it is present, even when
+# the Spike binary itself is restored from CI cache (cache hit used to skip apt).
+ensure_dtc() {
+  if command -v dtc >/dev/null 2>&1; then
+    return 0
+  fi
+  echo "Installing device-tree-compiler (required by Spike at runtime)"
+  sudo apt-get update
+  sudo apt-get install -y device-tree-compiler
+}
+
+ensure_dtc
+
 if [[ -x "${PREFIX}/bin/spike" ]]; then
   echo "Spike already present at ${PREFIX}/bin/spike"
   "${PREFIX}/bin/spike" --version || true

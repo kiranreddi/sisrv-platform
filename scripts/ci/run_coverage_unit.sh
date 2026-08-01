@@ -14,7 +14,7 @@ echo "=== Unit coverage: sisDecompress ==="
 (
   cd tb/cocotb
   rm -rf sim_build results.xml coverage.dat
-  make -f Makefile.decompress SIM=verilator COVERAGE=1
+  make -f Makefile.decompress SIM=verilator VLT_COVERAGE=1
   if compgen -G "sim_build/coverage.dat" > /dev/null; then
     cp -f sim_build/coverage.dat "${OUT}/decompress.dat"
   elif compgen -G "coverage.dat" > /dev/null; then
