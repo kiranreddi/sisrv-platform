@@ -5,7 +5,9 @@ TOPLEVEL = sisDecompress
 MODULE = test_decompress
 SIM ?= verilator
 
-EXTRA_ARGS += --timing
+# Match other cocotb unit Makefiles / top-level Verilator build: width
+# warnings in RV32C bit-scrambling are intentional and otherwise fail -Wall.
+EXTRA_ARGS += --timing -Wno-WIDTHEXPAND -Wno-WIDTHTRUNC
 ifeq ($(COVERAGE),1)
 EXTRA_ARGS += --coverage
 endif
