@@ -157,4 +157,42 @@ module sisMemFabric (
   assign s3_rsp_ready = m_rsp_ready && (active_slave == 3'd3);
   assign s4_rsp_ready = m_rsp_ready && (active_slave == 3'd4);
 
+  // ---------------------------------------------------------------
+  // Synthesizable assertions (guarded by `ifdef ASSERT)
+  // ---------------------------------------------------------------
+`ifdef ASSERT
+  // At most one slave decode hit (regions are designed disjoint).
+  logic [4:0] sel_oh;
+  assign sel_oh = {sel_plic, sel_clint, sel_mmio, sel_ram, sel_rom};
+  assert property (@(posedge clk) disable iff (!rst_n)
+    m_req_valid |-> ($onehot0(sel_oh))
+  ) else $error("FABRIC: overlapping slave selects");
+
+  // Request VALID stability while waiting for READY.
+  logic req_was_valid;
+  always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n) req_was_valid <= 1'b0;
+    else        req_was_valid <= m_req_valid && !m_req_ready;
+  end
+  assert property (@(posedge clk) disable iff (!rst_n)
+    req_was_valid |-> m_req_valid
+  ) else $error("FABRIC: m_req_valid dropped before m_req_ready");
+
+  // Response VALID stability while waiting for READY.
+  logic rsp_was_valid;
+  always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n) rsp_was_valid <= 1'b0;
+    else        rsp_was_valid <= m_rsp_valid && !m_rsp_ready;
+  end
+  assert property (@(posedge clk) disable iff (!rst_n)
+    rsp_was_valid |-> m_rsp_valid
+  ) else $error("FABRIC: m_rsp_valid dropped before m_rsp_ready");
+
+  // Single outstanding: if pending and master still drives a request handshake,
+  // pending must remain (FF ignores new accepts while has_pending).
+  assert property (@(posedge clk) disable iff (!rst_n)
+    (has_pending && m_req_valid && m_req_ready) |=> has_pending
+  ) else $error("FABRIC: lost pending across overlapping request");
+`endif
+
 endmodule

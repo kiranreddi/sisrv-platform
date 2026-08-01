@@ -3,7 +3,7 @@
 [![CI](https://github.com/kiranreddi/sisrv-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/kiranreddi/sisrv-platform/actions/workflows/ci.yml)
 ![ISA](https://img.shields.io/badge/ISA-RV32IMAC-blue)
 ![ASM](https://img.shields.io/badge/asm-76%2F76%20passing-brightgreen)
-![cocotb](https://img.shields.io/badge/cocotb-50%20tests-brightgreen)
+![cocotb](https://img.shields.io/badge/cocotb-55%20tests-brightgreen)
 ![formal](https://img.shields.io/badge/formal-4%20proof%20sets-brightgreen)
 ![synth](https://img.shields.io/badge/synthesis-Yosys-informational)
 ![maturity](https://img.shields.io/badge/maturity-productizing-yellow)
@@ -53,7 +53,7 @@ keeping the implementation readable and open.
 | Interrupts | CLINT (MSIP/MTIP/MTIME), PLIC (8 prioritized sources), GPIO→PLIC mux |
 | Debug | RISC-V DM 0.13 subset + JTAG DTM; halt/resume/step, abstract GPR while halted; 2 hardware triggers (exec/load/store breakpoints) |
 | Bus | Internal corebus plus optional AXI4-Lite bridge path |
-| Verification | 76 asm regression tests (+ pipeline throughput / fetch-buffer / debug-step guards), **50** cocotb tests, required formal proofs (ALU/RegFile/Decode; optional AXI), RISCOF ACT **95/95** I/M/C+Zicsr subset, gated 10k-seed Spike lock-step (rv32im profile in per-push CI) |
+| Verification | 78 asm sources / 76 regress (+ pipeline/fetch/debug guards), **55** cocotb tests (incl. Decompress), formal (ALU/RegFile/Decode; optional AXI), RISCOF ACT **95/95** I/M/C+Zicsr subset, per-push Spike lock-step **rv32im** + **64-seed rv32imac+U/PMP smoke**, plan: [`docs/UVM_COVERAGE_PLAN.md`](docs/UVM_COVERAGE_PLAN.md) |
 | Implementation | Synthesizable SystemVerilog; Verilator sim; Yosys generic synth; Sky130 HD OpenSTA (`make sta-sky130`); OpenROAD+Magic harden for `sisHardenTop` (`make harden`) |
 | Benchmarks | Internal Verilator direct-corebus, `-O2` (not EEMBC-certified): `rv32imc_zicsr` **1.530 CoreMark/MHz** / **0.475 DMIPS/MHz**; `rv32im_zicsr` **1.522** / **0.478** — see [docs/BENCHMARKS.md](docs/BENCHMARKS.md) |
 | Open items | Certified benchmark submission; full-core GDS; A/PMP/privilege ACT + imac+U/PMP lock-step are opt-in/nightly, not the per-push gate |

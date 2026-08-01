@@ -171,7 +171,7 @@ timer interrupt tests run with the AXI slave timer model ✅, CI covers `make re
 
 | Deliverable | Status | Notes |
 |-------------|--------|-------|
-| `sisTimer.sv` | ✅ Done | MTIME (64-bit counter), MTIMECMP, MTIP output |
+| Timer path | ✅ Done via **CLINT** | `sisClint.sv` owns MTIME/MTIMECMP/MTIP; orphan `sisTimer.sv` removed |
 | `sisGpio.sv` | ✅ Done | 32-bit DATA/DIR/IN/SET/CLR MMIO peripheral |
 | `sisUart.sv` | ✅ Done | TXDATA/RXDATA/STATUS/CTRL/BAUDDIV MMIO peripheral |
 | CSR MTIP integration | ✅ Done | ext_mtip → mip.MTIP (bit 7), irq_pending output |

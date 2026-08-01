@@ -151,17 +151,12 @@ Key principles:
 - mepc: PC + 4 (return to next instruction after interrupted one)
 
 ### Deliverables
-- ✅ `rtl/periph/sisTimer.sv` — MTIME (64-bit), MTIMECMP, MTIP output
+- ✅ `rtl/periph/sisClint.sv` — MTIME/MTIMECMP/MSIP (standard CLINT); orphan `sisTimer` removed
 - ✅ CSR: ext_mtip → mip.MTIP, irq_pending output
 - ✅ Core: interrupt check in WB state
-- ✅ `test_timer.S` — deterministic periodic interrupt test
+- ✅ `test_timer.S` / `test_msip.S` — deterministic timer / software IRQ tests
 - ✅ `test_mret_boundary.S` — exact resume point verification (no skipped/repeated instructions)
 - ✅ cocotb test_csr_mtip_irq_pending
-- Timer peripheral at MMIO, simple compare register
-
-### Deliverables
-- `rtl/periph/sisTimer.sv`
-- BSP support + interrupt handler tests
 
 ### Exit criteria
 - “tick” counter increments in handler; mainline continues; PASS if both counters match expected ranges.

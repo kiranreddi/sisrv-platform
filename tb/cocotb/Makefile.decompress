@@ -1,0 +1,13 @@
+# cocotb Makefile for sisDecompress tests
+TOPLEVEL_LANG = verilog
+VERILOG_SOURCES = $(shell pwd)/../../rtl/core/sisDecompress.sv
+TOPLEVEL = sisDecompress
+MODULE = test_decompress
+SIM ?= verilator
+
+EXTRA_ARGS += --timing
+ifeq ($(COVERAGE),1)
+EXTRA_ARGS += --coverage
+endif
+
+include $(shell cocotb-config --makefiles)/Makefile.sim

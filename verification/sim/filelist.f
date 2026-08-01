@@ -18,7 +18,6 @@ rtl/periph/sisGpio.sv
 rtl/periph/sisPlic.sv
 rtl/periph/sisRam.sv
 rtl/periph/sisRom.sv
-rtl/periph/sisTimer.sv
 rtl/periph/sisTohost.sv
 rtl/periph/sisUart.sv
 rtl/debug/sisDm.sv

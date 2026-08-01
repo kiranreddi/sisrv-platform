@@ -1,0 +1,40 @@
+name: RTL / verification bug
+description: Report a DUT or TB bug found by directed, random, or lock-step verification
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - P0 — incorrect retire / trap / PMP allow
+        - P1 — bus / IRQ / protocol
+        - P2 — coverage hole / dead code
+        - P3 — docs / TB-only
+    validations:
+      required: true
+  - type: input
+    id: level
+    attributes:
+      label: Verification level
+      description: e.g. cosim rv32imac-u-pmp, cocotb decompress, asm test_pmp_*
+    validations:
+      required: true
+  - type: input
+    id: seed
+    attributes:
+      label: Seed / test name
+      placeholder: seed 16 / test_decompress
+  - type: textarea
+    id: repro
+    attributes:
+      label: Repro
+      description: Exact make/command and expected vs actual
+    validations:
+      required: true
+  - type: textarea
+    id: suspect
+    attributes:
+      label: Suspected block
+      placeholder: sisDecompress / sisPmp / privilege path …

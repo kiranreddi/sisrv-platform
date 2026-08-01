@@ -45,7 +45,8 @@ ALL_ASM_HEXES := $(patsubst sw/tests/asm/%.S,$(BUILD)/tests/%.hex,$(ALL_ASM_TEST
 
 .PHONY: sim lint clean wave regress regress-axil regress-axil-stall pipeline-debug pipeline-throughput fetch-throughput sw sw-all sw-artifacts sw-from-artifacts all tests cocotb formal formal-axil formal-questa \
         sim-questa sim-vcs sim-xcelium regress-questa regress-vcs regress-xcelium regress-all-sims \
-        synth sta sta-sky130 cosim-lockstep cosim-lockstep-imac cosim-lockstep-imac-upmp \
+        synth sta sta-sky130 cosim-lockstep cosim-lockstep-imac cosim-lockstep-imac-upmp cosim-lockstep-imac-upmp-smoke \
+        coverage-unit \
         benchmark benchmark-coremark benchmark-dhrystone benchmark-smoke \
         riscof-check-tools riscof-smoke riscof-act riscof-act-full riscof-rv32i riscof-rv32im \
         fetch-sky130-pdk synth-harden openroad-harden openroad-gds openroad-drc openroad-lvs harden \
@@ -58,7 +59,7 @@ all: sim
 $(SIM): $(RTL_SRCS) $(TB_SRCS) $(CPP_SRCS)
 	@mkdir -p $(BUILD)
 	$(VERILATOR) -Wall -Wno-UNUSEDSIGNAL -Wno-WIDTHTRUNC -Wno-WIDTHEXPAND -Wno-SELRANGE -Wno-UNUSEDPARAM -Wno-SYNCASYNCNET --cc --exe --build \
-	  -O3 --trace-fst \
+	  -O3 --trace-fst -DASSERT \
 	  -Irtl -Irtl/core -Irtl/bus -Irtl/periph -Irtl/debug -Itb/models \
 	  --top-module $(TOP) \
 	  -GROM_INIT_FILE='"rom.hex"' \
@@ -307,6 +308,8 @@ cocotb:
 	@cd tb/cocotb && rm -rf sim_build results.xml && $(MAKE) -f Makefile.regfile SIM=verilator
 	@echo "=== Running cocotb Decode tests ==="
 	@cd tb/cocotb && rm -rf sim_build results.xml && $(MAKE) -f Makefile.decode SIM=verilator
+	@echo "=== Running cocotb Decompress tests ==="
+	@cd tb/cocotb && rm -rf sim_build results.xml && $(MAKE) -f Makefile.decompress SIM=verilator
 	@echo "=== Running cocotb CSR tests ==="
 	@cd tb/cocotb && rm -rf sim_build results.xml && $(MAKE) -f Makefile.csr SIM=verilator
 	@echo "=== Running cocotb AXI-Lite bridge tests ==="
@@ -314,6 +317,13 @@ cocotb:
 	@echo "=== Running cocotb PMP tests ==="
 	@cd tb/cocotb && rm -rf sim_build results.xml && $(MAKE) -f Makefile.pmp SIM=verilator
 	@echo "=== cocotb tests PASSED ==="
+
+# Informational unit coverage (Verilator --coverage). Floors come later.
+coverage-unit:
+	@bash scripts/ci/run_coverage_unit.sh
+
+cosim-lockstep-imac-upmp-smoke:
+	$(MAKE) cosim-lockstep COSIM_PROFILE=rv32imac-u-pmp COSIM_SEEDS=$(or $(COSIM_SMOKE_SEEDS),64)
 
 # M3 stretch: 1000-seed AXI-Lite random stall stress (nightly / optional)
 AXIL_STALL_SEEDS ?= 1000
@@ -492,7 +502,7 @@ COSIM_STAMP   = $(BUILD)/.cosim_sim_built
 $(COSIM_STAMP): $(RTL_SRCS) $(TB_SRCS) $(CPP_SRCS)
 	@mkdir -p $(BUILD)
 	$(VERILATOR) -Wall -Wno-UNUSEDSIGNAL -Wno-WIDTHTRUNC -Wno-WIDTHEXPAND -Wno-SELRANGE -Wno-UNUSEDPARAM -Wno-SYNCASYNCNET --cc --exe --build \
-	  -O3 --trace-fst \
+	  -O3 --trace-fst -DASSERT \
 	  -Irtl -Irtl/core -Irtl/bus -Irtl/periph -Irtl/debug -Itb/models \
 	  --top-module $(TOP) \
 	  -GROM_INIT_FILE='"rom.hex"' \
