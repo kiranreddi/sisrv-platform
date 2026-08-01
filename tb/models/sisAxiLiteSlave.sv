@@ -249,7 +249,7 @@ module sisAxiLiteSlave #(
   endfunction
 
   function automatic logic is_plic(input [31:0] addr);
-    return (addr[31:16] == 16'h0C00);
+    return (addr[31:22] == 10'h030); // 0x0C00_0000–0x0C3F_FFFF
   endfunction
 
   function automatic logic is_timer(input [31:0] addr);

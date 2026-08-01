@@ -3,7 +3,7 @@
 [![CI](https://github.com/kiranreddi/sisrv-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/kiranreddi/sisrv-platform/actions/workflows/ci.yml)
 ![ISA](https://img.shields.io/badge/ISA-RV32IMAC-blue)
 ![ASM](https://img.shields.io/badge/asm-76%2F76%20passing-brightgreen)
-![cocotb](https://img.shields.io/badge/cocotb-50%20tests-brightgreen)
+![cocotb](https://img.shields.io/badge/cocotb-55%20tests-brightgreen)
 ![formal](https://img.shields.io/badge/formal-4%20proof%20sets-brightgreen)
 ![synth](https://img.shields.io/badge/synthesis-Yosys-informational)
 ![maturity](https://img.shields.io/badge/maturity-productizing-yellow)
@@ -53,7 +53,7 @@ keeping the implementation readable and open.
 | Interrupts | CLINT (MSIP/MTIP/MTIME), PLIC (8 prioritized sources), GPIO→PLIC mux |
 | Debug | RISC-V DM 0.13 subset + JTAG DTM; halt/resume/step, abstract GPR while halted; 2 hardware triggers (exec/load/store breakpoints) |
 | Bus | Internal corebus plus optional AXI4-Lite bridge path |
-| Verification | 76 asm regression tests (+ pipeline throughput / fetch-buffer / debug-step guards), **50** cocotb tests, required formal proofs (ALU/RegFile/Decode; optional AXI), RISCOF ACT **95/95** I/M/C+Zicsr subset, gated 10k-seed Spike lock-step (rv32im profile in per-push CI) |
+| Verification | 78 asm sources / 76 regress (+ pipeline/fetch/debug guards), **55** cocotb tests (incl. Decompress), formal (ALU/RegFile/Decode; optional AXI), RISCOF ACT **95/95** I/M/C+Zicsr subset, per-push Spike lock-step **rv32im** + **64-seed rv32imac+U/PMP smoke**, plan: [`docs/UVM_COVERAGE_PLAN.md`](docs/UVM_COVERAGE_PLAN.md) |
 | Implementation | Synthesizable SystemVerilog; Verilator sim; Yosys generic synth; Sky130 HD OpenSTA (`make sta-sky130`); OpenROAD+Magic harden for `sisHardenTop` (`make harden`) |
 | Benchmarks | Internal Verilator direct-corebus, `-O2` (not EEMBC-certified): `rv32imc_zicsr` **1.530 CoreMark/MHz** / **0.475 DMIPS/MHz**; `rv32im_zicsr` **1.522** / **0.478** — see [docs/BENCHMARKS.md](docs/BENCHMARKS.md) |
 | Open items | Certified benchmark submission; full-core GDS; A/PMP/privilege ACT + imac+U/PMP lock-step are opt-in/nightly, not the per-push gate |
@@ -289,7 +289,7 @@ implemented.
 |---|---:|---:|---|
 | ROM | `0x0000_0000` | 2 MB | Reset vector, program code (ACT link.ld) |
 | Timer / CLINT | `0x0200_0000` | 64 KB | MSIP, MTIMECMP, MTIME |
-| PLIC | `0x0C00_0000` | 64 KB | 8 external IRQ sources |
+| PLIC | `0x0C00_0000` | 4 MB | 8 external IRQ sources (context @ `+0x20_0000`) |
 | MMIO | `0x1000_0000` | 64 KB | tohost pass/fail signaling |
 | GPIO | `0x1000_3000` | 20 B | DATA/DIR/IN/SET/CLR |
 | UART | `0x1000_4000` | 20 B | TXDATA/RXDATA/STATUS/CTRL/BAUDDIV |
@@ -324,7 +324,9 @@ Workflow: [`.github/workflows/ci.yml`](.github/workflows/ci.yml). Runs on push/P
 | Build Verilator (`v5.050`) | every PR/push | Shared Verilator install artifact for sim jobs |
 | Verilator Lint | every PR/push | RTL lint-clean |
 | Assembly Regression | every PR/push | 76 asm tests corebus + AXI-Lite + stall path; pipeline/fetch/debug guards |
-| cocotb Tests (50) | every PR/push | ALU, RegFile, Decode, CSR, AXI-Lite, PMP (cocotb 2.0.1) |
+| cocotb Tests (55) | every PR/push | ALU, RegFile, Decode, Decompress, CSR, AXI-Lite, PMP (cocotb 2.0.1) |
+| Unit Coverage Baseline | every PR/push | Informational Verilator `--coverage` (Decompress) |
+| Lock-step Smoke (imac+U/PMP) | every PR/push | 64-seed B2 triage (10k nightly) |
 | Software Artifacts (UVM/cocotb) | every PR/push | Prebuilt asm hex/elf for hosts without `riscv-gcc` |
 | Formal | every PR/push | Required ALU/RegFile/Decode proofs |
 | Yosys Synthesis | every PR/push | Generic synth; uploads `ppa-synth-report` |

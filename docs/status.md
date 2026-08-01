@@ -1,13 +1,14 @@
 # Implementation Status
 
-**Last updated**: 2026-07-31 (M8 OpenROAD Sky130 hardening)
+**Last updated**: 2026-08-01 (UVM on Verilator: decompress + platform smoke)
 
 ## Summary
 
 The sisrv-platform project implements a fully functional RV32IMAC RISC-V processor core
 with M-mode CSRs, trap handling, **CLINT/PLIC interrupts**, **RISC-V Debug subset**,
 GPIO, UART, HPM counters, and an AXI4-Lite master bridge.
-The core is verified through **76** directed assembly regression tests, pipeline throughput/debug-step Verilator tests, **50** cocotb unit tests (ALU/RegFile/Decode/CSR/AXI/PMP),
+The core is verified through **76** directed assembly regression tests, pipeline throughput/debug-step Verilator tests, **55** cocotb unit tests (ALU/RegFile/Decode/Decompress/CSR/AXI/PMP),
+a **Verilator UVM** environment (`make uvm-decompress` / `make uvm-platform`, chipsalliance `uvm-verilator`),
 required formal proofs (ALU/RegFile/Decode; optional AXI), **RISCOF rv32imac_zicsr ACT suite** I/M/C subset (**95/95** filtered tests in CI; A/PMP/privilege still excluded from the per-push lane), and
 **10k-seed retired-instruction Spike lock-step co-sim** (rv32im profile) as a final gated CI lane.
 
@@ -136,7 +137,8 @@ x0 always 0 ✅, PC word-aligned ✅, correct sign/zero extension ✅
 | Formal Decode proof | ✅ Done | Field extraction, immediate invariants, legality consistency (yosys SAT) |
 | Formal AXI-Lite check | Optional | Bounded VALID stability, mutual exclusion, data stability (`make formal-axil`) |
 | cocotb PMP lane | ✅ Done | 7 tests in `tb/cocotb/test_pmp.py` (part of the 50-test suite) |
-| CI pipeline | ✅ Done | GitHub Actions: lint, regress, cocotb (50), formal, synth, RISCOF, STA, OpenROAD harden, gated 10k co-sim (+ nightly/opt-in lanes) |
+| UVM on Verilator | ✅ Done | `verification/uvm/` + `third_party/uvm` (uvm-2017-1.0-vlt); L0 decompress + **76/76** platform UVM regress; `make uvm-coverage` baseline in `docs/UVM_COVERAGE_BASELINE.md` |
+| CI pipeline | ✅ Done | GitHub Actions: lint, regress, cocotb (55), UVM Verilator, formal, synth, RISCOF, STA, OpenROAD harden, gated 10k co-sim (+ nightly/opt-in lanes) |
 
 ---
 
@@ -171,7 +173,7 @@ timer interrupt tests run with the AXI slave timer model ✅, CI covers `make re
 
 | Deliverable | Status | Notes |
 |-------------|--------|-------|
-| `sisTimer.sv` | ✅ Done | MTIME (64-bit counter), MTIMECMP, MTIP output |
+| Timer path | ✅ Done via **CLINT** | `sisClint.sv` owns MTIME/MTIMECMP/MTIP; orphan `sisTimer.sv` removed |
 | `sisGpio.sv` | ✅ Done | 32-bit DATA/DIR/IN/SET/CLR MMIO peripheral |
 | `sisUart.sv` | ✅ Done | TXDATA/RXDATA/STATUS/CTRL/BAUDDIV MMIO peripheral |
 | CSR MTIP integration | ✅ Done | ext_mtip → mip.MTIP (bit 7), irq_pending output |
@@ -307,8 +309,9 @@ timer interrupt tests run with the AXI slave timer model ✅, CI covers `make re
 | Pipeline throughput guard | `make pipeline-throughput` passing on the direct corebus path |
 | Benchmark smoke | `make benchmark-smoke` builds/runs reduced CoreMark + Dhrystone validation |
 | Publish benchmark | `make benchmark` generates `build/bench/summary.json` and logs |
-| cocotb unit tests | 50 tests (3 ALU + 4 RegFile + 11 Decode + 14 CSR + 11 AXI-Lite + 7 PMP) |
-| cocotb status | 50/50 in CI job name / `@cocotb.test` count |
+| cocotb unit tests | 55 tests (3 ALU + 4 RegFile + 11 Decode + 5 Decompress + 14 CSR + 11 AXI-Lite + 7 PMP) |
+| cocotb status | 55/55 in CI job name / `@cocotb.test` count |
+| UVM (Verilator) | `make uvm-decompress` / `uvm-platform` / `uvm-platform-regress` / `uvm-coverage`; CI `uvm-verilator` + informational `uvm-coverage` |
 | Formal proofs/checks | Required: ALU (all 10 ops), RegFile (x0=0), Decode (fields + legality). Optional: AXI-Lite bounded safety (`make formal-axil`) |
 | Formal status | All proofs PASS |
 | Simulation time | < 2s per test |

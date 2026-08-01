@@ -30,17 +30,15 @@ the per-push job stays fast. Then re-include those paths and fix any genuine fai
 **Done when:** A/PMP/privilege ACT runs green in CI (nightly or bounded), exclusions documented.
 
 ### B2. Extend Spike lock-step co-sim to rv32imac / U / PMP
-**Branch work:** `codex/compliance-lockstep` adds selectable cosim profiles, including
-`rv32imac-u-pmp`, and changes the RTL retire log to compare raw fetched instruction encodings so
-compressed instructions can lock-step against Spike.
-**Why:** lock-step (`verification/cosim/spike_lockstep.py`) was reverted to **rv32im** to get green;
-it diverged on random imac/privilege programs (an edge case worth finding). Compressed/atomic/U/PMP
-paths have no lock-step backstop.
-**Where:** `verification/cosim/spike_lockstep.py` (program gen + spike `--isa`/`--priv`/`--pmpregions`).
-**Approach:** needs local spike to iterate. Re-enable `-march=rv32imac` and `--priv=mu --pmpregions=8`,
-reproduce the seed-16 divergence, root-cause (likely a compressed/atomic decode or a privilege/PMP
-edge case), fix, confirm 10k green.
-**Done when:** lock-step passes 10k seeds on rv32imac with U/PMP enabled.
+**Status:** profiles exist (`rv32imac`, `rv32imac-u-pmp`). Per-push CI now runs a **64-seed smoke**
+(`make cosim-lockstep-imac-upmp-smoke`) for triage; full 10k remains nightly/opt-in.
+**Why:** lock-step was kept on **rv32im** for the long per-push gate; imac/U/PMP diverged historically
+(seed-16 class). Compressed/atomic/U/PMP need a random backstop.
+**Where:** `verification/cosim/spike_lockstep.py`, CI smoke + nightly jobs.
+**Approach:** fail the 64-seed smoke → open GitHub Issue (bug template) → root-cause → fix →
+expand smoke → promote 10k to required when green.
+**Done when:** lock-step passes 10k seeds on `rv32imac-u-pmp` and that lane is a required PR gate.
+**Plan:** [`docs/UVM_COVERAGE_PLAN.md`](UVM_COVERAGE_PLAN.md).
 
 ### B3. Compliance/coverage for the new HW triggers
 **Why:** triggers (Sdtrig) landed with directed tests only.

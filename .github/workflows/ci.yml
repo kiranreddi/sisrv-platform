@@ -131,7 +131,7 @@ jobs:
         run: make pipeline-debug
 
   cocotb:
-    name: cocotb Tests (50 tests)
+    name: cocotb Tests (55 tests)
     runs-on: ubuntu-latest
     needs: [verilator, lint]
     steps:
@@ -162,9 +162,177 @@ jobs:
           echo "=== cocotb Test Configuration ==="
           echo "Simulator backend: Verilator"
           verilator --version
-          echo "DUT top modules: sisAlu, sisRegFile, sisDecode, sisCsr, sisAxiLiteM"
+          echo "DUT top modules: sisAlu, sisRegFile, sisDecode, sisDecompress, sisCsr, sisAxiLiteM, sisPmp"
           echo "================================"
           make cocotb
+
+  uvm-verilator:
+    name: UVM Verilator (Decompress + Platform)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs: [verilator, lint]
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Download Verilator
+        uses: actions/download-artifact@v4
+        with:
+          name: verilator-${{ env.VERILATOR_REF }}
+          path: /tmp/verilator-art
+
+      - name: Install Verilator from artifact
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential ccache \
+            gcc-riscv64-linux-gnu binutils-riscv64-linux-gnu
+          mkdir -p "$HOME/.local"
+          tar -xzf /tmp/verilator-art/verilator.tar.gz -C "$HOME/.local"
+          echo "$HOME/.local/verilator/bin" >> "$GITHUB_PATH"
+          echo "VERILATOR_ROOT=$HOME/.local/verilator/share/verilator" >> "$GITHUB_ENV"
+          "$HOME/.local/verilator/bin/verilator" --version
+
+      - name: Ensure UVM library present
+        run: |
+          if [ ! -f third_party/uvm/src/uvm.sv ]; then
+            bash scripts/ci/fetch_uvm.sh
+          fi
+          test -f third_party/uvm/src/uvm.sv
+
+      - name: UVM L0 Decompress smoke
+        run: make uvm-decompress UVM_TEST=sis_decompress_smoke_test
+
+      - name: UVM platform tohost (test_pass)
+        run: |
+          make sw
+          make uvm-platform UVM_PLATFORM_TEST=sis_platform_tohost_test \
+            UVM_ROM_HEX=build/tests/test_pass.hex
+
+      - name: UVM platform regress (all asm)
+        run: make uvm-platform-regress
+
+  uvm-coverage:
+    name: UVM Coverage (informational)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    needs: [verilator, lint]
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Download Verilator
+        uses: actions/download-artifact@v4
+        with:
+          name: verilator-${{ env.VERILATOR_REF }}
+          path: /tmp/verilator-art
+
+      - name: Install Verilator + RISC-V toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential ccache \
+            gcc-riscv64-linux-gnu binutils-riscv64-linux-gnu
+          mkdir -p "$HOME/.local"
+          tar -xzf /tmp/verilator-art/verilator.tar.gz -C "$HOME/.local"
+          echo "$HOME/.local/verilator/bin" >> "$GITHUB_PATH"
+          echo "VERILATOR_ROOT=$HOME/.local/verilator/share/verilator" >> "$GITHUB_ENV"
+          "$HOME/.local/verilator/bin/verilator" --version
+
+      - name: Ensure UVM library present
+        run: |
+          if [ ! -f third_party/uvm/src/uvm.sv ]; then
+            bash scripts/ci/fetch_uvm.sh
+          fi
+
+      - name: UVM coverage (decompress + platform regress)
+        run: make uvm-coverage
+
+      - name: Upload UVM coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-uvm
+          path: build/coverage/uvm/
+          if-no-files-found: warn
+
+  coverage-unit:
+    name: Unit Coverage Baseline (informational)
+    runs-on: ubuntu-latest
+    needs: [verilator, lint]
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Download Verilator
+        uses: actions/download-artifact@v4
+        with:
+          name: verilator-${{ env.VERILATOR_REF }}
+          path: /tmp/verilator-art
+
+      - name: Install Verilator from artifact
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential ccache
+          mkdir -p "$HOME/.local"
+          tar -xzf /tmp/verilator-art/verilator.tar.gz -C "$HOME/.local"
+          echo "$HOME/.local/verilator/bin" >> "$GITHUB_PATH"
+          echo "VERILATOR_ROOT=$HOME/.local/verilator/share/verilator" >> "$GITHUB_ENV"
+          "$HOME/.local/verilator/bin/verilator" --version
+
+      - name: Install cocotb
+        run: python3 -m pip install --upgrade pip && python3 -m pip install "cocotb==${{ env.COCOTB_VERSION }}"
+
+      - name: Run unit coverage (Decompress)
+        run: make coverage-unit
+
+      - name: Upload coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-unit
+          path: build/coverage/
+          if-no-files-found: warn
+
+  # B2 triage: bounded rv32imac+U/PMP lock-step on every PR (full 10k stays nightly).
+  cosim-lockstep-imac-upmp-smoke:
+    name: Lock-step Smoke (rv32imac+U/PMP, 64 seeds)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs: [verilator, lint]
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Download Verilator
+        uses: actions/download-artifact@v4
+        with:
+          name: verilator-${{ env.VERILATOR_REF }}
+          path: /tmp/verilator-art
+
+      - name: Install Verilator from artifact
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential ccache
+          mkdir -p "$HOME/.local"
+          tar -xzf /tmp/verilator-art/verilator.tar.gz -C "$HOME/.local"
+          echo "$HOME/.local/verilator/bin" >> "$GITHUB_PATH"
+          echo "VERILATOR_ROOT=$HOME/.local/verilator/share/verilator" >> "$GITHUB_ENV"
+          "$HOME/.local/verilator/bin/verilator" --version
+
+      - name: Install RISC-V toolchain
+        run: |
+          sudo apt-get install -y gcc-riscv64-linux-gnu || true
+          sudo apt-get install -y gcc-riscv64-unknown-elf binutils-riscv64-unknown-elf || true
+
+      - name: Cache Spike
+        id: cache-spike-cosim-smoke
+        uses: actions/cache@v6
+        with:
+          path: ~/.local/spike
+          key: spike-${{ runner.os }}-${{ env.SPIKE_REF }}
+
+      - name: Install Spike (reference model)
+        run: |
+          PREFIX="$HOME/.local/spike" SPIKE_REF="$SPIKE_REF" bash scripts/ci/install_spike.sh
+          echo "$HOME/.local/spike/bin" >> "$GITHUB_PATH"
+
+      - name: Run 64-seed rv32imac+U/PMP lock-step smoke
+        run: make cosim-lockstep-imac-upmp-smoke COSIM_SMOKE_SEEDS=64
 
   # Prebuilt RV32 firmware for hosts that cannot install a RISC-V toolchain.
   # Download artifact "sisrv-sw-artifacts", then:

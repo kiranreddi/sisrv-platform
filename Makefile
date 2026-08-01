@@ -45,7 +45,9 @@ ALL_ASM_HEXES := $(patsubst sw/tests/asm/%.S,$(BUILD)/tests/%.hex,$(ALL_ASM_TEST
 
 .PHONY: sim lint clean wave regress regress-axil regress-axil-stall pipeline-debug pipeline-throughput fetch-throughput sw sw-all sw-artifacts sw-from-artifacts all tests cocotb formal formal-axil formal-questa \
         sim-questa sim-vcs sim-xcelium regress-questa regress-vcs regress-xcelium regress-all-sims \
-        synth sta sta-sky130 cosim-lockstep cosim-lockstep-imac cosim-lockstep-imac-upmp \
+        synth sta sta-sky130 cosim-lockstep cosim-lockstep-imac cosim-lockstep-imac-upmp cosim-lockstep-imac-upmp-smoke \
+        coverage-unit uvm-fetch uvm-decompress uvm-platform \
+        uvm-coverage uvm-platform-regress \
         benchmark benchmark-coremark benchmark-dhrystone benchmark-smoke \
         riscof-check-tools riscof-smoke riscof-act riscof-act-full riscof-rv32i riscof-rv32im \
         fetch-sky130-pdk synth-harden openroad-harden openroad-gds openroad-drc openroad-lvs harden \
@@ -58,7 +60,7 @@ all: sim
 $(SIM): $(RTL_SRCS) $(TB_SRCS) $(CPP_SRCS)
 	@mkdir -p $(BUILD)
 	$(VERILATOR) -Wall -Wno-UNUSEDSIGNAL -Wno-WIDTHTRUNC -Wno-WIDTHEXPAND -Wno-SELRANGE -Wno-UNUSEDPARAM -Wno-SYNCASYNCNET --cc --exe --build \
-	  -O3 --trace-fst \
+	  -O3 --trace-fst -DASSERT \
 	  -Irtl -Irtl/core -Irtl/bus -Irtl/periph -Irtl/debug -Itb/models \
 	  --top-module $(TOP) \
 	  -GROM_INIT_FILE='"rom.hex"' \
@@ -307,6 +309,8 @@ cocotb:
 	@cd tb/cocotb && rm -rf sim_build results.xml && $(MAKE) -f Makefile.regfile SIM=verilator
 	@echo "=== Running cocotb Decode tests ==="
 	@cd tb/cocotb && rm -rf sim_build results.xml && $(MAKE) -f Makefile.decode SIM=verilator
+	@echo "=== Running cocotb Decompress tests ==="
+	@cd tb/cocotb && rm -rf sim_build results.xml && $(MAKE) -f Makefile.decompress SIM=verilator
 	@echo "=== Running cocotb CSR tests ==="
 	@cd tb/cocotb && rm -rf sim_build results.xml && $(MAKE) -f Makefile.csr SIM=verilator
 	@echo "=== Running cocotb AXI-Lite bridge tests ==="
@@ -314,6 +318,95 @@ cocotb:
 	@echo "=== Running cocotb PMP tests ==="
 	@cd tb/cocotb && rm -rf sim_build results.xml && $(MAKE) -f Makefile.pmp SIM=verilator
 	@echo "=== cocotb tests PASSED ==="
+
+# Informational unit coverage (Verilator --coverage). Floors come later.
+coverage-unit:
+	@bash scripts/ci/run_coverage_unit.sh
+
+cosim-lockstep-imac-upmp-smoke:
+	$(MAKE) cosim-lockstep COSIM_PROFILE=rv32imac-u-pmp COSIM_SEEDS=$(or $(COSIM_SMOKE_SEEDS),64)
+
+# ---------------------------------------------------------------------------
+# UVM (Verilator-first) — bottom-up env under verification/uvm/
+# ---------------------------------------------------------------------------
+UVM_HOME       ?= third_party/uvm
+UVM_BUILD      ?= $(BUILD)/uvm
+UVM_TEST       ?= sis_decompress_smoke_test
+UVM_COVERAGE   ?= 0
+UVM_COV_FILE   ?= coverage.dat
+UVM_WARN       := -Wno-lint -Wno-style -Wno-SYMRSVDWORD -Wno-IGNOREDRETURN \
+                  -Wno-CONSTRAINTIGN -Wno-ZERODLY -Wno-UNOPTFLAT -Wno-WIDTHTRUNC \
+                  -Wno-WIDTHEXPAND -Wno-UNUSEDSIGNAL -Wno-UNUSEDPARAM -Wno-CASEINCOMPLETE \
+                  -Wno-BLKANDNBLK -Wno-INITIALDLY -Wno-EOFNEWLINE
+UVM_JOBS       ?= $(shell nproc 2>/dev/null || echo 4)
+# COMMERCIAL_SIM: skip Verilator-only retire DPI import in sisRvCore (UVM TB
+# has no C++ harness). UVM_NO_DPI: Accellera UVM without DPI helpers.
+UVM_EXTRA      := --timing --timescale 1ns/1ps -DUVM_NO_DPI -DCOMMERCIAL_SIM -j $(UVM_JOBS)
+UVM_RUN_PLUS   :=
+ifeq ($(UVM_COVERAGE),1)
+UVM_EXTRA      += --coverage
+UVM_RUN_PLUS   += +verilator+coverage+file+$(UVM_COV_FILE)
+endif
+
+uvm-fetch:
+	@bash scripts/ci/fetch_uvm.sh
+
+$(UVM_HOME)/src/uvm.sv:
+	@$(MAKE) uvm-fetch
+
+uvm-decompress: $(UVM_HOME)/src/uvm.sv
+	@mkdir -p $(UVM_BUILD)/decompress $(dir $(UVM_COV_FILE))
+	$(VERILATOR) --binary $(UVM_EXTRA) $(UVM_WARN) \
+	  -Mdir $(UVM_BUILD)/decompress/obj_dir \
+	  -f verification/uvm/filelist_decompress.f \
+	  --top-module sis_uvm_decompress_tb \
+	  -o $(abspath $(UVM_BUILD)/decompress/sim_uvm_decompress)
+	$(UVM_BUILD)/decompress/sim_uvm_decompress \
+	  +UVM_TESTNAME=$(UVM_TEST) +UVM_NO_RELNOTES $(UVM_RUN_PLUS)
+
+# Platform UVM TB: monitor tohost for a directed image (default test_pass).
+UVM_ROM_HEX ?= $(BUILD)/tests/test_pass.hex
+uvm-platform: $(UVM_HOME)/src/uvm.sv $(UVM_ROM_HEX)
+	@mkdir -p $(UVM_BUILD)/platform $(dir $(UVM_COV_FILE))
+	@cp -f $(UVM_ROM_HEX) rom.hex
+	@touch ram.hex
+	$(VERILATOR) --binary $(UVM_EXTRA) $(UVM_WARN) \
+	  -Mdir $(UVM_BUILD)/platform/obj_dir \
+	  -f verification/uvm/filelist_platform.f \
+	  --top-module sis_uvm_platform_tb \
+	  -o $(abspath $(UVM_BUILD)/platform/sim_uvm_platform)
+	$(UVM_BUILD)/platform/sim_uvm_platform \
+	  +UVM_TESTNAME=$(or $(UVM_PLATFORM_TEST),sis_platform_tohost_test) \
+	  +ROM_HEX=rom.hex +RAM_HEX=ram.hex +UVM_NO_RELNOTES $(UVM_RUN_PLUS) ; \
+	  rc=$$?; rm -f rom.hex ram.hex; exit $$rc
+
+# Run every asm regress image through the UVM platform TB (reuse binary).
+uvm-platform-regress: $(UVM_HOME)/src/uvm.sv $(ASM_HEXES)
+	@mkdir -p $(UVM_BUILD)
+	@$(MAKE) uvm-platform UVM_ROM_HEX=$(BUILD)/tests/test_pass.hex \
+	  UVM_COVERAGE=$(UVM_COVERAGE) UVM_JOBS=$(UVM_JOBS)
+	@pass=0; fail=0; total=0; \
+	sim=$(UVM_BUILD)/platform/sim_uvm_platform; \
+	for hex in $(ASM_HEXES); do \
+	  name=$$(basename $$hex .hex); \
+	  total=$$((total + 1)); \
+	  cp -f $$hex rom.hex; touch ram.hex; \
+	  if $$sim +UVM_TESTNAME=sis_platform_tohost_test +UVM_NO_RELNOTES \
+	       +TIMEOUT_CYCLES=$(or $(UVM_PLATFORM_TIMEOUT),200000) \
+	       $(UVM_RUN_PLUS) > $(UVM_BUILD)/$$name.log 2>&1; then \
+	    echo "  PASS: $$name"; pass=$$((pass + 1)); \
+	  else \
+	    echo "  FAIL: $$name"; tail -30 $(UVM_BUILD)/$$name.log || true; \
+	    fail=$$((fail + 1)); \
+	  fi; \
+	  rm -f rom.hex ram.hex; \
+	done; \
+	echo "=== UVM platform regress: $$pass/$$total passed, $$fail failed ==="; \
+	[ $$fail -eq 0 ]
+
+# Collect/merge/annotate Verilator coverage across UVM decompress + platform regress.
+uvm-coverage:
+	@bash scripts/ci/run_uvm_coverage.sh
 
 # M3 stretch: 1000-seed AXI-Lite random stall stress (nightly / optional)
 AXIL_STALL_SEEDS ?= 1000
@@ -492,7 +585,7 @@ COSIM_STAMP   = $(BUILD)/.cosim_sim_built
 $(COSIM_STAMP): $(RTL_SRCS) $(TB_SRCS) $(CPP_SRCS)
 	@mkdir -p $(BUILD)
 	$(VERILATOR) -Wall -Wno-UNUSEDSIGNAL -Wno-WIDTHTRUNC -Wno-WIDTHEXPAND -Wno-SELRANGE -Wno-UNUSEDPARAM -Wno-SYNCASYNCNET --cc --exe --build \
-	  -O3 --trace-fst \
+	  -O3 --trace-fst -DASSERT \
 	  -Irtl -Irtl/core -Irtl/bus -Irtl/periph -Irtl/debug -Itb/models \
 	  --top-module $(TOP) \
 	  -GROM_INIT_FILE='"rom.hex"' \
