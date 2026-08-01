@@ -134,10 +134,10 @@ Post-M6 / plan extensions also present: RV32C, RV32A, vectored `mtvec`, U-mode +
 
 ### Prerequisites
 
-- Verilator 5.038+
+- Verilator **5.050+** (CI builds `v5.050`)
 - RISC-V cross-compiler: `riscv64-linux-gnu-gcc`
 - GNU Make
-- Python 3 + cocotb
+- Python 3 + **cocotb 2.0.1** (needs Verilator ≥ 5.036)
 - Yosys + SymbiYosys + z3 for formal/synthesis flows
 
 On Ubuntu/Debian:
@@ -146,13 +146,13 @@ On Ubuntu/Debian:
 # Core tools
 sudo apt-get install gcc-riscv64-linux-gnu binutils-riscv64-linux-gnu make
 
-# Verilator 5.038
-sudo apt-get install git autoconf g++ flex bison libfl2 libfl-dev help2man ccache zlib1g-dev
-cd /tmp && git clone --depth 1 --branch v5.038 https://github.com/verilator/verilator.git
+# Verilator 5.050 (or: VERILATOR_REF=v5.050 bash scripts/ci/install_verilator.sh)
+sudo apt-get install git autoconf g++ flex bison libfl2 libfl-dev help2man ccache zlib1g-dev liblz4-dev
+cd /tmp && git clone --depth 1 --branch v5.050 https://github.com/verilator/verilator.git
 cd verilator && autoconf && ./configure --prefix=/usr/local && make -j$(nproc) && sudo make install
 
-# cocotb
-pip install cocotb
+# cocotb 2.x
+python3 -m pip install 'cocotb==2.0.1'
 
 # Formal verification + synthesis
 sudo apt-get install yosys z3
@@ -321,9 +321,11 @@ Workflow: [`.github/workflows/ci.yml`](.github/workflows/ci.yml). Runs on push/P
 
 | Job | When | What it proves |
 |---|---|---|
+| Build Verilator (`v5.050`) | every PR/push | Shared Verilator install artifact for sim jobs |
 | Verilator Lint | every PR/push | RTL lint-clean |
 | Assembly Regression | every PR/push | 76 asm tests corebus + AXI-Lite + stall path; pipeline/fetch/debug guards |
-| cocotb Tests (50) | every PR/push | ALU, RegFile, Decode, CSR, AXI-Lite, PMP |
+| cocotb Tests (50) | every PR/push | ALU, RegFile, Decode, CSR, AXI-Lite, PMP (cocotb 2.0.1) |
+| Software Artifacts (UVM/cocotb) | every PR/push | Prebuilt asm hex/elf for hosts without `riscv-gcc` |
 | Formal | every PR/push | Required ALU/RegFile/Decode proofs |
 | Yosys Synthesis | every PR/push | Generic synth; uploads `ppa-synth-report` |
 | Benchmark Smoke | every PR/push | Reduced CoreMark + Dhrystone |

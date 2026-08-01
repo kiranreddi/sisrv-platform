@@ -126,7 +126,7 @@ x0 always 0 ✅, PC word-aligned ✅, correct sign/zero extension ✅
 
 | Deliverable | Status | Notes |
 |-------------|--------|-------|
-| cocotb ALU tests | ✅ Done | 1000 directed + 1000 random + shift sweep (Verilator 5.038) |
+| cocotb ALU tests | ✅ Done | 1000 directed + 1000 random + shift sweep (Verilator 5.050) |
 | cocotb RegFile tests | ✅ Done | x0 zero, write/read all, isolation, 500 random cycles |
 | cocotb Decode tests | ✅ Done | Type flags, illegal opcodes, immediates (I/S/U/B/J), register extraction, 1000 random |
 | cocotb CSR tests | ✅ Done | Reset values, RW/RS/RC ops, trap entry, MRET, MEPC alignment, MTIP/irq_pending, ID CSRs, counters |
@@ -299,7 +299,7 @@ timer interrupt tests run with the AXI slave timer model ✅, CI covers `make re
 
 | Metric | Value |
 |--------|-------|
-| Verilator version | 5.038 |
+| Verilator version | 5.050 |
 | Lint status | ✅ Clean (Wall, no warnings) |
 | Compiler | riscv64-linux-gnu-gcc 13.3 |
 | Assembly regression suite | 76 tests |

@@ -20,27 +20,67 @@ permissions:
   contents: read
 
 env:
-  SPIKE_REF: 1280c3ca1ef0ce5ec95994cb9b7144f3ea2c655c
+  VERILATOR_REF: v5.050
+  SPIKE_REF: 3d8eb089bd289c59dcb506f197a172e02beb7b5b
+  COCOTB_VERSION: "2.0.1"
+  OPENSTA_REF: v2.2.0
 
 jobs:
+  # Build Verilator once; consumers download the install prefix artifact.
+  verilator:
+    name: Build Verilator (${{ env.VERILATOR_REF }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Cache Verilator install
+        id: cache-verilator
+        uses: actions/cache@v6
+        with:
+          path: ~/.local/verilator
+          key: verilator-${{ runner.os }}-${{ env.VERILATOR_REF }}
+
+      - name: Build Verilator
+        if: steps.cache-verilator.outputs.cache-hit != 'true'
+        run: |
+          PREFIX="$HOME/.local/verilator" VERILATOR_REF="$VERILATOR_REF" \
+            bash scripts/ci/install_verilator.sh
+
+      - name: Package install tree
+        run: |
+          test -x "$HOME/.local/verilator/bin/verilator"
+          "$HOME/.local/verilator/bin/verilator" --version
+          tar -C "$HOME/.local" -czf /tmp/verilator.tar.gz verilator
+
+      - name: Upload Verilator artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: verilator-${{ env.VERILATOR_REF }}
+          path: /tmp/verilator.tar.gz
+          if-no-files-found: error
+          retention-days: 7
+
   lint:
     name: Verilator Lint
     runs-on: ubuntu-latest
+    needs: verilator
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - name: Install Verilator 5.038
+      - name: Download Verilator
+        uses: actions/download-artifact@v4
+        with:
+          name: verilator-${{ env.VERILATOR_REF }}
+          path: /tmp/verilator-art
+
+      - name: Install Verilator from artifact
         run: |
-          sudo apt-get update
-          sudo apt-get install -y git autoconf g++ flex bison libfl2 libfl-dev help2man make ccache zlib1g-dev
-          cd /tmp
-          git clone --depth 1 --branch v5.038 https://github.com/verilator/verilator.git
-          cd verilator
-          autoconf
-          ./configure --prefix=/usr/local
-          make -j$(nproc)
-          sudo make install
-          verilator --version
+          mkdir -p "$HOME/.local"
+          tar -xzf /tmp/verilator-art/verilator.tar.gz -C "$HOME/.local"
+          echo "$HOME/.local/verilator/bin" >> "$GITHUB_PATH"
+          echo "VERILATOR_ROOT=$HOME/.local/verilator/share/verilator" >> "$GITHUB_ENV"
+          "$HOME/.local/verilator/bin/verilator" --version
 
       - name: Run Lint
         run: make lint
@@ -48,22 +88,24 @@ jobs:
   regress:
     name: Assembly Regression (76 tests + pipeline guards)
     runs-on: ubuntu-latest
-    needs: lint
+    needs: [verilator, lint]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - name: Install Verilator 5.038
+      - name: Download Verilator
+        uses: actions/download-artifact@v4
+        with:
+          name: verilator-${{ env.VERILATOR_REF }}
+          path: /tmp/verilator-art
+
+      - name: Install Verilator from artifact
         run: |
-          sudo apt-get update
-          sudo apt-get install -y git autoconf g++ flex bison libfl2 libfl-dev help2man make ccache zlib1g-dev
-          cd /tmp
-          git clone --depth 1 --branch v5.038 https://github.com/verilator/verilator.git
-          cd verilator
-          autoconf
-          ./configure --prefix=/usr/local
-          make -j$(nproc)
-          sudo make install
-          verilator --version
+          mkdir -p "$HOME/.local"
+          tar -xzf /tmp/verilator-art/verilator.tar.gz -C "$HOME/.local"
+          echo "$HOME/.local/verilator/bin" >> "$GITHUB_PATH"
+          echo "VERILATOR_ROOT=$HOME/.local/verilator/share/verilator" >> "$GITHUB_ENV"
+          "$HOME/.local/verilator/bin/verilator" --version
+
 
       - name: Install RISC-V Toolchain
         run: sudo apt-get install -y gcc-riscv64-linux-gnu
@@ -86,25 +128,27 @@ jobs:
   cocotb:
     name: cocotb Tests (50 tests)
     runs-on: ubuntu-latest
-    needs: lint
+    needs: [verilator, lint]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - name: Install Verilator 5.038
+      - name: Download Verilator
+        uses: actions/download-artifact@v4
+        with:
+          name: verilator-${{ env.VERILATOR_REF }}
+          path: /tmp/verilator-art
+
+      - name: Install Verilator from artifact
         run: |
-          sudo apt-get update
-          sudo apt-get install -y git autoconf g++ flex bison libfl2 libfl-dev help2man make ccache zlib1g-dev python3-pip
-          cd /tmp
-          git clone --depth 1 --branch v5.038 https://github.com/verilator/verilator.git
-          cd verilator
-          autoconf
-          ./configure --prefix=/usr/local
-          make -j$(nproc)
-          sudo make install
-          verilator --version
+          mkdir -p "$HOME/.local"
+          tar -xzf /tmp/verilator-art/verilator.tar.gz -C "$HOME/.local"
+          echo "$HOME/.local/verilator/bin" >> "$GITHUB_PATH"
+          echo "VERILATOR_ROOT=$HOME/.local/verilator/share/verilator" >> "$GITHUB_ENV"
+          "$HOME/.local/verilator/bin/verilator" --version
+
 
       - name: Install cocotb
-        run: pip install cocotb
+        run: python3 -m pip install --upgrade pip && python3 -m pip install "cocotb==${{ env.COCOTB_VERSION }}"
 
       - name: Run cocotb Tests
         run: |
@@ -123,9 +167,8 @@ jobs:
     name: Software Artifacts (UVM/cocotb)
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: lint
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install RISC-V cross toolchain
         run: |
@@ -159,24 +202,27 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 180
     if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.extended_compliance == true)
-    needs: lint
+    needs: [verilator, lint]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - name: Install Verilator 5.038
+      - name: Download Verilator
+        uses: actions/download-artifact@v4
+        with:
+          name: verilator-${{ env.VERILATOR_REF }}
+          path: /tmp/verilator-art
+
+      - name: Install Verilator from artifact
         run: |
-          sudo apt-get update
-          sudo apt-get install -y git autoconf g++ flex bison libfl2 libfl-dev help2man make ccache zlib1g-dev python3-pip
-          cd /tmp
-          git clone --depth 1 --branch v5.038 https://github.com/verilator/verilator.git
-          cd verilator
-          autoconf
-          ./configure --prefix=/usr/local
-          make -j$(nproc)
-          sudo make install
+          mkdir -p "$HOME/.local"
+          tar -xzf /tmp/verilator-art/verilator.tar.gz -C "$HOME/.local"
+          echo "$HOME/.local/verilator/bin" >> "$GITHUB_PATH"
+          echo "VERILATOR_ROOT=$HOME/.local/verilator/share/verilator" >> "$GITHUB_ENV"
+          "$HOME/.local/verilator/bin/verilator" --version
+
 
       - name: Install cocotb
-        run: pip install cocotb
+        run: python3 -m pip install --upgrade pip && python3 -m pip install "cocotb==${{ env.COCOTB_VERSION }}"
 
       - name: Run 1000-seed AXI-Lite stall stress
         run: make cocotb-axil-stall-nightly AXIL_STALL_SEEDS=1000 AXIL_STALL_TXNS=100
@@ -187,7 +233,7 @@ jobs:
     timeout-minutes: 60
     needs: lint
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install SymbiYosys + Yosys + z3
         run: |
@@ -204,7 +250,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: lint
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install Yosys
         run: |
@@ -227,22 +273,24 @@ jobs:
   benchmark-smoke:
     name: Benchmark Smoke
     runs-on: ubuntu-latest
-    needs: lint
+    needs: [verilator, lint]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - name: Install Verilator 5.038
+      - name: Download Verilator
+        uses: actions/download-artifact@v4
+        with:
+          name: verilator-${{ env.VERILATOR_REF }}
+          path: /tmp/verilator-art
+
+      - name: Install Verilator from artifact
         run: |
-          sudo apt-get update
-          sudo apt-get install -y git autoconf g++ flex bison libfl2 libfl-dev help2man make ccache zlib1g-dev
-          cd /tmp
-          git clone --depth 1 --branch v5.038 https://github.com/verilator/verilator.git
-          cd verilator
-          autoconf
-          ./configure --prefix=/usr/local
-          make -j$(nproc)
-          sudo make install
-          verilator --version
+          mkdir -p "$HOME/.local"
+          tar -xzf /tmp/verilator-art/verilator.tar.gz -C "$HOME/.local"
+          echo "$HOME/.local/verilator/bin" >> "$GITHUB_PATH"
+          echo "VERILATOR_ROOT=$HOME/.local/verilator/share/verilator" >> "$GITHUB_ENV"
+          "$HOME/.local/verilator/bin/verilator" --version
+
 
       - name: Install RISC-V Toolchain
         run: |
@@ -264,21 +312,24 @@ jobs:
     # Independent of riscof-act: co-sim is its own functional check (lock-step vs Spike on
     # random programs) and builds its own Spike, so it should not be skipped when the ACT
     # suite is slow. Keep it gated on the fast functional jobs only.
-    needs: [regress, cocotb, formal, synth, benchmark-smoke, sta-sky130]
+    needs: [verilator, regress, cocotb, formal, synth, benchmark-smoke, sta-sky130]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - name: Install Verilator 5.038
+      - name: Download Verilator
+        uses: actions/download-artifact@v4
+        with:
+          name: verilator-${{ env.VERILATOR_REF }}
+          path: /tmp/verilator-art
+
+      - name: Install Verilator from artifact
         run: |
-          sudo apt-get update
-          sudo apt-get install -y git autoconf g++ flex bison libfl2 libfl-dev help2man make ccache zlib1g-dev
-          cd /tmp
-          git clone --depth 1 --branch v5.038 https://github.com/verilator/verilator.git
-          cd verilator
-          autoconf
-          ./configure --prefix=/usr/local
-          make -j$(nproc)
-          sudo make install
+          mkdir -p "$HOME/.local"
+          tar -xzf /tmp/verilator-art/verilator.tar.gz -C "$HOME/.local"
+          echo "$HOME/.local/verilator/bin" >> "$GITHUB_PATH"
+          echo "VERILATOR_ROOT=$HOME/.local/verilator/share/verilator" >> "$GITHUB_ENV"
+          "$HOME/.local/verilator/bin/verilator" --version
+
 
       - name: Install RISC-V toolchain
         run: |
@@ -287,29 +338,16 @@ jobs:
 
       - name: Cache Spike
         id: cache-spike-cosim
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.local/spike
           key: spike-${{ runner.os }}-${{ env.SPIKE_REF }}
 
       - name: Install Spike (reference model)
         run: |
-          sudo apt-get install -y device-tree-compiler
+          PREFIX="$HOME/.local/spike" SPIKE_REF="$SPIKE_REF" bash scripts/ci/install_spike.sh
           echo "$HOME/.local/spike/bin" >> "$GITHUB_PATH"
-          if [ -x "$HOME/.local/spike/bin/spike" ]; then
-            "$HOME/.local/spike/bin/spike" --version || true
-            exit 0
-          fi
-          git init /tmp/riscv-isa-sim
-          cd /tmp/riscv-isa-sim
-          git remote add origin https://github.com/riscv-software-src/riscv-isa-sim.git
-          git fetch --depth 1 origin "$SPIKE_REF"
-          git checkout FETCH_HEAD
-          mkdir build && cd build
-          ../configure --prefix="$HOME/.local/spike" --enable-commitlog
-          make -j$(nproc)
-          make install
-          "$HOME/.local/spike/bin/spike" --version || true
+
 
       - name: Run 10k-seed lock-step co-sim
         run: make cosim-lockstep COSIM_SEEDS=10000
@@ -319,21 +357,24 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.extended_compliance == true)
-    needs: [regress, cocotb, formal, synth, benchmark-smoke, sta-sky130]
+    needs: [verilator, regress, cocotb, formal, synth, benchmark-smoke, sta-sky130]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - name: Install Verilator 5.038
+      - name: Download Verilator
+        uses: actions/download-artifact@v4
+        with:
+          name: verilator-${{ env.VERILATOR_REF }}
+          path: /tmp/verilator-art
+
+      - name: Install Verilator from artifact
         run: |
-          sudo apt-get update
-          sudo apt-get install -y git autoconf g++ flex bison libfl2 libfl-dev help2man make ccache zlib1g-dev
-          cd /tmp
-          git clone --depth 1 --branch v5.038 https://github.com/verilator/verilator.git
-          cd verilator
-          autoconf
-          ./configure --prefix=/usr/local
-          make -j$(nproc)
-          sudo make install
+          mkdir -p "$HOME/.local"
+          tar -xzf /tmp/verilator-art/verilator.tar.gz -C "$HOME/.local"
+          echo "$HOME/.local/verilator/bin" >> "$GITHUB_PATH"
+          echo "VERILATOR_ROOT=$HOME/.local/verilator/share/verilator" >> "$GITHUB_ENV"
+          "$HOME/.local/verilator/bin/verilator" --version
+
 
       - name: Install RISC-V toolchain
         run: |
@@ -342,29 +383,16 @@ jobs:
 
       - name: Cache Spike
         id: cache-spike-cosim-imac-upmp
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.local/spike
           key: spike-${{ runner.os }}-${{ env.SPIKE_REF }}
 
       - name: Install Spike (reference model)
         run: |
-          sudo apt-get install -y device-tree-compiler
+          PREFIX="$HOME/.local/spike" SPIKE_REF="$SPIKE_REF" bash scripts/ci/install_spike.sh
           echo "$HOME/.local/spike/bin" >> "$GITHUB_PATH"
-          if [ -x "$HOME/.local/spike/bin/spike" ]; then
-            "$HOME/.local/spike/bin/spike" --version || true
-            exit 0
-          fi
-          git init /tmp/riscv-isa-sim
-          cd /tmp/riscv-isa-sim
-          git remote add origin https://github.com/riscv-software-src/riscv-isa-sim.git
-          git fetch --depth 1 origin "$SPIKE_REF"
-          git checkout FETCH_HEAD
-          mkdir build && cd build
-          ../configure --prefix="$HOME/.local/spike" --enable-commitlog
-          make -j$(nproc)
-          make install
-          "$HOME/.local/spike/bin/spike" --version || true
+
 
       - name: Run 10k-seed rv32imac + U/PMP lock-step co-sim
         run: make cosim-lockstep-imac-upmp COSIM_SEEDS=10000
@@ -373,21 +401,24 @@ jobs:
     name: RISCOF ACT (I/M/C/Zicsr CI subset, 95 tests)
     runs-on: ubuntu-latest
     timeout-minutes: 180
-    needs: lint
+    needs: [verilator, lint]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - name: Install Verilator 5.038
+      - name: Download Verilator
+        uses: actions/download-artifact@v4
+        with:
+          name: verilator-${{ env.VERILATOR_REF }}
+          path: /tmp/verilator-art
+
+      - name: Install Verilator from artifact
         run: |
-          sudo apt-get update
-          sudo apt-get install -y git autoconf g++ flex bison libfl2 libfl-dev help2man make ccache zlib1g-dev
-          cd /tmp
-          git clone --depth 1 --branch v5.038 https://github.com/verilator/verilator.git
-          cd verilator
-          autoconf
-          ./configure --prefix=/usr/local
-          make -j$(nproc)
-          sudo make install
+          mkdir -p "$HOME/.local"
+          tar -xzf /tmp/verilator-art/verilator.tar.gz -C "$HOME/.local"
+          echo "$HOME/.local/verilator/bin" >> "$GITHUB_PATH"
+          echo "VERILATOR_ROOT=$HOME/.local/verilator/share/verilator" >> "$GITHUB_ENV"
+          "$HOME/.local/verilator/bin/verilator" --version
+
 
       - name: Install RISC-V toolchain
         run: |
@@ -396,29 +427,16 @@ jobs:
 
       - name: Cache Spike
         id: cache-spike-riscof
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.local/spike
           key: spike-${{ runner.os }}-${{ env.SPIKE_REF }}
 
       - name: Install Spike (reference model)
         run: |
-          sudo apt-get install -y device-tree-compiler
+          PREFIX="$HOME/.local/spike" SPIKE_REF="$SPIKE_REF" bash scripts/ci/install_spike.sh
           echo "$HOME/.local/spike/bin" >> "$GITHUB_PATH"
-          if [ -x "$HOME/.local/spike/bin/spike" ]; then
-            "$HOME/.local/spike/bin/spike" --version || true
-            exit 0
-          fi
-          git init /tmp/riscv-isa-sim
-          cd /tmp/riscv-isa-sim
-          git remote add origin https://github.com/riscv-software-src/riscv-isa-sim.git
-          git fetch --depth 1 origin "$SPIKE_REF"
-          git checkout FETCH_HEAD
-          mkdir build && cd build
-          ../configure --prefix="$HOME/.local/spike" --enable-commitlog
-          make -j$(nproc)
-          make install
-          "$HOME/.local/spike/bin/spike" --version || true
+
 
       - name: Install RISCOF Python stack
         run: |
@@ -444,21 +462,24 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 360
     if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.extended_compliance == true)
-    needs: lint
+    needs: [verilator, lint]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - name: Install Verilator 5.038
+      - name: Download Verilator
+        uses: actions/download-artifact@v4
+        with:
+          name: verilator-${{ env.VERILATOR_REF }}
+          path: /tmp/verilator-art
+
+      - name: Install Verilator from artifact
         run: |
-          sudo apt-get update
-          sudo apt-get install -y git autoconf g++ flex bison libfl2 libfl-dev help2man make ccache zlib1g-dev
-          cd /tmp
-          git clone --depth 1 --branch v5.038 https://github.com/verilator/verilator.git
-          cd verilator
-          autoconf
-          ./configure --prefix=/usr/local
-          make -j$(nproc)
-          sudo make install
+          mkdir -p "$HOME/.local"
+          tar -xzf /tmp/verilator-art/verilator.tar.gz -C "$HOME/.local"
+          echo "$HOME/.local/verilator/bin" >> "$GITHUB_PATH"
+          echo "VERILATOR_ROOT=$HOME/.local/verilator/share/verilator" >> "$GITHUB_ENV"
+          "$HOME/.local/verilator/bin/verilator" --version
+
 
       - name: Install RISC-V toolchain
         run: |
@@ -467,29 +488,16 @@ jobs:
 
       - name: Cache Spike
         id: cache-spike-riscof-full
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.local/spike
           key: spike-${{ runner.os }}-${{ env.SPIKE_REF }}
 
       - name: Install Spike (reference model)
         run: |
-          sudo apt-get install -y device-tree-compiler
+          PREFIX="$HOME/.local/spike" SPIKE_REF="$SPIKE_REF" bash scripts/ci/install_spike.sh
           echo "$HOME/.local/spike/bin" >> "$GITHUB_PATH"
-          if [ -x "$HOME/.local/spike/bin/spike" ]; then
-            "$HOME/.local/spike/bin/spike" --version || true
-            exit 0
-          fi
-          git init /tmp/riscv-isa-sim
-          cd /tmp/riscv-isa-sim
-          git remote add origin https://github.com/riscv-software-src/riscv-isa-sim.git
-          git fetch --depth 1 origin "$SPIKE_REF"
-          git checkout FETCH_HEAD
-          mkdir build && cd build
-          ../configure --prefix="$HOME/.local/spike" --enable-commitlog
-          make -j$(nproc)
-          make install
-          "$HOME/.local/spike/bin/spike" --version || true
+
 
       - name: Install RISCOF Python stack
         run: |
@@ -515,7 +523,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: synth
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install Yosys and build OpenSTA
         run: |
@@ -532,7 +540,7 @@ jobs:
           make -j$(nproc)
           sudo make install
           cd -
-          git clone --depth 1 https://github.com/The-OpenROAD-Project/OpenSTA.git /tmp/OpenSTA
+          git clone --depth 1 --branch "$OPENSTA_REF" https://github.com/The-OpenROAD-Project/OpenSTA.git /tmp/OpenSTA
           cmake -S /tmp/OpenSTA -B /tmp/OpenSTA/build \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_INSTALL_PREFIX=/usr/local \
@@ -557,7 +565,7 @@ jobs:
     needs: synth
     timeout-minutes: 120
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install micromamba + OpenROAD/Yosys/Magic
         run: |

@@ -299,7 +299,7 @@ benchmark-smoke: $(SIM)
 clean:
 	rm -rf $(BUILD) obj_dir obj_dir_pipeline_debug rom.hex ram.hex
 
-# cocotb tests (requires cocotb + verilator 5.038+)
+# cocotb tests (requires cocotb 2.x + verilator 5.050+)
 cocotb:
 	@echo "=== Running cocotb ALU tests ==="
 	@cd tb/cocotb && rm -rf sim_build results.xml && $(MAKE) -f Makefile.alu SIM=verilator
