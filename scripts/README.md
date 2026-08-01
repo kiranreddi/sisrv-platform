@@ -4,34 +4,31 @@ Helper scripts for the sisrv-platform build flow.
 
 ## Available scripts
 
-- `yosys_synth.tcl` — Yosys synthesis script for core + AXI bridge
-  - Synthesizes `sisRvCore` and `sisAxiLiteM` to generic gates
-  - Reports area and cell counts
-  - Writes netlist to `build/*_synth.v`
-  - Uses `-define SYNTHESIS` to guard sim-only constructs
+- `yosys_synth.tcl` — Yosys generic synthesis for ALU/decode/regfile/AXI-Lite
+- `yosys_synth_sky130.tcl` — Sky130-mapped STA smoke (`sisRegFile`)
+- `yosys_synth_harden.tcl` — Sky130 synthesis for `sisHardenTop` (M8)
+- `sta_sky130.tcl` / `sta_opensta.tcl` — OpenSTA timing scripts
+- `constraints*.sdc` — SDC constraints
+- `fetch_sky130_lib.sh` — Liberty-only fetch for STA
+- `fetch_sky130_pdk.sh` — Full Sky130 HD platform fetch for OpenROAD/Magic
+- `openroad_flow.tcl` — OpenROAD floorplan → route (M8)
+- `magic_gds.tcl` / `magic_drc.tcl` — GDS stream-out + Magic DRC
+- `run_klayout_drc_lvs.sh` — Optional KLayout DRC/LVS
+- `run_benchmarks.py` — CoreMark/Dhrystone driver
 
-## Planned scripts
-- `openroad_flow.tcl` — OpenROAD PnR flow (Milestone 8)
+## Hardening (M8)
 
-## Current build flow
-
-The Makefile handles the complete build flow:
-
+```bash
+make harden
 ```
-.S → .elf → .bin → .hex → Verilator simulation
-```
 
-1. Assembly source compiled with `riscv64-linux-gnu-gcc`
-2. ELF converted to flat binary with `objcopy`
-3. Binary converted to hex with `od`
-4. Hex loaded into ROM via `$readmemh` during simulation (guarded with `ifndef SYNTHESIS`)
+Produces `build/openroad/sisHardenTop.gds` plus DEF/SDF/SPEF/DRC/power reports.
+See [`docs/HARDENING.md`](../docs/HARDENING.md).
 
-## Running synthesis
+## Synthesis (generic)
 
 ```bash
 make synth
 ```
 
-This runs Yosys with `scripts/yosys_synth.tcl` and produces:
-- Gate-level netlist: `build/sisRvCore_synth.v`, `build/sisAxiLiteM_synth.v`
-- Area/cell reports printed to stdout
+Produces gate-level netlists and `build/ppa_synth_report.txt`.
