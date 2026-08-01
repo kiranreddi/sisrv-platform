@@ -5,6 +5,11 @@
 The sisrv-platform uses a multi-tier verification strategy combining directed assembly
 tests, randomized cocotb unit tests, and formal proofs. All tests run on Verilator 5.038.
 
+If your host cannot install a RISC-V toolchain, download CI-built ROM images
+(`sisrv-sw-artifacts`) and install with `make sw-from-artifacts` — see
+[SW_ARTIFACTS.md](SW_ARTIFACTS.md). Unit-level cocotb does not need those images;
+directed Verilator runs, commercial/`sisTbTop`, and future platform cocotb/UVM do.
+
 ## Verification Tiers
 
 ### Tier 1: Directed Assembly Tests (42 regression tests + throughput guard)

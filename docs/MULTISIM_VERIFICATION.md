@@ -1,7 +1,21 @@
 # Multi-simulator verification
 
 The commercial-simulator lane uses `tb/sv/sisTbTop.sv`, which is independent of
-the Verilator C++ harness. Test images are built with `make sw`.
+the Verilator C++ harness. Test images are built with `make sw`, or downloaded
+from CI when the local host cannot install a RISC-V toolchain (see
+[SW_ARTIFACTS.md](SW_ARTIFACTS.md)).
+
+## Firmware without a local `riscv-gcc`
+
+```sh
+# From a CI run with job "Software Artifacts (UVM/cocotb)":
+gh run download <run-id> -n sisrv-sw-artifacts -D build/sw-artifacts
+make sw-from-artifacts SW_ARTIFACTS_TGZ=build/sw-artifacts/sisrv-sw-artifacts.tar.gz
+
+cp build/tests/test_pass.hex rom.hex && : > ram.hex
+./verification/sim/run_questa.sh   # or run_vcs.sh / run_xcelium.sh
+# Optional: ROM_HEX=build/tests/test_csr.hex ./verification/sim/run_questa.sh
+```
 
 ## Local commands
 

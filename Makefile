@@ -39,8 +39,11 @@ FETCH_THROUGHPUT_TEST    := sw/tests/asm/test_fetch_buffer_throughput.S
 CYCLE_GUARD_TESTS        := $(PIPELINE_THROUGHPUT_TEST) $(FETCH_THROUGHPUT_TEST)
 ASM_TESTS := $(filter-out $(CYCLE_GUARD_TESTS),$(wildcard sw/tests/asm/*.S))
 ASM_HEXES := $(patsubst sw/tests/asm/%.S,$(BUILD)/tests/%.hex,$(ASM_TESTS))
+# Full asm set for offline UVM/cocotb artifact packages (includes cycle-guard tests).
+ALL_ASM_TESTS := $(wildcard sw/tests/asm/*.S)
+ALL_ASM_HEXES := $(patsubst sw/tests/asm/%.S,$(BUILD)/tests/%.hex,$(ALL_ASM_TESTS))
 
-.PHONY: sim lint clean wave regress regress-axil regress-axil-stall pipeline-debug pipeline-throughput fetch-throughput sw all tests cocotb formal formal-axil formal-questa \
+.PHONY: sim lint clean wave regress regress-axil regress-axil-stall pipeline-debug pipeline-throughput fetch-throughput sw sw-all sw-artifacts sw-from-artifacts all tests cocotb formal formal-axil formal-questa \
         sim-questa sim-vcs sim-xcelium regress-questa regress-vcs regress-xcelium regress-all-sims \
         synth sta sta-sky130 cosim-lockstep cosim-lockstep-imac cosim-lockstep-imac-upmp \
         benchmark benchmark-coremark benchmark-dhrystone benchmark-smoke \
@@ -126,6 +129,37 @@ $(BUILD)/tests/%.objdump: $(BUILD)/tests/%.elf
 # Build all test hex files
 sw: $(ASM_HEXES)
 	@echo "Built $(words $(ASM_HEXES)) test hex files."
+
+# Build every asm image, including cycle-guard tests (for artifact packaging / UVM).
+sw-all: $(ALL_ASM_HEXES)
+	@echo "Built $(words $(ALL_ASM_HEXES)) asm images (full set)."
+
+# Package prebuilt ELF/BIN/HEX for hosts without a RISC-V toolchain.
+# CI uploads build/sw-artifacts/sisrv-sw-artifacts.tar.gz
+SW_ARTIFACTS_OUT ?= $(BUILD)/sw-artifacts
+SW_ARTIFACTS_TGZ ?= $(SW_ARTIFACTS_OUT)/sisrv-sw-artifacts.tar.gz
+sw-artifacts:
+	@bash scripts/package_sw_artifacts.sh
+
+# Install a downloaded artifact tarball into build/tests/ (no local toolchain required).
+# Example:
+#   gh run download <run-id> -n sisrv-sw-artifacts -D /tmp/sw-art
+#   make sw-from-artifacts SW_ARTIFACTS_TGZ=/tmp/sw-art/sisrv-sw-artifacts.tar.gz
+sw-from-artifacts:
+	@test -n "$(SW_ARTIFACTS_TGZ)" || (echo "Set SW_ARTIFACTS_TGZ=path/to/sisrv-sw-artifacts.tar.gz"; exit 2)
+	@test -s "$(SW_ARTIFACTS_TGZ)" || (echo "Missing $(SW_ARTIFACTS_TGZ)"; exit 2)
+	@mkdir -p $(BUILD)/tests
+	@tmpdir=$$(mktemp -d); \
+	  tar -xzf "$(SW_ARTIFACTS_TGZ)" -C "$$tmpdir"; \
+	  if [ -d "$$tmpdir/tests" ]; then src="$$tmpdir/tests"; \
+	  elif [ -d "$$tmpdir/staging/tests" ]; then src="$$tmpdir/staging/tests"; \
+	  else echo "No tests/ directory in archive"; rm -rf "$$tmpdir"; exit 2; fi; \
+	  cp -f "$$src"/* $(BUILD)/tests/; \
+	  if [ -f "$$tmpdir/ram.hex" ]; then cp -f "$$tmpdir/ram.hex" $(BUILD)/ram.hex; fi; \
+	  if [ -f "$$tmpdir/manifest.json" ]; then cp -f "$$tmpdir/manifest.json" $(BUILD)/sw-artifacts-manifest.json; fi; \
+	  rm -rf "$$tmpdir"
+	@echo "Installed $$(ls $(BUILD)/tests/*.hex 2>/dev/null | wc -l) hex images into $(BUILD)/tests"
+	@echo "Use: make run-TESTNAME   or   cp build/tests/TESTNAME.hex rom.hex for UVM/commercial sim"
 
 # Run regression: build all tests, run each through sim
 regress: $(SIM) $(ASM_HEXES)

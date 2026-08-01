@@ -115,6 +115,45 @@ jobs:
           echo "================================"
           make cocotb
 
+  # Prebuilt RV32 firmware for hosts that cannot install a RISC-V toolchain.
+  # Download artifact "sisrv-sw-artifacts", then:
+  #   make sw-from-artifacts SW_ARTIFACTS_TGZ=.../sisrv-sw-artifacts.tar.gz
+  # Use for Verilator directed runs, commercial/UVM TB (sisTbTop), future platform cocotb.
+  sw-artifacts:
+    name: Software Artifacts (UVM/cocotb)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install RISC-V cross toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            gcc-riscv64-linux-gnu \
+            binutils-riscv64-linux-gnu
+
+      - name: Build + package all asm hex/elf/dis
+        run: make sw-artifacts
+
+      - name: Upload sisrv-sw-artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sisrv-sw-artifacts
+          path: build/sw-artifacts/sisrv-sw-artifacts.tar.gz
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload unpacked tree (browseable)
+        uses: actions/upload-artifact@v4
+        with:
+          name: sisrv-sw-artifacts-tree
+          path: build/sw-artifacts/tree/
+          if-no-files-found: error
+          retention-days: 14
+
   axil-stall-nightly:
     name: AXI-Lite 1000-seed Stall Nightly (M3)
     runs-on: ubuntu-latest

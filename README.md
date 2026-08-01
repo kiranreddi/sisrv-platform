@@ -366,6 +366,8 @@ third_party/    Vendored CoreMark/Dhrystone (see NOTICE); Sky130 files fetched o
 - [`docs/INDUSTRY_COMPARISON.md`](docs/INDUSTRY_COMPARISON.md) — gap analysis vs product IP.
 - [`docs/INTEGRATION_GUIDE.md`](docs/INTEGRATION_GUIDE.md) / [`docs/PROGRAMMERS_REFERENCE.md`](docs/PROGRAMMERS_REFERENCE.md).
 - [`docs/MEMORY_MAP.md`](docs/MEMORY_MAP.md), [`docs/INTERFACES.md`](docs/INTERFACES.md), [`docs/VERIFICATION.md`](docs/VERIFICATION.md).
+- [`docs/SW_ARTIFACTS.md`](docs/SW_ARTIFACTS.md) — CI prebuilt hex/elf for UVM & cocotb when local `riscv-gcc` is unavailable.
+- [`docs/MULTISIM_VERIFICATION.md`](docs/MULTISIM_VERIFICATION.md) — Questa / VCS / Xcelium + SV TB.
 
 ## License
 
