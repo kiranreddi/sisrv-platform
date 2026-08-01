@@ -7,9 +7,9 @@
 The sisrv-platform project implements a fully functional RV32IMAC RISC-V processor core
 with M-mode CSRs, trap handling, **CLINT/PLIC interrupts**, **RISC-V Debug subset**,
 GPIO, UART, HPM counters, and an AXI4-Lite master bridge.
-The core is verified through **76** directed assembly regression tests, pipeline throughput/debug-step Verilator tests, 43+ cocotb randomized unit tests (incl. PMP matcher lane),
-4 formal proofs, **RISCOF rv32imac_zicsr ACT suite** I/M/C subset (**95/95** filtered tests in CI; A/PMP/privilege still excluded from the per-push lane), and
-**10k-seed retired-instruction Spike lock-step co-sim** as a final gated CI lane.
+The core is verified through **76** directed assembly regression tests, pipeline throughput/debug-step Verilator tests, **50** cocotb unit tests (ALU/RegFile/Decode/CSR/AXI/PMP),
+required formal proofs (ALU/RegFile/Decode; optional AXI), **RISCOF rv32imac_zicsr ACT suite** I/M/C subset (**95/95** filtered tests in CI; A/PMP/privilege still excluded from the per-push lane), and
+**10k-seed retired-instruction Spike lock-step co-sim** (rv32im profile) as a final gated CI lane.
 
 | P0 closure snapshot (2026-06-15) | see below |
 | U-mode + PMP (2026-06-16) | ✅ Complete | `ENABLE_U=1`, `PMP_ENTRIES=8`, `sisPmp.sv`, 25 new asm tests, cocotb PMP lane |
@@ -135,7 +135,8 @@ x0 always 0 ✅, PC word-aligned ✅, correct sign/zero extension ✅
 | Formal RegFile proof | ✅ Done | x0-always-zero (k-induction, SymbiYosys + z3) |
 | Formal Decode proof | ✅ Done | Field extraction, immediate invariants, legality consistency (yosys SAT) |
 | Formal AXI-Lite check | Optional | Bounded VALID stability, mutual exclusion, data stability (`make formal-axil`) |
-| CI pipeline | ✅ Done | GitHub Actions: lint, regress, pipeline debug, cocotb, formal, synth, RISCOF, STA, gated 10k co-sim |
+| cocotb PMP lane | ✅ Done | 7 tests in `tb/cocotb/test_pmp.py` (part of the 50-test suite) |
+| CI pipeline | ✅ Done | GitHub Actions: lint, regress, cocotb (50), formal, synth, RISCOF, STA, OpenROAD harden, gated 10k co-sim (+ nightly/opt-in lanes) |
 
 ---
 
@@ -306,21 +307,23 @@ timer interrupt tests run with the AXI slave timer model ✅, CI covers `make re
 | Pipeline throughput guard | `make pipeline-throughput` passing on the direct corebus path |
 | Benchmark smoke | `make benchmark-smoke` builds/runs reduced CoreMark + Dhrystone validation |
 | Publish benchmark | `make benchmark` generates `build/bench/summary.json` and logs |
-| cocotb unit tests | 43 tests (3 ALU + 4 RegFile + 11 Decode + 14 CSR + 11 AXI-Lite) |
-| cocotb status | 43/43 passing |
+| cocotb unit tests | 50 tests (3 ALU + 4 RegFile + 11 Decode + 14 CSR + 11 AXI-Lite + 7 PMP) |
+| cocotb status | 50/50 in CI job name / `@cocotb.test` count |
 | Formal proofs/checks | Required: ALU (all 10 ops), RegFile (x0=0), Decode (fields + legality). Optional: AXI-Lite bounded safety (`make formal-axil`) |
 | Formal status | All proofs PASS |
 | Simulation time | < 2s per test |
 | Waveform format | FST |
-| CI pipeline | GitHub Actions (lint, regress, pipeline debug, cocotb, formal, synth, RISCOF, STA, gated 10k co-sim) |
+| CI pipeline | GitHub Actions: lint, regress (+AXI/stall/guards), cocotb (50), formal, synth (+artifact), benchmark-smoke, RISCOF ACT 95, STA (+artifact), OpenROAD harden (+artifact), gated 10k cosim; nightly/opt-in: stall-1000, ACT-full, imac+U/PMP cosim |
 | Synthesis | Yosys (make synth); reports uploaded as CI artifacts |
-| OpenROAD harden (M8) | `make harden` → Sky130 HD GDS/DEF/SDF for `sisHardenTop` |
+| OpenROAD harden (M8) | `make harden` → Sky130 HD GDS/DEF/SDF for `sisHardenTop` (CI green on PR #4 / run 30611181758) |
 
 ## Files Implemented
 
 ### RTL (synthesizable)
 - `rtl/sisPlatformTop.sv` — Top-level platform integration (USE_AXIL param switch)
-- `rtl/core/sisRvCore.sv` — RV32IMC in-order pipelined CPU core (with interrupt support)
+- `rtl/core/sisRvCore.sv` — RV32IMAC in-order pipelined CPU core (M+U, PMP, interrupts, M9 fetch buffer/prefetch)
+- `rtl/core/sisPmp.sv` — Physical memory protection matcher
+- `rtl/asic/sisHardenTop.sv` — Sky130 hardenable datapath + AXI-Lite slice (M8)
 - `rtl/core/sisAlu.sv` — Arithmetic/Logic Unit
 - `rtl/core/sisDecode.sv` — Instruction decoder
 - `rtl/core/sisRegFile.sv` — 32-entry register file
@@ -346,6 +349,7 @@ timer interrupt tests run with the AXI slave timer model ✅, CI covers `make re
 - `tb/cocotb/test_decode.py` — Decoder cocotb tests (11 tests)
 - `tb/cocotb/test_csr.py` — CSR unit cocotb tests (15 tests)
 - `tb/cocotb/test_axil_bridge.py` — AXI-Lite bridge cocotb tests (11 tests)
+- `tb/cocotb/test_pmp.py` — PMP matcher cocotb tests (7 tests)
 
 ### Formal Verification
 - `formal/alu_add.sv` — ALU proof wrapper (all 10 operations)
@@ -365,5 +369,6 @@ timer interrupt tests run with the AXI slave timer model ✅, CI covers `make re
 
 ### Build & CI
 - `Makefile` — Build, lint, sim, regression, cocotb, formal, synth targets
-- `.github/workflows/ci.yml` — CI pipeline (lint, regress, pipeline debug, cocotb, formal, synth, RISCOF, STA, gated 10k co-sim)
+- `.github/workflows/ci.yml` — CI pipeline (lint, regress, cocotb 50, formal, synth, STA, OpenROAD harden, RISCOF, gated 10k cosim; nightly/opt-in lanes)
 - `scripts/yosys_synth.tcl` — Yosys synthesis script
+- `scripts/openroad_flow.tcl` / `scripts/magic_*.tcl` — M8 Sky130 harden path
