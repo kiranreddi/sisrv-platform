@@ -31,3 +31,9 @@ directory records its upstream source and pinned revision in SOURCE.md.
    Note:     Dhrystone figures produced by this repository are internal
              cycle-normalized Verilator measurements, reported with the
              compiler, ISA, simulator, and memory conditions recorded.
+
+3. Accellera UVM (Verilator tree)  --  third_party/uvm/
+   Upstream: https://github.com/chipsalliance/uvm-verilator
+   Branch:   uvm-2017-1.0-vlt
+   Terms:    Apache-2.0 (see third_party/uvm/LICENSE.txt)
+   Refresh:  scripts/ci/fetch_uvm.sh

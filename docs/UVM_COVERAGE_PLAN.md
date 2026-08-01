@@ -7,47 +7,45 @@ No `Co-authored-by` trailers. See `AGENTS.md`.
 
 | Topic | Decision |
 |-------|----------|
-| CI gate | **Verilator + cocotb only** |
-| SV UVM | **Commercial / LSF only** — wraps `tb/sv/sisTbTop.sv`; never a PR gate |
-| Functional coverage on Verilator | **Python-side bins** (+ later SVA `cover`); no SV `covergroup` (unsupported) |
-| Code coverage | Verilator `--coverage` (line/toggle); informational until floors measured |
-| L0 agent rebuild | **Skip** where formal+cocotb already close; **Decompress only** |
-| Phase 1 priority | **B2 lock-step imac+U/PMP** → Decompress TB → SVA → coverage baseline |
-| JTAG/DM | Phase 2 (second), not first |
-| Bugs | GitHub Issues |
-| `sisTimer` | **Deleted** (orphan; CLINT owns MTIME/MTIMECMP) |
-| SV TB source of truth | `tb/sv/sisTbTop.sv` |
+| Primary UVM sim | **Verilator 5.050+** with chipsalliance `uvm-verilator` (`third_party/uvm`) |
+| CI | UVM smoke (`make uvm-decompress`, `make uvm-platform`) **gates PRs** once green; cocotb/formal/asm remain |
+| Commercial sims | Same UVM filelists on Questa/VCS/Xcelium (LSF); not required for PR gate |
+| Functional coverage on Verilator | Python bins and/or SVA `cover` (no SV `covergroup`) |
+| Code coverage | Verilator `--coverage` via `UVM_COVERAGE=1` / `make coverage-unit` |
+| Bottom-up stitch | L0 agents first (Decompress shipped) → tohost/platform → bus/IRQ/JTAG |
+| SV non-UVM TB | `tb/sv/sisTbTop.sv` remains directed smoke; UVM platform TB wraps same DUT |
+| Bugs | GitHub Issues (`.github/ISSUE_TEMPLATE/bug_rtl.yml`) |
+| `sisTimer` | Deleted (CLINT owns timer) |
 
-## Baseline (current `main`)
+## Tree
 
-- Verilator **v5.050**, cocotb **2.0.1**
-- 50 unit cocotb (ALU/RegFile/Decode/CSR/AXI/PMP) + Decompress (this work)
-- 78 asm sources / 76 regress; RISCOF 95 I/M/C; lock-step per-push **rv32im**
-- No coverage metrics in CI yet
-- Opt-in/nightly already has `cosim-lockstep-imac-upmp` (10k)
+```text
+verification/uvm/
+  vip/decompress/   agent + scoreboard + sequences
+  vip/tohost/       platform pass/fail monitor
+  env/              decompress_env, platform_env
+  tests/            sis_decompress_smoke_test, sis_platform_tohost_test
+  tb/               sis_uvm_decompress_tb, sis_uvm_platform_tb
+third_party/uvm/    Accellera UVM (uvm-2017-1.0-vlt)
+```
 
-## Phases
+## Commands
 
-### Phase 0 — Foundations
-- This document; delete `sisTimer`; fix stale status/PLAN; enable `-DASSERT` in Verilator sims.
-- Scaffold coverage targets; declare fcov = Python bins.
+```bash
+make uvm-decompress                          # L0 UVM smoke
+make sw && make uvm-platform                 # platform UVM + test_pass.hex
+UVM_COVERAGE=1 make uvm-decompress           # code coverage
+```
 
-### Phase 1 — Highest bug yield *(this branch)*
-1. **B2 smoke in CI:** per-push `rv32imac-u-pmp` lock-step on a **bounded seed window** (triage seed-16 class failures); keep 10k on nightly.
-2. **Decompress** cocotb unit TB + Python fcov counters.
-3. **SVA pass:** MemFabric one-hot/decode + keep AXI asserts; enable `ASSERT` in sim builds.
-4. **Coverage baseline:** informational CI artifact from unit decompress (+ existing unit suite when cheap).
+## Phase order
 
-### Phase 2 — Debug + platform stitch
-- JTAG/DMI sequences; platform cocotb around `sisPlatformTop`.
-- Commercial UVM env wrapping `sisTbTop` (LSF).
+1. **Ship UVM env on Verilator** (this work): Decompress agent + platform tohost env + CI.
+2. **B2**: keep 64-seed imac+U/PMP lock-step smoke; fix divergences via Issues.
+3. Grow VIP: corebus/AXI agents, IRQ, then JTAG/DM.
+4. Coverage floors only after measured baselines.
 
-### Phase 3 — Coverage gates
-- Floors from measured baselines only; then PR gates.
+## Non-goals
 
-## Non-goals (until explicit)
-
-- Full Accellera UVM as GitHub CI gate
-- Rebuilding UVM agents for ALU/RegFile/Decode already closed by formal+cocotb
+- Rebuilding UVM agents for ALU/RegFile/Decode already closed by formal+cocotb (unless coverage demands)
 - Full-`sisRvCore` GDS TB
 - EEMBC-certified numbers

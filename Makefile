@@ -46,7 +46,7 @@ ALL_ASM_HEXES := $(patsubst sw/tests/asm/%.S,$(BUILD)/tests/%.hex,$(ALL_ASM_TEST
 .PHONY: sim lint clean wave regress regress-axil regress-axil-stall pipeline-debug pipeline-throughput fetch-throughput sw sw-all sw-artifacts sw-from-artifacts all tests cocotb formal formal-axil formal-questa \
         sim-questa sim-vcs sim-xcelium regress-questa regress-vcs regress-xcelium regress-all-sims \
         synth sta sta-sky130 cosim-lockstep cosim-lockstep-imac cosim-lockstep-imac-upmp cosim-lockstep-imac-upmp-smoke \
-        coverage-unit \
+        coverage-unit uvm-fetch uvm-decompress uvm-platform \
         benchmark benchmark-coremark benchmark-dhrystone benchmark-smoke \
         riscof-check-tools riscof-smoke riscof-act riscof-act-full riscof-rv32i riscof-rv32im \
         fetch-sky130-pdk synth-harden openroad-harden openroad-gds openroad-drc openroad-lvs harden \
@@ -324,6 +324,57 @@ coverage-unit:
 
 cosim-lockstep-imac-upmp-smoke:
 	$(MAKE) cosim-lockstep COSIM_PROFILE=rv32imac-u-pmp COSIM_SEEDS=$(or $(COSIM_SMOKE_SEEDS),64)
+
+# ---------------------------------------------------------------------------
+# UVM (Verilator-first) — bottom-up env under verification/uvm/
+# ---------------------------------------------------------------------------
+UVM_HOME       ?= third_party/uvm
+UVM_BUILD      ?= $(BUILD)/uvm
+UVM_TEST       ?= sis_decompress_smoke_test
+UVM_COVERAGE   ?= 0
+UVM_WARN       := -Wno-lint -Wno-style -Wno-SYMRSVDWORD -Wno-IGNOREDRETURN \
+                  -Wno-CONSTRAINTIGN -Wno-ZERODLY -Wno-UNOPTFLAT -Wno-WIDTHTRUNC \
+                  -Wno-WIDTHEXPAND -Wno-UNUSEDSIGNAL -Wno-UNUSEDPARAM -Wno-CASEINCOMPLETE \
+                  -Wno-BLKANDNBLK -Wno-INITIALDLY -Wno-EOFNEWLINE
+UVM_JOBS       ?= $(shell nproc 2>/dev/null || echo 4)
+# COMMERCIAL_SIM: skip Verilator-only retire DPI import in sisRvCore (UVM TB
+# has no C++ harness). UVM_NO_DPI: Accellera UVM without DPI helpers.
+UVM_EXTRA      := --timing --timescale 1ns/1ps -DUVM_NO_DPI -DCOMMERCIAL_SIM -j $(UVM_JOBS)
+ifeq ($(UVM_COVERAGE),1)
+UVM_EXTRA      += --coverage
+endif
+
+uvm-fetch:
+	@bash scripts/ci/fetch_uvm.sh
+
+$(UVM_HOME)/src/uvm.sv:
+	@$(MAKE) uvm-fetch
+
+uvm-decompress: $(UVM_HOME)/src/uvm.sv
+	@mkdir -p $(UVM_BUILD)/decompress
+	$(VERILATOR) --binary $(UVM_EXTRA) $(UVM_WARN) \
+	  -Mdir $(UVM_BUILD)/decompress/obj_dir \
+	  -f verification/uvm/filelist_decompress.f \
+	  --top-module sis_uvm_decompress_tb \
+	  -o $(abspath $(UVM_BUILD)/decompress/sim_uvm_decompress)
+	$(UVM_BUILD)/decompress/sim_uvm_decompress \
+	  +UVM_TESTNAME=$(UVM_TEST) +UVM_NO_RELNOTES
+
+# Platform UVM TB: monitor tohost for a directed image (default test_pass).
+UVM_ROM_HEX ?= $(BUILD)/tests/test_pass.hex
+uvm-platform: $(UVM_HOME)/src/uvm.sv $(UVM_ROM_HEX)
+	@mkdir -p $(UVM_BUILD)/platform
+	@cp -f $(UVM_ROM_HEX) rom.hex
+	@touch ram.hex
+	$(VERILATOR) --binary $(UVM_EXTRA) $(UVM_WARN) \
+	  -Mdir $(UVM_BUILD)/platform/obj_dir \
+	  -f verification/uvm/filelist_platform.f \
+	  --top-module sis_uvm_platform_tb \
+	  -o $(abspath $(UVM_BUILD)/platform/sim_uvm_platform)
+	$(UVM_BUILD)/platform/sim_uvm_platform \
+	  +UVM_TESTNAME=$(or $(UVM_PLATFORM_TEST),sis_platform_tohost_test) \
+	  +ROM_HEX=rom.hex +RAM_HEX=ram.hex +UVM_NO_RELNOTES ; \
+	  rc=$$?; rm -f rom.hex ram.hex; exit $$rc
 
 # M3 stretch: 1000-seed AXI-Lite random stall stress (nightly / optional)
 AXIL_STALL_SEEDS ?= 1000
